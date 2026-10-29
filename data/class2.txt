@@ -1,0 +1,566 @@
+Loading 'turbo' model on cpu...
+Transcribing 'audit2.mp3'...
+Detected language: 'es' (probability: 1.00)
+
+[0.36s -> 4.50s]  La ciudad no es que compra entre IGB y renta el 33%.
+[4.50s -> 5.14s]  ¡A la madre!
+[5.80s -> 6.84s]  Es una de esas partes, ¿no?
+[7.40s -> 12.06s]  Y la ciudad, pues, no te ayuda a conseguir el cliente.
+[13.02s -> 15.78s]  No te ayuda en nada a hacer el trabajo.
+[17.60s -> 20.62s]  Y tampoco convierte en nada en que usted no tiene que saber.
+[21.50s -> 25.96s]  Y tampoco comprarte los kits y todas las herramientas necesarias para poder llevar a cabo el trabajo.
+[26.74s -> 27.76s]  Pero eres tu socio, me invita.
+[27.76s -> 31.32s]  No, pero no queremos acabar de nuestro socio.
+[32.22s -> 33.40s]  Se va a la tercera parte de IGB.
+[33.90s -> 36.46s]  150.000, 50.000 redondos se va a la semana.
+[37.16s -> 41.74s]  Y en servicios no hay escudo fiscal, porque es básicamente servicio.
+[42.66s -> 45.36s]  A no ser que gastes, pues, en traslados, estadías, ¿no?
+[46.44s -> 49.66s]  Viajes en avión, hoteles, en muestras, pues, a la IGB.
+[50.14s -> 54.24s]  Es la única forma de bajar los impuestos.
+[54.24s -> 59.42s]  Por eso, me estoy hablando de esto porque estoy hablando ya con personas que pronto van a estar en el mercado.
+[59.80s -> 61.16s]  Probablemente haciendo con su servicio.
+[62.14s -> 65.00s]  Entonces, necesito un buen capital para llevar a cabo un proyecto de equipo.
+[65.90s -> 68.50s]  Por lo menos para sobrevivir tres meses con todos los tipos.
+[68.50s -> 80.76s]  Para embarcarse en un proyecto de equipo, necesitan en la cuenta unos 60.000 soles disponibles para poder motivar todo lo que significa avanzar hasta que quedan en el primer bar.
+[81.64s -> 84.06s]  Invertir, invertir, invertir hasta que son desesperables.
+[84.06s -> 87.52s]  Y, ya, un bien, te dan el primer adelanto, ¿no?
+[87.94s -> 89.18s]  No te dan desresaje, de nada.
+[89.30s -> 91.44s]  O sea, te dan contraemplegable, validar.
+[92.48s -> 94.04s]  En el sector capital también puede ser.
+[94.86s -> 102.90s]  Ya, la otra tercera parte de 50.000, es para eso, pues, para pagar los servicios y honorarios del equipo que va a llevar a cabo el trabajo.
+[102.90s -> 109.84s]  Entonces, ahí tienes que rodearte y buscar gente que sea bien dedicada, ¿no?
+[109.90s -> 115.92s]  Tiene que, eh, bien concentrada, bien concentradores, fotográficos, también.
+[116.42s -> 117.52s]  Trabajan bien, solo.
+[118.68s -> 119.56s]  Un equipo de tres, ¿no?
+[120.72s -> 126.94s]  Ahora, si son socios y buscan socios, un socio tiene que encargarse de buscar clientes, en la parte comercial.
+[127.88s -> 132.30s]  El otro socio tiene que encargarse de hacer el trabajo.
+[132.90s -> 135.68s]  De llevar a cabo el proyecto con colaboradores.
+[135.76s -> 141.26s]  ¿Cómo podemos conseguir colaboradores temporales y contrarios para que por tres meses te lleguen a hacer la administración?
+[141.64s -> 144.78s]  A propósito de implementar este sistema de gestión de la privacidad de San Agustín,
+[145.30s -> 146.76s]  ¿qué le calculan los tres meses de trabajo?
+[147.08s -> 147.72s]  Bien, ¿verdad?
+[148.64s -> 149.86s]  Así es que también colaboran, ¿no?
+[149.86s -> 153.62s]  Porque si no colaboran acá, la cosa es más camino, más de dinero, estábamos hablando de cuatro años.
+[154.58s -> 157.92s]  Y gasolina para cuatro meses, de repente, 60.000 se queda de acuerdo.
+[157.92s -> 160.20s]  No, no, no, no, no, no, no, que tenemos más.
+[160.88s -> 166.74s]  Porque la gente trabaja como el gasolina, o sea, a la semana hay que dar eso del arco.
+[167.54s -> 171.82s]  Que a mí me tengan preparado, después de entregar a los 90 días, con un problema.
+[172.96s -> 176.38s]  A la gente le paras a la semana porque no hace la institución.
+[176.38s -> 178.12s]  si quieres
+[178.12s -> 180.78s]  que el cliente está
+[180.78s -> 181.90s]  fuera de la ciudad
+[181.90s -> 186.06s]  la única forma de reducir impuestos
+[186.06s -> 187.20s]  es gastarlo
+[187.20s -> 189.48s]  a darle impuestos a la ciudad
+[189.48s -> 191.38s]  no es mejor ir a comer a un buen lugar
+[191.38s -> 192.68s]  a dormir a un buen lugar
+[192.68s -> 194.76s]  a estar pagando tanto a la ciudad
+[194.76s -> 196.24s]  entonces tú reduces
+[196.24s -> 197.90s]  el impuesto a la renta
+[197.90s -> 199.42s]  cuando reduces pues la renta
+[199.42s -> 201.20s]  ingreso menos gastos
+[201.20s -> 202.56s]  renta
+[202.56s -> 204.78s]  entonces pues aumenta muy los gastos
+[204.78s -> 208.10s]  y por eso vale la pena
+[208.10s -> 208.78s]  hacer con su calidad
+[208.78s -> 211.78s]  fuera de la ciudad
+[211.78s -> 217.66s]  y gastancia para que recién es para la empresa
+[217.66s -> 219.64s]  utilidades para la empresa
+[219.64s -> 221.84s]  para crecer, para compornar la caneta
+[221.84s -> 223.56s]  para abrir una oficina en otro lugar
+[223.56s -> 225.30s]  para su capital de trabajo
+[225.30s -> 227.72s]  para poder amortiguar segundos proyectos paralelos
+[227.72s -> 229.26s]  si no tienes capital de trabajo
+[229.26s -> 231.64s]  un segundo cliente sigue complicado y grande
+[231.64s -> 232.30s]  como la sanfín
+[232.30s -> 234.72s]  y no voy a hacer que termine
+[234.72s -> 235.42s]  si no estoy ocupado
+[235.42s -> 236.14s]  si no estoy ocupado
+[236.14s -> 236.94s]  ya no tienes plata
+[236.94s -> 238.84s]  para pagar un proyecto a la vez
+[238.84s -> 242.30s]  y entonces
+[242.30s -> 247.38s]  uno de los primeros artefactos
+[247.38s -> 248.66s]  es el alcance
+[248.66s -> 250.04s]  en los momentos
+[250.04s -> 250.74s]  que el alcance
+[250.74s -> 252.04s]  dice la gestión de la privación
+[252.04s -> 254.26s]  en la norma
+[254.26s -> 254.74s]  ya
+[254.74s -> 256.24s]  ahí me hubo
+[256.24s -> 256.90s]  cuando estaba viendo
+[256.90s -> 257.78s]  todo lo que es gestión
+[257.78s -> 258.58s]  en el proceso
+[258.58s -> 260.38s]  tendría que estar
+[260.38s -> 262.16s]  preocupado y ocupado
+[262.16s -> 263.04s]  de los artefactos
+[263.04s -> 264.50s]  y uno de los artefactos
+[264.50s -> 266.28s]  es el enunciado del alcance
+[266.28s -> 267.30s]  del sistema de gestión
+[267.30s -> 268.60s]  de la privacidad y formación
+[268.60s -> 269.80s]  entonces
+[269.80s -> 271.20s]  a través del delegado
+[271.20s -> 273.04s]  necesitamos
+[273.04s -> 274.30s]  la plantilla
+[274.30s -> 275.92s]  para el enunciado del alcance
+[275.92s -> 276.88s]  del sistema de gestión
+[276.88s -> 277.84s]  de la privacidad y formación
+[277.84s -> 279.40s]  yo te mando
+[279.40s -> 280.96s]  como 100 y 5 formatos
+[280.96s -> 282.22s]  se los doy por todo gusto
+[282.22s -> 283.76s]  pero tiene que decirme el grupo
+[283.76s -> 285.38s]  en que cláusula
+[285.38s -> 286.76s]  cláusulas rural
+[286.76s -> 290.32s]  y anexo control
+[290.32s -> 292.20s]  se exige
+[292.20s -> 293.98s]  se exige
+[293.98s -> 294.64s]  la norma pide
+[294.64s -> 295.66s]  obliga
+[295.66s -> 296.36s]  a votar
+[296.36s -> 297.16s]  por el enunciado
+[297.16s -> 297.88s]  del alcance
+[297.88s -> 298.96s]  del sistema de gestión
+[298.96s -> 299.76s]  de la privacidad y formación
+[299.76s -> 301.32s]  que solo así
+[301.32s -> 302.58s]  ya no se tira bien
+[302.58s -> 303.32s]  entonces
+[303.32s -> 304.28s]  lo busco
+[304.28s -> 304.62s]  entonces
+[304.62s -> 306.06s]  el documento sobre el alcance
+[306.06s -> 307.16s]  pero yo tengo atrás
+[307.16s -> 308.46s]  la gestión de seguridad
+[308.46s -> 309.10s]  y formación
+[309.10s -> 310.26s]  ese es el servicio
+[310.26s -> 312.76s]  de la privacidad
+[312.76s -> 313.50s]  y el de la privacidad
+[313.50s -> 314.42s]  y el de la seguridad
+[314.42s -> 316.08s]  son signos acuerdanos
+[316.08s -> 316.60s]  porque ambos
+[316.60s -> 317.82s]  son sistemas de gestión
+[317.82s -> 319.36s]  uno es de la seguridad
+[319.36s -> 319.92s]  y formación
+[319.92s -> 320.76s]  que tengo yo
+[320.76s -> 322.00s]  y el que nos ocupa
+[322.00s -> 322.60s]  ahora para revisar
+[322.60s -> 322.98s]  los fines
+[322.98s -> 323.74s]  es el de la privacidad
+[323.74s -> 324.34s]  y formación
+[324.34s -> 325.32s]  listo
+[325.32s -> 326.50s]  es el trabajito
+[326.50s -> 327.24s]  que tienen que hacer
+[327.24s -> 327.86s]  los grupos de
+[327.86s -> 329.30s]  y les doy la plantilla
+[329.30s -> 334.36s]  por eso
+[334.36s -> 334.94s]  esas estrategias
+[334.94s -> 335.36s]  ayudan
+[335.36s -> 336.44s]  de sobremanera
+[336.44s -> 337.40s]  porque
+[337.40s -> 339.24s]  como responsables
+[339.24s -> 339.86s]  de empresas
+[339.86s -> 340.84s]  y más el contrato
+[340.84s -> 342.84s]  usas un equipo
+[342.84s -> 344.96s]  muy dedicado
+[344.96s -> 347.50s]  libertad
+[347.50s -> 349.84s]  y le dices
+[349.84s -> 350.50s]  ya no tienes nada
+[350.50s -> 351.10s]  que adoptar
+[351.10s -> 351.84s]  porque ahí está
+[351.84s -> 352.28s]  la plantilla
+[352.28s -> 352.94s]  está el conductor
+[352.94s -> 354.30s]  yo me cargo
+[354.30s -> 354.68s]  de adoptar
+[354.68s -> 355.78s]  a otro cliente
+[355.78s -> 356.50s]  ustedes
+[356.50s -> 358.38s]  ya tienen todo
+[358.38s -> 359.22s]  para sacar adelante
+[359.22s -> 360.22s]  ya ahorita
+[360.22s -> 360.60s]  les termino
+[360.60s -> 360.84s]  de abrir
+[360.84s -> 361.36s]  esto no van a ser
+[361.36s -> 362.38s]  porque es fácil
+[362.38s -> 364.42s]  para que
+[364.42s -> 369.60s]  no se ha soñado
+[369.60s -> 370.42s]  no se ha tomado
+[370.42s -> 371.04s]  nada raro
+[371.04s -> 372.12s]  porque
+[372.12s -> 373.08s]  todo lo que
+[373.08s -> 373.92s]  está en la plantilla
+[373.92s -> 374.30s]  ¿dónde está?
+[376.78s -> 377.68s]  es que la norma
+[377.68s -> 378.02s]  ¿sí o no?
+[378.42s -> 379.26s]  no se ha inventado
+[379.26s -> 379.96s]  ni una coma
+[379.96s -> 381.32s]  lo que dicen
+[381.32s -> 381.74s]  la norma
+[381.74s -> 382.24s]  se está poniendo
+[382.24s -> 382.74s]  en la plantilla
+[382.74s -> 385.04s]  han leído
+[385.04s -> 385.54s]  este libro
+[385.54s -> 386.20s]  y lo van a la plantilla
+[386.20s -> 386.90s]  entonces
+[386.90s -> 387.94s]  y es acá
+[387.94s -> 389.04s]  para aprender
+[389.04s -> 389.58s]  a completar
+[389.58s -> 390.28s]  este documento
+[390.28s -> 390.92s]  ve el tutorial
+[390.92s -> 391.94s]  how to define
+[391.94s -> 392.18s]  luego
+[392.18s -> 393.20s]  después
+[393.20s -> 394.36s]  está en este libro
+[394.36s -> 395.68s]  si usted no ha comprado
+[395.68s -> 396.10s]  el paquete
+[396.10s -> 396.76s]  aquí no te habrá
+[396.76s -> 397.74s]  una vista previa
+[397.74s -> 398.14s]  del tutorial
+[398.14s -> 398.98s]  cuando yo ponía el paquete
+[398.98s -> 399.28s]  después
+[399.28s -> 400.20s]  se fue esto
+[400.20s -> 401.70s]  el autor
+[401.70s -> 402.32s]  de este producto
+[402.32s -> 403.40s]  para conocer
+[403.40s -> 403.94s]  cómo definir
+[403.94s -> 404.44s]  el alcance
+[404.44s -> 405.50s]  lea el siguiente artículo
+[405.50s -> 406.08s]  cómo definir
+[406.08s -> 406.50s]  el alcance
+[406.50s -> 407.20s]  el sistema de gestión
+[407.20s -> 411.40s]  de la privacidad
+[411.40s -> 413.04s]  luego
+[413.04s -> 414.76s]  el logo de la humanidad
+[414.76s -> 415.40s]  el logo de la organización
+[415.40s -> 416.32s]  más o menos el logo de
+[416.32s -> 418.08s]  la vamos a desumir
+[418.08s -> 420.66s]  si el cliente de la bursa
+[420.66s -> 421.42s]  le ven a poner acá
+[421.42s -> 423.50s]  el logo de la bursa
+[423.50s -> 424.36s]  el nombre de la bursa
+[424.36s -> 424.38s]  el nombre de la organización
+[424.38s -> 426.30s]  solo presente el colchete
+[426.30s -> 427.78s]  es el nombre del cliente
+[427.78s -> 429.04s]  universidad
+[429.04s -> 434.06s]  se debe completar
+[434.06s -> 434.76s]  todos los campos
+[434.76s -> 435.34s]  de este documento
+[435.34s -> 436.00s]  que estén marcados
+[436.00s -> 436.66s]  entre el colchete
+[436.66s -> 437.68s]  o sea
+[437.68s -> 438.52s]  más fácil el agua
+[438.52s -> 438.72s]  ¿no?
+[439.32s -> 440.00s]  ¿por qué me tendría
+[440.00s -> 440.64s]  que estar llamando?
+[441.50s -> 442.26s]  yo soy gustando
+[442.26s -> 442.78s]  a los clientes
+[442.78s -> 442.94s]  ¿no?
+[443.46s -> 444.16s]  y el equipo
+[444.16s -> 444.80s]  si a los demás
+[444.80s -> 445.70s]  a ver
+[445.70s -> 446.48s]  documentos sobre
+[446.48s -> 446.96s]  el alcance
+[446.96s -> 447.36s]  del sistema
+[447.36s -> 448.16s]  acá
+[448.16s -> 450.44s]  si vamos a reutilizar
+[450.44s -> 450.68s]  el sistema
+[450.68s -> 451.88s]  se puede quedar así
+[451.88s -> 453.46s]  no, no es cierto
+[453.46s -> 454.04s]  tiene esa misma
+[454.04s -> 454.60s]  gestión de la
+[454.60s -> 455.78s]  diversidad de información
+[455.78s -> 456.08s]  ¿no?
+[459.08s -> 459.52s]  código
+[459.52s -> 461.10s]  la gente es codificada
+[461.10s -> 461.22s]  o sea
+[461.22s -> 461.76s]  tiene el sistema
+[461.76s -> 462.48s]  que le dijo
+[462.48s -> 463.30s]  el gente
+[463.30s -> 464.58s]  un código
+[464.58s -> 464.92s]  o sea
+[464.92s -> 466.16s]  ese es el alcance
+[466.16s -> 467.74s]  1.1
+[467.74s -> 468.94s]  1.2
+[468.94s -> 469.58s]  1.3
+[469.58s -> 469.88s]  o sea
+[469.88s -> 470.66s]  se etiqueta
+[470.66s -> 470.88s]  ¿no?
+[471.38s -> 471.86s]  su versión
+[471.86s -> 472.16s]  de repente
+[472.16s -> 472.66s]  es una puntuadora
+[472.66s -> 473.40s]  pues este es el código
+[473.40s -> 474.76s]  de repente se alcanza
+[474.76s -> 476.64s]  su código
+[476.64s -> 478.12s]  de repente después
+[478.12s -> 480.38s]  alcance
+[480.38s -> 480.56s]  ¿no?
+[481.12s -> 482.86s]  un código inteligente
+[482.86s -> 483.50s]  algo tiene que decir
+[483.50s -> 483.94s]  en ese código
+[483.94s -> 484.72s]  o sea
+[484.72s -> 485.68s]  es un código
+[485.68s -> 486.48s]  de los artefactos
+[486.48s -> 487.50s]  codificado
+[487.50s -> 489.16s]  o un diccionario
+[489.16s -> 489.46s]  de datos
+[489.46s -> 491.88s]  o un diccionario
+[491.88s -> 492.28s]  de comienzo
+[492.28s -> 492.44s]  ¿no?
+[494.66s -> 495.02s]  versión
+[495.02s -> 495.58s]  ¿a qué es la versión?
+[496.20s -> 496.98s]  la versión 1
+[496.98s -> 497.86s]  1.1
+[497.86s -> 499.28s]  ¿cuánto tardan
+[499.28s -> 500.18s]  cambia la versión 2?
+[502.26s -> 502.92s]  cuando el cambio
+[502.92s -> 503.44s]  se cayó
+[503.44s -> 504.10s]  es importante
+[504.10s -> 504.32s]  ¿no?
+[504.80s -> 505.24s]  por ejemplo
+[505.24s -> 506.98s]  el alcance
+[506.98s -> 507.52s]  que hicimos
+[507.52s -> 510.36s]  que era un proceso
+[510.36s -> 510.72s]  core
+[510.72s -> 510.96s]  ¿no?
+[511.02s -> 511.76s]  de la universidad
+[511.76s -> 511.94s]  ¿no?
+[511.94s -> 512.60s]  y un proceso
+[512.60s -> 513.46s]  corte
+[513.46s -> 514.30s]  donde existe
+[514.30s -> 514.68s]  información
+[514.68s -> 515.40s]  personal
+[515.40s -> 516.56s]  un proceso
+[516.56s -> 517.14s]  corte
+[517.14s -> 520.66s]  donde hay un bolsón
+[520.66s -> 521.14s]  de datos
+[521.14s -> 521.98s]  que digan
+[521.98s -> 522.24s]  pues
+[522.24s -> 523.86s]  todo lo que es
+[523.86s -> 525.24s]  alumno
+[525.24s -> 526.76s]  alumno
+[526.76s -> 527.34s]  o sea
+[527.34s -> 528.62s]  todo lo que es
+[528.62s -> 530.04s]  admisión
+[530.04s -> 532.52s]  gestión de alumno
+[532.52s -> 534.48s]  ahí está
+[534.48s -> 535.48s]  ahí está
+[535.48s -> 536.66s]  para los números
+[536.66s -> 536.94s]  de datos
+[536.94s -> 538.32s]  aparte de la academia
+[538.32s -> 539.92s]  y un proceso
+[539.92s -> 540.84s]  soportivo
+[540.84s -> 542.08s]  que se soporte
+[542.08s -> 543.60s]  al negocio
+[543.60s -> 544.12s]  a la universidad
+[544.12s -> 544.96s]  donde hay datos
+[544.96s -> 545.54s]  personales
+[545.54s -> 546.58s]  ¿cuál sería?
+[547.86s -> 548.90s]  de soporte
+[548.90s -> 550.50s]  de todo lo que es
+[550.50s -> 551.38s]  planillas
+[551.38s -> 551.80s]  personal
+[551.80s -> 553.52s]  de soporte
+[553.52s -> 556.14s]  claro
+[556.14s -> 557.42s]  y así
+[557.42s -> 557.70s]  o sea
+[557.70s -> 558.42s]  el mapa
+[558.42s -> 558.98s]  de procesos
+[558.98s -> 559.62s]  de la universidad
+[559.62s -> 560.28s]  que tuvimos
+[560.28s -> 560.58s]  alrededor
+[560.58s -> 561.88s]  necesitamos
+[561.88s -> 562.36s]  un proceso
+[562.36s -> 562.74s]  core
+[562.74s -> 563.54s]  y un proceso
+[563.54s -> 564.54s]  soportivo
+[564.54s -> 565.98s]  yo no podría
+[565.98s -> 566.52s]  pensar que
+[566.52s -> 566.86s]  enunciado
+[566.86s -> 567.28s]  el alcance
+[567.28s -> 567.98s]  son dos pájaros
+[567.98s -> 569.52s]  si no vemos
+[569.52s -> 570.00s]  el formato
+[570.00s -> 570.50s]  uno puede decir
+[570.50s -> 570.72s]  a no
+[570.72s -> 571.34s]  el alcance
+[571.34s -> 572.20s]  es como
+[572.20s -> 573.50s]  dice la norma
+[573.50s -> 573.60s]  ¿no?
+[574.04s -> 574.44s]  definió
+[574.44s -> 575.18s]  este un proceso
+[575.18s -> 575.50s]  core
+[575.50s -> 575.82s]  y un proceso
+[575.82s -> 576.36s]  deportivo
+[576.36s -> 577.14s]  alguien podría decir
+[577.14s -> 577.56s]  el alcance
+[577.56s -> 578.00s]  por el lado
+[578.00s -> 580.14s]  el nuevo texto
+[580.14s -> 580.92s]  un parafito
+[580.92s -> 581.78s]  y digo
+[581.78s -> 582.60s]  el alcance
+[582.60s -> 583.30s]  de la gestión
+[583.30s -> 583.72s]  de privacidad
+[583.72s -> 584.14s]  y la normación
+[584.14s -> 584.84s]  para transmitir
+[584.84s -> 586.12s]  es su proceso
+[586.12s -> 586.86s]  de admisión
+[586.86s -> 588.78s]  más el proceso
+[588.78s -> 592.06s]  de comunicación
+[592.06s -> 593.20s]  que está
+[593.20s -> 593.76s]  los datos
+[593.76s -> 595.16s]  de los trabajadores
+[595.16s -> 596.58s]  y en un paradito
+[596.58s -> 597.44s]  pienso que está
+[597.44s -> 597.90s]  listo
+[597.90s -> 598.38s]  el alcance
+[598.38s -> 599.46s]  ¿está cierto eso?
+[600.60s -> 600.98s]  no
+[600.98s -> 602.18s]  porque el deseo
+[602.18s -> 602.60s]  del alcance
+[602.60s -> 603.42s]  es una plantilla
+[603.42s -> 604.02s]  es un documento
+[604.02s -> 605.48s]  de cuatro obras
+[605.48s -> 607.68s]  que tiene su índice
+[607.68s -> 608.06s]  también
+[608.06s -> 609.64s]  control de versiones
+[609.64s -> 610.02s]  no es todo
+[610.02s -> 610.52s]  de versión
+[610.52s -> 610.78s]  fecha
+[610.78s -> 611.18s]  de versión
+[611.18s -> 611.52s]  pedagón
+[611.52s -> 612.22s]  que tiene aprobado
+[612.22s -> 613.32s]  nivel de coger
+[613.32s -> 613.68s]  especialidad
+[613.68s -> 613.92s]  esto
+[613.92s -> 614.04s]  es
+[614.04s -> 615.20s]  confidencialidad
+[615.20s -> 615.48s]  media
+[615.48s -> 615.76s]  alta
+[615.76s -> 616.04s]  baja
+[616.04s -> 616.60s]  o totalmente
+[616.60s -> 617.02s]  abierto
+[617.02s -> 617.54s]  al público
+[617.54s -> 617.98s]  general
+[617.98s -> 619.48s]  historia
+[619.48s -> 620.18s]  de comunicaciones
+[620.18s -> 620.96s]  acá va el nombre
+[620.96s -> 621.62s]  de la organización
+[621.62s -> 622.14s]  el número
+[622.14s -> 622.90s]  de confidencialidad
+[622.90s -> 624.32s]  en qué fecha
+[624.32s -> 624.94s]  y qué versión
+[624.94s -> 625.68s]  tindo-creó
+[625.68s -> 626.32s]  y la despreciada
+[626.32s -> 626.90s]  la comunicación
+[626.90s -> 627.48s]  o sea
+[627.48s -> 628.16s]  si el alcance
+[628.16s -> 628.60s]  es mayor
+[628.60s -> 628.84s]  o sea
+[628.84s -> 629.58s]  vamos a incorporar
+[629.58s -> 630.22s]  un segundo
+[630.22s -> 630.60s]  proceso
+[630.60s -> 630.86s]  por
+[630.86s -> 632.30s]  o quitarlo
+[632.30s -> 632.82s]  de un proceso
+[632.82s -> 633.32s]  de acuerdo
+[633.32s -> 634.54s]  eso ya
+[634.54s -> 634.94s]  medita
+[634.94s -> 635.76s]  que el código
+[635.76s -> 636.14s]  cambie
+[636.14s -> 637.34s]  de 1.x
+[637.34s -> 639.04s]  a 2.1
+[639.04s -> 639.70s]  ¿está bien?
+[640.48s -> 640.94s]  ¿está bien?
+[643.32s -> 644.62s]  cambios mayores
+[644.62s -> 645.14s]  ya pues
+[645.14s -> 645.56s]  ustedes
+[645.56s -> 647.36s]  y no se borran
+[647.36s -> 647.98s]  o sea
+[647.98s -> 648.88s]  los documentos
+[648.88s -> 649.96s]  anunciados
+[649.96s -> 650.62s]  de alcance
+[650.62s -> 651.62s]  versión 1
+[651.62s -> 651.94s]  versión 2
+[651.94s -> 653.56s]  están en 3D
+[653.56s -> 654.58s]  en algún momento
+[654.58s -> 655.06s]  en el PIN
+[655.06s -> 656.14s]  alguien puede preguntar
+[656.14s -> 656.74s]  oye
+[656.74s -> 657.82s]  ¿y cuál era la opción
+[657.82s -> 658.50s]  que reinaba
+[658.50s -> 659.70s]  en el año 2022?
+[660.74s -> 661.12s]  y el PIN
+[661.12s -> 661.64s]  tiene que decir
+[661.64s -> 662.22s]  que aquí está
+[662.22s -> 664.34s]  o sea
+[664.34s -> 665.10s]  no se puede echar acá
+[665.10s -> 669.84s]  y cuando uno entiende
+[669.84s -> 670.28s]  el PIN
+[670.28s -> 671.04s]  la propiedad
+[671.04s -> 671.32s]  la moda
+[671.32s -> 672.00s]  de cómo está escrito
+[672.00s -> 675.74s]  ahí es donde
+[675.74s -> 676.32s]  puede pensar
+[676.32s -> 678.82s]  el trabajo
+[678.82s -> 679.58s]  tenioso
+[679.58s -> 682.66s]  el agua
+[682.66s -> 685.16s]  que es pesado
+[685.16s -> 685.96s]  que cansa
+[685.96s -> 687.78s]  que el agua
+[687.78s -> 688.14s]  que es
+[688.14s -> 689.68s]  ahí aparece
+[689.68s -> 691.50s]  la tabla
+[691.50s -> 692.08s]  de contenidos
+[692.08s -> 693.14s]  miren
+[693.14s -> 693.72s]  su índice
+[693.72s -> 695.52s]  objetivo
+[695.52s -> 695.88s]  alcance
+[695.88s -> 696.42s]  usuario
+[696.42s -> 697.16s]  documentos
+[697.16s -> 697.72s]  de referencia
+[697.72s -> 698.16s]  definición
+[698.16s -> 698.56s]  de alcance
+[698.56s -> 699.10s]  de 15
+[699.10s -> 699.80s]  de alcance
+[699.80s -> 700.72s]  procesos
+[700.72s -> 701.22s]  de servicios
+[701.22s -> 701.60s]  unidades
+[701.60s -> 702.16s]  radiactivas
+[702.16s -> 702.72s]  de aplicaciones
+[702.72s -> 703.44s]  redes
+[703.44s -> 703.96s]  infraestructura
+[703.96s -> 704.24s]  de TI
+[704.24s -> 704.72s]  exclusiones
+[704.72s -> 705.32s]  del alcance
+[705.32s -> 706.36s]  todo esto
+[706.36s -> 706.72s]  reserva
+[706.72s -> 707.16s]  la medida
+[707.16s -> 707.84s]  del abuso
+[707.84s -> 709.28s]  ahora
+[709.28s -> 710.88s]  imagínense
+[710.88s -> 711.28s]  que tenemos
+[711.28s -> 712.80s]  como cliente
+[712.80s -> 715.56s]  una empresa
+[715.56s -> 715.96s]  de labor
+[715.96s -> 719.90s]  de la par
+[719.90s -> 720.40s]  de la par
+[720.40s -> 721.02s]  de la par
+[721.02s -> 723.06s]  de la par
+[723.06s -> 724.62s]  y
+[724.62s -> 725.66s]  y
+[725.66s -> 728.06s]  tenemos
+[728.06s -> 736.06s]  buscamos un equipo de colaboradores y le damos la plantilla de CELAPAC
+[736.06s -> 739.06s]  y cometen un error, ¿no?
+[739.06s -> 746.06s]  de que, a ver, la Universidad de San Martín es ubicada en la dirección de CELAPAC
+[746.06s -> 749.06s]  en la avenida, ¿no?
+[749.06s -> 751.06s]  en la avenida Tigal, ¿qué es eso?
+[751.06s -> 753.06s]  no me lo quince acá
+[753.06s -> 755.06s]  la gente y el cliente
+[755.06s -> 760.06s]  o encuentran, hay unidades organizativas, encuentran áreas que no tienen la universidad
+[760.06s -> 762.06s]  no es un cliente de la universidad
+[762.06s -> 766.06s]  plantillas hechas y se han modificadas a la medida para CELAPAC
+[766.06s -> 772.06s]  y por darle el trabajo a manos de personas que están distraídas con el celular
+[772.06s -> 774.06s]  pensan en otra cosa
+[774.06s -> 776.06s]  ya se la van a producir
+[776.06s -> 778.06s]  y si le llegan las manos del cliente
+[778.06s -> 784.06s]  tienen un documento de estos con indicios, con un tutillo de ser ajeno
+[784.06s -> 786.06s]  ¿qué pasa con el contrato?
+[786.06s -> 788.06s]  ¿qué pasa con el contratista?
+[788.06s -> 790.06s]  ¿qué pasa con el contratista?
+[790.06s -> 792.06s]  ¿qué pasa con el contratista?
+[792.06s -> 794.06s]  ¿qué pasa con el contratista?

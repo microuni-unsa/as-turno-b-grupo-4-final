@@ -1,0 +1,369 @@
+Loading 'turbo' model on cpu...
+Transcribing 'clase3.mp3'...
+Detected language: 'es' (probability: 0.99)
+
+[0.00s -> 1.50s]  Es un super producto
+[1.50s -> 3.86s]  Fácil
+[3.86s -> 8.14s]  El GDPR
+[8.14s -> 9.08s]  de Sopa Expert
+[9.08s -> 11.32s]  también tiene lo suyo
+[11.32s -> 12.44s]  tiene sus módulos
+[12.44s -> 14.94s]  y este que hemos hecho pues con
+[14.94s -> 16.44s]  Mateo, les mataba
+[16.44s -> 18.38s]  Mateo tiene su empresa
+[18.38s -> 20.04s]  para
+[20.04s -> 22.70s]  Proinnova
+[22.70s -> 23.62s]  tiene un proveedor de Proinnova
+[23.62s -> 25.28s]  se ha calificado su empresa como
+[25.28s -> 27.28s]  implementadora
+[27.28s -> 29.76s]  yo estoy en el caso de solicitar
+[29.76s -> 31.92s]  una empresa
+[31.92s -> 35.08s]  para fondos compulsables
+[35.08s -> 36.58s]  y entonces
+[36.58s -> 38.62s]  una empresa solicitante
+[38.62s -> 40.04s]  yo solicito, quiero el fondo
+[40.04s -> 42.70s]  para incorporarme de más tecnología
+[42.70s -> 43.52s]  para
+[43.52s -> 46.10s]  o sea, siendo una empresa de base tecnológica
+[46.10s -> 47.44s]  incorporar
+[47.44s -> 49.86s]  contar con más tecnología
+[49.86s -> 51.10s]  para poder posturar más
+[51.10s -> 52.44s]  para tener más productos
+[52.44s -> 55.62s]  normalmente quienes solicitan
+[55.62s -> 58.24s]  fondos son empresas pues puras
+[58.24s -> 59.88s]  cliente puro
+[59.88s -> 60.92s]  dedicadas a
+[60.92s -> 62.80s]  la exportación de
+[62.80s -> 64.92s]  trucha
+[64.92s -> 66.28s]  procesamiento de importación de trucha
+[66.28s -> 67.66s]  arándanos
+[67.66s -> 69.96s]  o procesamiento de alpaca
+[69.96s -> 72.18s]  entonces son clientes puros
+[72.18s -> 73.86s]  a ellos pues les cae
+[73.86s -> 75.12s]  también un rp
+[75.12s -> 75.50s]  no sé
+[75.50s -> 76.90s]  un modulo
+[76.90s -> 78.14s]  más que suficiente
+[78.14s -> 79.48s]  ahí ya está bien
+[79.48s -> 81.44s]  pero en mi caso pues no
+[81.44s -> 82.82s]  yo necesito un juguete pues
+[82.82s -> 84.76s]  que se pueda vender como servicio
+[84.76s -> 85.22s]  una nueva
+[85.22s -> 86.82s]  para curar más
+[86.82s -> 88.04s]  como fuese
+[88.04s -> 90.02s]  Mateo ha traído al mundo
+[90.02s -> 90.62s]  este producto
+[90.62s -> 91.02s]  no claro
+[91.02s -> 92.54s]  con también aporte nuestro
+[92.54s -> 93.34s]  del no-how
+[93.34s -> 93.56s]  y todo
+[93.56s -> 95.62s]  pues esta aplicación
+[95.62s -> 100.72s]  cumple con lo que pide
+[100.72s -> 101.98s]  la 27701
+[101.98s -> 103.74s]  y la ley general de protección
+[103.74s -> 104.40s]  de datos personales
+[104.40s -> 104.84s]  en Perú
+[104.84s -> 106.76s]  ahora poder entender
+[106.76s -> 107.62s]  cómo funciona
+[107.62s -> 108.30s]  cada
+[108.30s -> 108.58s]  cada
+[108.58s -> 111.06s]  módulo
+[111.06s -> 111.84s]  y todo esto
+[111.84s -> 113.20s]  la única forma
+[113.20s -> 113.68s]  es entender
+[113.68s -> 114.26s]  pues la
+[114.26s -> 115.18s]  la norma
+[115.18s -> 116.76s]  porque si no hemos
+[116.76s -> 117.52s]  digerido esto
+[117.52s -> 118.34s]  o se ha entendido
+[118.34s -> 119.32s]  bien de que se trata
+[119.32s -> 120.60s]  pues este juguete
+[120.60s -> 122.52s]  no tiene ni pieza
+[122.52s -> 122.94s]  ni cabeza
+[122.94s -> 124.12s]  entiende
+[124.12s -> 124.42s]  hasta ahí
+[124.42s -> 126.76s]  entonces
+[126.76s -> 128.64s]  hay un tema de seguridad
+[128.64s -> 129.90s]  acá al momento de entrar
+[129.90s -> 131.94s]  primero para poder pasar
+[131.94s -> 132.58s]  esa ventana
+[132.58s -> 133.44s]  de login y password
+[133.44s -> 134.70s]  he tenido que cambiar
+[134.70s -> 135.64s]  esto al celular
+[135.64s -> 137.66s]  celular primero
+[137.66s -> 139.26s]  y después
+[139.26s -> 142.30s]  después de que entra
+[142.30s -> 143.00s]  que está acá adentro
+[143.00s -> 143.74s]  recién ha regresado
+[143.74s -> 144.28s]  al Winfix
+[144.28s -> 146.40s]  y tanto la pantalla
+[146.40s -> 146.84s]  como yo
+[146.84s -> 147.78s]  estamos en el Winfix
+[147.78s -> 149.10s]  pero ya salte
+[149.10s -> 150.56s]  con esta barrera
+[150.56s -> 150.98s]  de seguridad
+[150.98s -> 152.16s]  por ejemplo
+[152.16s -> 152.68s]  por acá
+[152.68s -> 153.80s]  gestión documental
+[153.80s -> 155.34s]  que es esto
+[155.34s -> 155.94s]  total vigente
+[155.94s -> 157.66s]  acá serían
+[157.66s -> 158.40s]  nuevos documentos
+[158.40s -> 160.10s]  y qué documentos
+[160.10s -> 160.38s]  serán
+[160.38s -> 161.96s]  no son cualquier documento
+[161.96s -> 162.94s]  ¿qué documentos son?
+[163.58s -> 164.38s]  son documentos
+[164.38s -> 165.46s]  del sistema de gestión
+[165.46s -> 166.04s]  de privacidad
+[166.04s -> 166.52s]  de información
+[166.52s -> 168.48s]  y si han leído
+[168.48s -> 168.92s]  la norma
+[168.92s -> 169.24s]  o no han leído
+[169.24s -> 170.06s]  la norma
+[170.06s -> 171.08s]  ¿de qué documentos
+[171.08s -> 171.90s]  existen acá?
+[172.62s -> 173.02s]  hay uno
+[173.02s -> 173.92s]  en el scope statement
+[173.92s -> 174.38s]  en el enunciado
+[174.38s -> 174.94s]  del alcance
+[174.94s -> 176.04s]  del PIMS
+[176.04s -> 176.72s]  PIMS es
+[176.72s -> 177.98s]  Privacy Information
+[177.98s -> 178.72s]  Management System
+[178.72s -> 180.24s]  entonces acá
+[180.24s -> 181.78s]  hay como 40 documentos
+[181.78s -> 182.58s]  del sistema
+[182.58s -> 183.08s]  de gestión
+[183.08s -> 183.58s]  de la privacidad
+[183.58s -> 183.96s]  de información
+[183.96s -> 185.04s]  uno de ellos
+[185.04s -> 186.26s]  es el enunciado
+[186.26s -> 186.76s]  del alcance
+[186.76s -> 187.48s]  en inglés
+[187.48s -> 188.02s]  vamos a decir
+[188.02s -> 188.48s]  que ustedes
+[188.48s -> 189.74s]  no han leído
+[189.74s -> 190.54s]  que se acuerdan
+[190.54s -> 190.56s]  que se acuerdan
+[190.56s -> 191.26s]  por en inglés
+[191.26s -> 191.76s]  y en español
+[191.76s -> 193.54s]  el scope statement
+[193.54s -> 194.42s]  el otro es
+[194.42s -> 199.08s]  information private policy
+[199.08s -> 200.40s]  política de privacidad
+[200.40s -> 200.80s]  de información
+[200.80s -> 202.32s]  después
+[202.32s -> 203.12s]  el tema
+[203.12s -> 204.42s]  el statement
+[204.42s -> 205.80s]  o aplicability
+[205.80s -> 209.52s]  de los controles
+[209.52s -> 210.18s]  de esta visa
+[210.18s -> 211.32s]  y así
+[211.32s -> 213.20s]  plan de tratamiento
+[213.20s -> 213.70s]  de riesgos
+[213.70s -> 218.42s]  y así
+[218.42s -> 218.94s]  habla de varios
+[218.94s -> 219.28s]  documentos
+[219.28s -> 219.44s]  acá
+[219.44s -> 221.16s]  solamente
+[221.16s -> 221.88s]  si mencionamos
+[221.88s -> 222.60s]  el que les he pasado
+[222.60s -> 223.22s]  si les he pasado
+[223.22s -> 224.04s]  a través del legado
+[224.04s -> 225.56s]  el enunciado
+[225.56s -> 227.18s]  de aplicabilidad
+[227.18s -> 233.14s]  este es un documento
+[233.14s -> 234.56s]  del sistema
+[234.56s -> 234.88s]  de gestión
+[234.88s -> 235.30s]  de privacidad
+[235.30s -> 235.80s]  de información
+[235.80s -> 238.72s]  y cuando uno lo ve
+[238.72s -> 243.20s]  si pues
+[243.20s -> 244.68s]  que tendría que pasar
+[244.68s -> 246.10s]  primero que vamos a ver
+[246.10s -> 246.58s]  el sistema
+[246.58s -> 247.88s]  de aplicability
+[247.88s -> 249.40s]  en que cláusulas
+[249.40s -> 250.38s]  de la norma
+[250.38s -> 251.30s]  lo exige
+[251.30s -> 251.58s]  ¿no?
+[253.08s -> 253.62s]  acá no cierto
+[253.62s -> 254.80s]  en que cláusulas
+[254.80s -> 256.38s]  la 3.6
+[256.38s -> 257.64s]  la 6.3
+[257.64s -> 258.08s]  también
+[258.08s -> 259.32s]  y a la vez
+[259.32s -> 259.98s]  es un control
+[259.98s -> 261.20s]  los controles
+[261.20s -> 261.96s]  están en el anexo A
+[261.96s -> 263.30s]  todos los controles
+[263.30s -> 264.52s]  son A.algo
+[264.52s -> 266.22s]  entonces el control
+[266.22s -> 268.10s]  es A.3.8
+[268.10s -> 269.06s]  pero el hecho
+[269.06s -> 269.66s]  de que tenga
+[269.66s -> 270.64s]  A.2
+[270.64s -> 270.88s]  o sea
+[270.88s -> 271.28s]  imagínense
+[271.28s -> 271.70s]  que hubiesen
+[271.70s -> 272.26s]  que ser los controles
+[272.26s -> 272.90s]  en el anexo B
+[272.90s -> 274.22s]  todos se llamarían
+[274.22s -> 275.48s]  B.algo
+[275.48s -> 276.78s]  el control
+[276.78s -> 277.10s]  el control
+[277.10s -> 277.98s]  es el medito
+[277.98s -> 279.42s]  el A adelante
+[279.42s -> 279.82s]  es pues
+[279.82s -> 280.28s]  que porque
+[280.28s -> 281.82s]  están en el anexo A
+[281.82s -> 283.68s]  ya puede ser
+[283.68s -> 285.06s]  hay
+[285.06s -> 286.44s]  tres lugares
+[286.44s -> 287.16s]  en donde
+[287.16s -> 288.52s]  hace mención
+[288.52s -> 289.10s]  referencia
+[289.10s -> 289.56s]  a la norma
+[289.56s -> 290.02s]  hace mención
+[290.02s -> 290.44s]  referencia
+[290.44s -> 291.44s]  a la obligatoriedad
+[291.44s -> 291.90s]  de contar
+[291.90s -> 293.94s]  con un enunciado
+[293.94s -> 294.64s]  de prioridad
+[294.64s -> 295.38s]  un SOPA
+[295.38s -> 296.18s]  un sistema
+[296.18s -> 297.20s]  de aplicabilidad
+[297.20s -> 298.42s]  entonces
+[298.42s -> 299.28s]  en alas de que
+[299.28s -> 299.46s]  o sea
+[299.46s -> 299.86s]  pues tanto
+[299.86s -> 300.48s]  de que lean
+[300.48s -> 301.86s]  porque así
+[301.86s -> 302.26s]  puede haber
+[302.26s -> 302.56s]  una pregunta
+[302.56s -> 303.04s]  del examen
+[303.04s -> 303.40s]  o sea
+[303.40s -> 303.62s]  no
+[303.62s -> 304.00s]  por así
+[304.00s -> 305.00s]  no
+[305.00s -> 305.66s]  que es
+[305.66s -> 306.00s]  un sistema
+[306.00s -> 306.92s]  de aplicabilidad
+[306.92s -> 307.20s]  no
+[307.20s -> 307.54s]  o sea
+[307.54s -> 309.42s]  en que cláusulas
+[309.42s -> 309.84s]  ¿no cierto?
+[309.84s -> 311.50s]  y en que controles
+[311.50s -> 312.32s]  se habla
+[312.32s -> 312.92s]  se exige
+[312.92s -> 314.68s]  el contar
+[314.68s -> 315.84s]  con un enunciado
+[315.84s -> 316.56s]  de aplicabilidad
+[316.56s -> 317.50s]  actualizado
+[317.50s -> 318.88s]  de la norma
+[318.88s -> 319.94s]  A B S D
+[319.94s -> 320.46s]  para marcar
+[320.46s -> 321.52s]  la cláusula
+[321.52s -> 322.64s]  3.5
+[322.64s -> 323.54s]  4.3
+[323.54s -> 324.42s]  8.2
+[324.42s -> 325.22s]  5.3
+[325.22s -> 328.30s]  no te damos
+[328.30s -> 328.74s]  sin pisos
+[328.74s -> 328.90s]  ya
+[328.90s -> 331.22s]  incluso
+[331.22s -> 331.68s]  teniendo
+[331.68s -> 332.06s]  la norma
+[332.06s -> 332.48s]  a la mano
+[332.48s -> 333.38s]  esto
+[333.38s -> 333.96s]  abren ahí
+[333.96s -> 334.64s]  escondidas
+[334.64s -> 335.30s]  en el celular
+[335.30s -> 336.46s]  edit search
+[336.46s -> 337.18s]  y no se puede
+[337.18s -> 338.00s]  porque es una imagen
+[338.00s -> 350.56s]  no ha encontrado
+[350.56s -> 351.04s]  coincidencia
+[351.04s -> 351.26s]  ¿por qué?
+[351.32s -> 351.70s]  porque todo esto
+[351.70s -> 352.30s]  es una imagen
+[352.30s -> 354.62s]  todo es una imagen
+[354.62s -> 356.08s]  entonces no encuentra
+[356.08s -> 356.50s]  nada
+[356.50s -> 358.08s]  este en inglés
+[358.08s -> 359.24s]  no hay nada
+[359.24s -> 359.70s]  pues este
+[359.70s -> 365.92s]  no está
+[365.92s -> 366.16s]  ¿cierto?
+[366.56s -> 367.48s]  y como no está
+[367.48s -> 368.04s]  ¿qué haríamos?
+[370.26s -> 371.16s]  ¿qué harían ustedes?
+[371.32s -> 371.92s]  para eso tienen que
+[371.92s -> 372.42s]  usar la idea
+[372.42s -> 372.72s]  ¿verdad?
+[374.06s -> 374.44s]  esta
+[374.44s -> 375.16s]  statement
+[375.16s -> 377.92s]  está bien
+[377.92s -> 379.60s]  ¿cómo lo harían?
+[380.64s -> 381.18s]  yo no voy a decir
+[381.18s -> 381.42s]  ¿cómo?
+[381.54s -> 382.24s]  porque ustedes me llevan
+[382.24s -> 383.76s]  años luz
+[383.76s -> 384.26s]  en esto
+[384.26s -> 384.52s]  ¿no?
+[385.24s -> 385.88s]  ¿cómo lo harían?
+[385.88s -> 388.60s]  no lo harían
+[388.60s -> 390.10s]  no lo harían
+[390.10s -> 390.52s]  ¿no?
+[390.52s -> 390.96s]  ¿qué harían?
+[392.58s -> 393.04s]  ¿no?
+[393.04s -> 393.32s]  sí
+[393.32s -> 394.10s]  ¿qué harían?
+[394.32s -> 394.54s]  no
+[394.54s -> 394.70s]  no
+[394.70s -> 395.00s]  no
+[395.00s -> 395.42s]  no
+[395.42s -> 395.92s]  no
+[395.92s -> 397.20s]  no
+[397.20s -> 398.30s]  no
+[398.30s -> 398.42s]  no
+[398.42s -> 398.76s]  ¿qué harían?
+[398.76s -> 408.82s]  bueno siento que con mi cuenta se va a poner más lento todavía
+[408.82s -> 414.34s]  lo subo al notebook y leeme, ¿no?
+[415.56s -> 417.70s]  subo la norma norma, ¿no?
+[418.10s -> 420.04s]  y ahí le pregunto a inglés, español
+[420.04s -> 423.88s]  ¿en qué cláusulas y en qué control
+[423.88s -> 426.70s]  se hace referencia al statement
+[426.70s -> 434.88s]  y así, todos los artefactos
+[434.88s -> 439.72s]  a ver, a ver, a ver, a ver, a ver quién es el primero que puede decir
+[439.72s -> 446.40s]  en qué cláusulas y en qué control se hace referencia
+[446.40s -> 447.72s]  a la mención de la pitabilidad
+[447.72s -> 454.20s]  de otro modo voy a pensar que han pedido un artefacto
+[454.20s -> 456.22s]  y no saben ni qué es, ni para qué
+[456.22s -> 458.42s]  solamente para coleccionar
+[458.42s -> 479.26s]  entonces, no es un control que tenga
+[479.26s -> 480.26s]  Gracias.
+[509.26s -> 510.26s]  Gracias.
+[539.26s -> 540.26s]  Gracias.
+[569.26s -> 570.26s]  Gracias.
+[600.26s -> 601.26s]  Gracias.
+[613.26s -> 614.26s]  Gracias.
+[620.26s -> 624.26s]  Esta es una buena máquina pero eso va a estar posteando.
+[624.26s -> 627.10s]  Esta es una buena máquina, pero eso no está formateando.
+[627.80s -> 629.82s]  Cambiarla de disco, ¿no? Ponerle más de memoria.
+[631.30s -> 633.08s]  Este es un i7, este es un i4, ¿no?
+[635.36s -> 637.08s]  36, 32 gigas.
+[637.62s -> 638.86s]  Es una montera de discos órbidos.
+[640.90s -> 642.54s]  Ya está, empieza por ahí con más diario.
+[644.86s -> 646.70s]  Y como totalmente quiere salir a bajar.
+[650.70s -> 652.08s]  No quería que se haga eso.
+[652.08s -> 682.06s]  No quería que se haga eso.
+[682.08s -> 712.06s]  No quería que se haga eso.
+[712.08s -> 742.06s]  No quería que se haga eso.
+[742.08s -> 743.08s]  No quería que se haga eso.
+[743.08s -> 744.60s]  No quería que se haga eso.
+[744.60s -> 745.66s]  No quería que se haga eso.
+[745.66s -> 775.64s]  Gracias por ver el video.
+[775.66s -> 805.64s]  Gracias por ver el video.
+[805.66s -> 835.64s]  Gracias por ver el video.

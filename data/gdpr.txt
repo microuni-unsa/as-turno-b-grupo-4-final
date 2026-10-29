@@ -1,0 +1,298 @@
+GDPR
+
+Is your company
+ready?
+
+In an increasingly interconnected economy, data related to daily
+life, location and personal interests are becoming increasingly
+accessible. It happens because people often provide personal
+information when hiring a service or when making an online
+purchase, without any guarantee of what will be done with this data,
+for how long it will be saved or to whom it will be conveyed. Personal
+data often ends up circulating on the internet which is the result of
+countless cases of data leakage or misuse, which usually ends up
+being inconvenient and causing a lot of headaches for the data
+owner.
+
+General Data
+Protection
+Regulation (GDPR)
+
+In this context, the General Data Protection Regulation (GDPR) was
+created with the objective of increasing a companies’ responsibility
+for how they handle personal information as well as preventing
+abuse and the unauthorized use of data. It is important to remember
+that personal data does not belong only to customers, it also applies
+to the data of employees, service providers and shareholders,
+among others.
+Complying with this regulation means ensuring that all personal
+data managed by the company are collected legally. In this way, the
+owners of data are informed about how their data is treated and the
+organization ensures that they are kept safe, in other words,
+protected against breaches.
+
+Challenges
+Companies of different scales and segments are still struggling to adapt their
+activities and ensure compliance with the GDPR. This is because the regulation
+does not only affect the IT department. It must be implemented and followed by
+several other areas of companies such as human resources, marketing, finance,
+and any other department that deals with personal data. Therefore, the
+management of all this information becomes extensive and laborious.
+Moreover, there is a need to implement documents, policies, terms and change
+of contracts, which results in a very complex governance of personal data
+governance, especially when performed manually.
+
+The challenges are numerous and the legal and financial implications are
+extensive. Those who violate the GDPR privacy and security standards will suffer
+severe penalties. It is for this reason that it is necessary for all organizations to
+dedicate themselves to this data protection standard that the regulation imposes,
+making structural and mainly cultural adjustments while aiming to implement rules
+of conduct that apply to the entire company.
+
+How can SoftExpert help?
+Complying with the requirements of the GDPR represents a series of challenges for all organizations. However, with the right technological
+support, the whole process can become simpler and faster. Currently, there are software solutions that allow to deal with the main aspects
+required by the resolution in a single work environment. The SoftExpert Excellence Suite for example, is a complete corporate solution for
+integrated management of compliance, innovation and digital transformation.
+The platform has interconnected applications that promote collaborative work and replace several isolated management systems that address
+only specific points of the business. Thus, it is possible to manage the main aspects of the law and, at the same time, avoid inconsistency of
+information, losses due to inefficiency, errors caused by duplication of functions and lack of visibility.
+
+Document Management
+Most of the personal data that organizations have is recorded in
+the documents that are stored in the companies. This information
+can be made available in both printed and electronic documents. In
+this way, document management and the GDPR have a direct
+relationship.
+Moreover, the need to implement a culture focused on the security
+of personal data. This requires a policy that is always up-to-date
+and disseminated. A company that has clarity in document
+management processes can more easily adapt to the regulation.
+SoftExpert Document is a software that allows organizations to
+effectively and efficiently automate the management of electronic
+and paper documents throughout their entire life cycle. In this way, it
+is possible to store them safely and ensure that legal requirements
+are effectively met.
+
+Learn more
+
+Data mapping in processes
+Data mapping is an essential tool when a company is in the
+process of adapting to the GDPR standard. This data gathering
+must reflect the path through which a personal data pass within the
+company, including the processes and procedures through which
+the data runs through .
+Using modeling based on the BPMN standard (Business Process
+Model and Notation), the SoftExpert tool allows users to model
+process flows, identifying which are the personal and / or sensitive
+data that that activity handles. In addition, it is possible to associate
+possible risks to which the data is exposed at each stage and to
+determine controls to mitigate them.
+
+Learn more
+
+Data mapping in processes
+After mapping data from the flowcharts of each process, the
+
+SoftExpert tool also makes it possible to manage information
+through personalized portals.
+All data collected are displayed by means of graphs and
+interactive tables and are updated automatically and in real
+time. In this way the Data Protection Officer’s (DPO) day to
+day becomes much easier.
+
+Learn more
+
+Risk Management
+In order to maintain personal data security and to prevent
+processing in infringement of the GDPR, the organizations need to
+determine guidelines for the processing of personal data, especially
+through a risk management program. These measures should
+ensure an appropriate level of security, considering any possible
+risks within the processing of personal data, such as accidental or
+unlawful destruction, loss, alteration, unauthorized disclosure of, or
+access to, personal data transmitted, stored or otherwise processed
+which may specifically lead to physical, material or non-material
+damage.
+The SoftExpert Excellence Suite covers all aspects of the risk
+management process, from initial identification, through
+assessment and analysis, to mitigation and monitoring, managing
+incidents and ensuring the execution of actions and proper
+communication.
+
+Learn more
+
+Management of Personal Data Breach
+The GDPR requires that in case of a personal data breach, the
+controller must notify the competent control authority of the fact.
+This notification must contain information such as:
+• Nature of the personal data breach including the categories and
+approximate number of
+• data subjects concerned;
+• Name and contact details of the data protection officer (DPO) or
+other contact point where more information can be obtained;
+• Description of the likely consequences of the personal data
+breach;
+• Description of the measures taken or proposed to be taken by
+the controller to address the personal data breach, including,
+where appropriate, measures to mitigate its possible adverse
+effects.
+
+Learn more
+
+Management of Personal Data Breach
+To report a personal data breach, the SoftExpert solution
+offers an electronic forms modeler, which captures all the
+details of the occurrence.
+These forms can be integrated into automated processes
+which manage the data breach response flow from start to
+finish.
+
+The tool manages all stages of the process life cycle, from
+modeling and optimization to automation, execution and
+monitoring according to the needs of each company.
+
+Learn more
+
+Occurrence Management
+In this context, it is apparent that protecting data is not
+enough. Organizations must be prepared in case of possible
+violations. Thus, in addition to describing a report with all the
+data of the event, they need to be prepared to carry out a
+complete investigation of the situation.
+
+SoftExpert Excellence Suite is software designed to help
+identify the root causes of problems. It offers all the
+necessary resources that assist in the investigation of
+incidents through the cause analysis tool that best suits the
+organization's convenience.
+Learn more
+
+Audit Management
+In order to remain in compliance with the GDPR, companies need
+to map plans for internal data protection audits that raise evidence
+to verify the compliance of the procedures with the regulation.
+An audit focused on this regulation must verify the efficiency and
+effectiveness of the new incorporated processes, covering all
+aspects of the law and, finally, issue results of possible
+improvements or adjustments necessary to achieve full compliance
+with the regulation.
+
+Using a corporate tool, the SoftExpert solution helps to control the
+entire audit process. The solution manages all stages, from audit
+planning, preparation, setting schedules, developing plans and
+checklists, to execution, recording findings, issuing reports and
+monitoring.
+
+Learn more
+
+Action Management
+To ensure compliance with the GDPR, the implementation of an action
+plan is necessary at different times:
+• Non-conformities of internal data protection audits;- Nonconformities of audits by the competent control authority;
+• Breach of personal data;
+• Risk management.
+Therefore, the use of a dynamic tool that assists in managing all the
+tasks of a company's action plans in a cohesive manner is a critical
+element to achieve success in compliance with the law.
+The SoftExpert Excellence Suite presents an innovative solution to
+optimize the life cycle of the entire Action Plan. From its initial
+registration to its approval, the software maintains team communication
+and improves collaboration through centralized control of planning,
+execution and task monitoring. The application is easy to use and
+flexible, improving the speed of execution, the reliability and the
+efficiency of the tasks.
+
+Learn more
+
+Training Management
+GDPR requires several adjustments to procedures, policies, systems and
+personnel awareness, seeking to ensure compliance with the law. Due to
+all these changes, training should be offered in order to train people and
+incorporate the concern with information security and data privacy into
+the organizational culture.
+It is essential that all employees have an overview of the law,
+understanding its importance for the organization, for the market and for
+society in general. Through periodic training, the knowledge that personal
+data must be treated properly will be disseminated, and, consequently,
+everyone will become agents that transform a new organizational culture.
+The SoftExpert solution is ideal for the effective management of training
+in any organization. It guarantees the periodic planning of internal and
+external training, with the electronic application of tests and evaluations. It
+also allows you to program the use of places and support materials,
+optimizing the resources available in the company.
+
+Learn more
+
+Indicator Management
+The indicators can be used by organizations to obtain a regular
+analysis of the performance of GDPR compliance, checking for
+possible gaps as well as the status of other privacy initiatives.
+Monitoring of results is also indicated to demonstrate compliance
+with the regulations for senior management. Showing the evolution
+of the actions and results obtained, as well as the role of privacy for
+citizens and employees of the organization, reinforces and
+strengthens the culture of data privacy.
+The SoftExpert tool makes it possible to manage indicators related
+to GDPR using, even, personalized management portals. The
+solution goes beyond the simple measurement of the indicators,
+allowing to manage the performance of the compliance with the
+regulation in a robust and intelligent way.
+Learn more
+
+Company
+SoftExpert is the market leader in software and services for enterprise-wide business process
+improvement and compliance management, providing the most comprehensive application suite
+to empower organizations to increase business performance at all levels and to maximize
+industry-mandated compliance and corporate governance programs.
+Founded in 1995 and currently with more than 2,000 customers and 300,000 users worldwide,
+SoftExpert solutions are used by leading corporations in all kinds of industries, including
+manufacturing, automotive, life sciences, food and beverage, mining and metals, oil and gas, hightech and IT, energy and utilities, government and public sector, financial services, transportation,
+logistics and healthcare.
+SoftExpert, along with its extensive network of international partners, provides hosting,
+implementation, post-sales support and validation services for all solutions to ensure that
+customers get the maximum value from their investments.
+
+Meet
+our
+Conheça
+customers
+nossos
+clientes
+
+SoftExpert Excellence Suite
+SoftExpert Excellence Suite is the most
+comprehensive solution to collaboratively
+solve critical business excellence challenges
+into an integrated multi-application
+environment.
+SoftExpert offers an integrated suite of
+components that can be implemented as
+business demands grow and the need to
+incorporate new functions.
+Whatever the strategy chosen, only a fully
+shared Business Excellence environment
+allows its applications fit together like puzzle
+pieces and work seamlessly.
+
+Thinking
+Global
+Acting Local
+One of the driving forces behind SoftExpert's
+growth is its global footprint. With its extensive
+partnership network throughout the world,
+SoftExpert develops its operations on every
+continent offering customers strong service
+with a local approach specific to their markets.
+Business Units
+Partners
+
+Leve sua empresa para o próximo nível
+
+www.softexpert.com | sales@softexpert.com
+
+O conteúdo deste material está sujeito a alteração sem aviso prévio. Este material é disponibilizado pela SoftExpert e/ou sua rede de afiliados em caráter informativo apenas, sem nenhuma condição de garantia de nenhum tipo, e a SoftExpert não oferece garantia de qualquer
+natureza nem se responsabiliza por sua precisão ou integridade, salvo declaração expressa em contrário. As únicas garantias relacionadas aos produtos e serviços da SoftExpert são aquelas declaradas nos acordos oficiais de garantia que acompanham os seus produtos e serviços.
+Algumas características e funcionalidades dos produtos apresentados neste material podem ser opcionais ou dependentes da composição da(s) oferta(s) adquiridas.
+
+

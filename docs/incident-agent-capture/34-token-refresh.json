@@ -1,0 +1,4 @@
+{
+  "access": "<redacted-jwt-access-token>",
+  "_capture_note": "POST /business/token/refresh/ with {refresh} returned 200 {access}; access token redacted at capture time"
+}

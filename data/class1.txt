@@ -1,0 +1,672 @@
+Loading 'turbo' model on cpu...
+Transcribing 'audit1.mp3'...
+Detected language: 'es' (probability: 1.00)
+
+[0.00s -> 4.24s]  que plantea el ISO 27701
+[4.24s -> 5.32s]  que hasta acabo de lanzar
+[5.32s -> 9.32s]  que nos proponga
+[9.32s -> 10.76s]  a gente nada más
+[10.76s -> 12.44s]  cuánto se considera
+[12.44s -> 13.32s]  que les va a decir
+[13.32s -> 16.04s]  promedio 8, 9, 7, 20
+[16.04s -> 17.70s]  y que les ponga una etiqueta
+[17.70s -> 19.66s]  yo voy a poner una etiqueta
+[19.66s -> 21.88s]  de la gente que se encarga de los riesgos
+[21.88s -> 24.32s]  de la auditoría, de las acciones colectivas
+[24.32s -> 26.22s]  de los indicadores
+[26.22s -> 28.00s]  de los procesos
+[30.00s -> 32.30s]  y uno de capacitación
+[32.30s -> 33.06s]  por ahí vamos
+[33.06s -> 33.90s]  los 7, 8
+[33.90s -> 36.58s]  y luego pasamos el F
+[36.58s -> 37.50s]  de Rafa
+[37.50s -> 39.14s]  el F
+[39.14s -> 41.60s]  quiero que me alcanza
+[41.60s -> 43.34s]  una matriz con las siguientes columnas
+[43.34s -> 45.40s]  columna cláusulas
+[45.40s -> 46.88s]  columna
+[46.88s -> 51.62s]  columna controles
+[51.62s -> 53.98s]  y columna el agente
+[53.98s -> 54.86s]  el agente
+[54.86s -> 57.46s]  ahora hacemos la validación
+[57.46s -> 59.06s]  de derecha e izquierda
+[59.06s -> 60.16s]  el agente
+[60.16s -> 61.06s]  de capacitación
+[61.06s -> 62.68s]  se tiene que ocupar
+[62.68s -> 64.56s]  de los controles
+[64.56s -> 65.84s]  números iguales
+[65.84s -> 67.06s]  y a su vez
+[67.06s -> 67.70s]  de estos
+[67.70s -> 68.68s]  de las cláusulas
+[68.68s -> 70.52s]  que es un perfil
+[70.52s -> 72.26s]  una matriz
+[72.26s -> 75.72s]  por cada agente
+[75.72s -> 77.44s]  o sea, acá el nombre
+[77.44s -> 78.32s]  de la etiqueta del agente
+[78.32s -> 80.74s]  de qué controles se ocupa
+[80.74s -> 83.08s]  y a su parte
+[83.08s -> 84.60s]  de qué cláusulas
+[84.60s -> 85.18s]  de las normas
+[85.18s -> 86.36s]  se caer
+[86.36s -> 88.46s]  entonces tiene que pasar algo
+[88.46s -> 89.24s]  eso es un delegado
+[89.24s -> 89.86s]  que va a ser también
+[89.86s -> 91.14s]  junto con los líderes de equipo
+[91.14s -> 93.10s]  tiene que pasar
+[93.10s -> 93.84s]  de que
+[93.84s -> 96.20s]  todas las cláusulas
+[96.20s -> 97.30s]  tienen que estar cubiertas
+[97.30s -> 97.98s]  por sección
+[97.98s -> 98.20s]  ¿no?
+[99.04s -> 99.98s]  y todos los controles
+[99.98s -> 100.36s]  también
+[100.36s -> 102.32s]  o sea, un agente
+[102.32s -> 103.56s]  puede estar
+[103.56s -> 104.36s]  encargándose
+[104.36s -> 110.34s]  un grupo de controles
+[110.34s -> 110.98s]  de cláusulas
+[110.98s -> 111.96s]  y otro agente
+[111.96s -> 112.18s]  también
+[112.18s -> 113.38s]  o sea, puede haber agentes
+[113.38s -> 114.28s]  que se estén ocupando
+[114.28s -> 115.38s]  de más de un control
+[115.38s -> 117.54s]  claro que sí
+[117.54s -> 119.10s]  puede haber más
+[119.10s -> 119.52s]  que un agente
+[119.52s -> 120.66s]  que esté ocupándose
+[120.66s -> 121.62s]  de más de una cláusula
+[121.62s -> 122.82s]  también
+[122.82s -> 124.38s]  pero hay esto
+[124.38s -> 125.58s]  que todos queremos
+[125.58s -> 125.88s]  ¿no?
+[126.42s -> 126.78s]  este
+[126.78s -> 127.98s]  alta cohesión
+[127.98s -> 129.24s]  y bajo acoplamiento
+[129.24s -> 130.28s]  en la medida
+[130.28s -> 130.86s]  de lo posible
+[130.86s -> 132.12s]  que no pase eso
+[132.12s -> 132.42s]  ¿cierto?
+[133.10s -> 134.30s]  que un agente
+[134.30s -> 135.08s]  se ocupe pues
+[135.08s -> 137.22s]  de un grupo
+[137.22s -> 138.06s]  de controles
+[138.06s -> 139.04s]  de un grupo
+[139.04s -> 139.62s]  de cláusulas
+[139.62s -> 140.34s]  y ya pues
+[140.34s -> 140.74s]  por fuerza
+[140.74s -> 141.78s]  mayormente otro
+[141.78s -> 142.26s]  también
+[142.26s -> 143.14s]  pero en la medida
+[143.14s -> 143.56s]  de lo posible
+[143.56s -> 144.02s]  que no
+[144.02s -> 145.22s]  porque si cae
+[145.22s -> 146.36s]  si muchos
+[146.36s -> 146.90s]  se ocupan
+[146.90s -> 147.38s]  de lo mismo
+[147.38s -> 148.34s]  no es el cierre de nadie
+[148.34s -> 149.00s]  pues no piensas
+[149.00s -> 149.56s]  el responsable
+[149.56s -> 150.00s]  ¿no?
+[150.60s -> 151.16s]  entonces eso
+[151.16s -> 152.76s]  entonces ya le piden eso
+[152.76s -> 152.92s]  ¿no?
+[152.92s -> 153.06s]  o sea
+[153.06s -> 153.98s]  el control
+[153.98s -> 155.26s]  el alcance
+[155.26s -> 156.20s]  que es lo que quiero que hagas
+[156.20s -> 157.36s]  y el formato
+[157.36s -> 157.56s]  ¿no?
+[157.78s -> 158.82s]  y luego le das el ámbito
+[158.82s -> 159.42s]  el ámbito
+[159.42s -> 160.64s]  ese final de Rafa
+[160.64s -> 160.90s]  es
+[160.90s -> 162.26s]  el contexto
+[162.26s -> 162.68s]  el ámbito
+[162.68s -> 162.84s]  ¿no?
+[162.86s -> 164.54s]  pues se trata
+[164.54s -> 165.52s]  de un sistema
+[165.52s -> 165.96s]  de gestión
+[165.96s -> 166.48s]  de la privacidad
+[166.48s -> 167.08s]  de información
+[167.08s -> 168.44s]  para existirse
+[168.44s -> 168.86s]  en inglés
+[168.86s -> 169.06s]  ¿no?
+[169.68s -> 170.88s]  de la Universidad
+[170.88s -> 171.30s]  Nacional
+[171.30s -> 172.00s]  de San Agustín
+[172.00s -> 172.74s]  entonces
+[172.74s -> 173.82s]  es una universidad
+[173.82s -> 175.42s]  estatal
+[175.42s -> 176.86s]  del Perú
+[176.86s -> 178.58s]  y nos vamos a decir
+[178.58s -> 179.04s]  listo
+[179.04s -> 179.70s]  ya tienes el Rafa
+[179.70s -> 179.88s]  ¿no?
+[180.20s -> 180.96s]  le sueltas el PROM
+[180.96s -> 181.52s]  y algo
+[181.52s -> 183.38s]  y ya está
+[183.38s -> 184.28s]  y ahí tienen los roles
+[184.28s -> 185.58s]  los agentes
+[185.58s -> 185.80s]  ¿no?
+[186.18s -> 186.60s]  entonces
+[186.60s -> 187.42s]  uno de ellos
+[187.42s -> 188.62s]  es el agente de riesgo
+[188.62s -> 188.78s]  ¿sí?
+[188.84s -> 189.78s]  vamos a hablar del riesgo
+[189.78s -> 190.64s]  el agente que hace
+[190.64s -> 191.44s]  gestión de riesgo
+[191.44s -> 191.88s]  ¿listo?
+[192.24s -> 192.56s]  ahora
+[192.56s -> 193.72s]  el
+[193.72s -> 195.76s]  se decía que son dos pisos
+[195.76s -> 195.92s]  ¿no?
+[196.40s -> 197.16s]  el PIMS
+[197.16s -> 198.96s]  el Sino de la Ciencia
+[198.96s -> 199.44s]  de la Privación
+[199.44s -> 199.96s]  de la Información
+[199.96s -> 200.84s]  soportado
+[200.84s -> 201.42s]  por ese software
+[201.42s -> 202.12s]  que no quiere
+[202.12s -> 202.80s]  dejar que entre
+[202.80s -> 204.58s]  tiene su propia
+[204.58s -> 205.16s]  base de datos
+[205.16s -> 205.48s]  ¿cierto?
+[206.12s -> 207.62s]  tiene formularios
+[207.62s -> 209.10s]  y lleva
+[209.10s -> 209.92s]  toda una implementación
+[209.92s -> 211.00s]  de 27-27
+[211.00s -> 212.22s]  y tiene su base de datos
+[212.22s -> 213.24s]  recién pasada
+[213.24s -> 213.86s]  la documentación
+[213.86s -> 214.60s]  de su base de datos
+[214.60s -> 215.44s]  igual
+[215.44s -> 216.90s]  la aplicación
+[216.90s -> 218.60s]  que permite
+[218.60s -> 219.38s]  encerrar a todos
+[219.38s -> 220.30s]  pues es cuestión
+[220.30s -> 220.70s]  de tiempo
+[220.70s -> 221.18s]  van a agarrar
+[221.18s -> 221.76s]  al proveedor
+[221.76s -> 222.06s]  y ya
+[222.06s -> 223.16s]  yo también
+[223.16s -> 223.76s]  agarré la noche
+[223.76s -> 224.46s]  y empezar a crear
+[224.46s -> 225.18s]  las cuentas
+[225.18s -> 225.56s]  y ya
+[225.56s -> 226.64s]  para que puedan
+[226.64s -> 226.88s]  entrar
+[226.88s -> 227.68s]  en los diferentes grupos
+[227.68s -> 229.62s]  que no esté pasando
+[229.62s -> 229.92s]  a este
+[229.92s -> 231.58s]  y entonces
+[231.58s -> 232.28s]  el PIMS
+[232.28s -> 232.80s]  el PIMS
+[232.80s -> 233.80s]  tiene su base de datos
+[233.80s -> 233.98s]  ¿no?
+[233.98s -> 234.40s]  no se va a hacer
+[234.40s -> 234.98s]  el mismo nivel
+[234.98s -> 235.16s]  ¿no?
+[235.40s -> 235.92s]  base de datos
+[235.92s -> 237.54s]  y este PIMS
+[237.54s -> 238.02s]  tiene también
+[238.02s -> 238.66s]  muchos módulos
+[238.66s -> 240.88s]  documentos
+[240.88s -> 241.54s]  metodologías
+[241.54s -> 242.36s]  riesgos
+[242.36s -> 244.08s]  acciones correctivas
+[244.08s -> 244.90s]  activos
+[244.90s -> 245.04s]  ¿no?
+[245.04s -> 246.12s]  de información
+[246.12s -> 247.96s]  tiene sus módulos
+[247.96s -> 250.50s]  la base de datos
+[250.50s -> 250.98s]  está en blanco
+[250.98s -> 251.84s]  completamente en blanco
+[251.84s -> 253.90s]  entonces
+[253.90s -> 254.94s]  por ejemplo
+[254.94s -> 255.74s]  si se tratase
+[255.74s -> 256.26s]  de la gente
+[256.26s -> 256.78s]  de riesgos
+[256.78s -> 257.26s]  que está acá
+[257.26s -> 258.38s]  la gente
+[258.38s -> 258.78s]  de riesgos
+[258.78s -> 259.28s]  tiene que ser
+[259.28s -> 259.92s]  pues inteligente
+[259.92s -> 260.08s]  ¿no?
+[260.08s -> 260.52s]  es importante
+[260.52s -> 261.12s]  ser inteligente
+[261.12s -> 262.24s]  si yo
+[262.24s -> 262.82s]  de usuario
+[262.82s -> 263.98s]  estoy llevando
+[263.98s -> 264.16s]  a cabo
+[264.16s -> 264.68s]  la interpretación
+[264.68s -> 265.28s]  en el San Agustín
+[265.28s -> 265.46s]  ¿no?
+[265.46s -> 265.68s]  entonces
+[265.68s -> 266.82s]  tengo que
+[266.82s -> 267.98s]  registrar riesgos
+[267.98s -> 268.20s]  ¿no?
+[268.72s -> 269.04s]  riesgos
+[269.04s -> 269.42s]  riesgos
+[269.42s -> 270.82s]  ¿de dónde empiezo?
+[271.62s -> 272.50s]  si no tengo
+[272.50s -> 273.50s]  una gente inteligente
+[273.50s -> 274.24s]  tendría que empezar
+[274.24s -> 275.20s]  preguntando
+[275.20s -> 276.14s]  oye
+[276.14s -> 277.22s]  ¿qué riesgos hay aquí?
+[277.42s -> 278.44s]  revisando la literatura
+[278.44s -> 278.96s]  bueno
+[278.96s -> 279.62s]  el peor de los casos
+[279.62s -> 279.90s]  es si eso
+[279.90s -> 280.26s]  van a tener
+[280.26s -> 281.08s]  que ser la primera vez
+[281.08s -> 283.18s]  preguntarle
+[283.18s -> 284.64s]  al Chachiquiti
+[284.64s -> 285.02s]  y decirle
+[285.02s -> 285.76s]  otra vez
+[285.76s -> 286.46s]  hacer un rato
+[286.46s -> 287.66s]  un propio tipo de rato
+[287.66s -> 287.80s]  ¿no?
+[288.24s -> 289.08s]  es la que se dice
+[289.08s -> 289.98s]  en ciberseguridad
+[289.98s -> 290.18s]  ¿no?
+[290.80s -> 291.12s]  este
+[291.12s -> 294.88s]  ayúdame a identificar
+[294.88s -> 295.70s]  pues los riesgos
+[295.70s -> 296.76s]  asociados a la privacidad
+[296.76s -> 297.20s]  de información
+[297.20s -> 297.50s]  ¿no?
+[298.16s -> 299.14s]  sobre los cuales
+[299.14s -> 299.58s]  necesito
+[299.58s -> 300.46s]  de los siguientes campos
+[300.46s -> 301.34s]  y los campos
+[301.34s -> 301.88s]  son necesariamente
+[301.88s -> 302.36s]  lo que pide
+[302.36s -> 303.10s]  el formulario
+[303.10s -> 303.76s]  del software
+[303.76s -> 303.98s]  ¿no?
+[304.48s -> 305.42s]  para cada riesgo
+[305.42s -> 306.50s]  qué datos
+[306.50s -> 306.70s]  ¿no?
+[307.04s -> 307.58s]  por ejemplo
+[307.58s -> 308.64s]  cuáles
+[308.64s -> 310.40s]  cuáles son los incidentes
+[310.40s -> 311.78s]  que pueden disparar
+[311.78s -> 312.40s]  ese riesgo
+[312.40s -> 312.52s]  ¿no?
+[313.22s -> 314.40s]  qué impactos
+[314.40s -> 315.18s]  puede generar
+[315.18s -> 315.32s]  ¿no?
+[316.14s -> 317.42s]  las causas
+[317.42s -> 318.72s]  los controles
+[318.72s -> 319.00s]  para
+[319.00s -> 320.94s]  mitigar
+[320.94s -> 321.04s]  ¿no?
+[321.04s -> 321.06s]  ¿no?
+[321.06s -> 321.22s]  cierto
+[321.22s -> 321.78s]  el riesgo
+[321.78s -> 322.92s]  ese tipo
+[322.92s -> 323.40s]  de riesgo
+[323.40s -> 325.28s]  normalmente
+[325.28s -> 325.70s]  quien sería
+[325.70s -> 326.34s]  responsable
+[326.34s -> 326.54s]  ¿no?
+[326.62s -> 327.50s]  risk owner
+[327.50s -> 328.04s]  ¿no?
+[328.04s -> 328.24s]  entonces
+[328.24s -> 330.54s]  registrar un riesgo
+[330.54s -> 332.68s]  que tiene varios campos
+[332.68s -> 333.98s]  ustedes entran
+[333.98s -> 334.52s]  en la aplicación
+[334.52s -> 335.16s]  y yo la repongo
+[335.16s -> 335.80s]  en cada campo
+[335.80s -> 336.96s]  entonces
+[336.96s -> 337.46s]  eso significa
+[337.46s -> 337.82s]  generar
+[337.82s -> 338.56s]  data sintética
+[338.56s -> 338.88s]  o sea
+[338.88s -> 340.10s]  pedirle a la IA
+[340.10s -> 340.60s]  que me ayude
+[340.60s -> 341.30s]  ¿qué otro modo
+[341.30s -> 342.34s]  habría que entrevistar
+[342.34s -> 343.10s]  pues a toda la gente
+[343.10s -> 343.32s]  ¿no?
+[343.74s -> 344.58s]  de planillas
+[344.58s -> 346.74s]  de admisión
+[346.74s -> 347.52s]  y decirles
+[347.52s -> 347.84s]  a ver
+[347.84s -> 349.52s]  qué data
+[349.52s -> 350.10s]  privada
+[350.10s -> 351.64s]  qué campos
+[351.64s -> 352.02s]  vienen
+[352.02s -> 352.30s]  ¿no?
+[353.98s -> 354.86s]  qué campos
+[354.86s -> 355.38s]  se recogen
+[355.38s -> 355.58s]  ¿no?
+[356.08s -> 356.48s]  después
+[356.48s -> 357.62s]  qué es lo peor
+[357.62s -> 358.32s]  que puede pasar
+[358.32s -> 358.52s]  ¿no?
+[359.34s -> 359.76s]  y
+[359.76s -> 361.98s]  qué amenazas
+[361.98s -> 362.56s]  existen
+[362.56s -> 362.74s]  ¿no?
+[363.60s -> 364.38s]  qué impacto
+[364.38s -> 365.04s]  puede generar
+[365.04s -> 365.82s]  si se materializa
+[365.82s -> 366.22s]  un riesgo
+[366.22s -> 366.76s]  de que se pierda
+[366.76s -> 367.24s]  esa data
+[367.24s -> 368.44s]  sería llevar
+[368.44s -> 369.08s]  como una entrevista
+[369.08s -> 369.28s]  ¿no?
+[369.84s -> 370.18s]  pero
+[370.18s -> 371.04s]  todo eso
+[371.04s -> 371.44s]  lo van a hacer
+[371.44s -> 372.08s]  con
+[372.08s -> 373.26s]  con ayuda
+[373.26s -> 373.74s]  de la IA
+[373.74s -> 374.80s]  y generarían
+[374.80s -> 375.38s]  un registro
+[375.38s -> 376.44s]  ¿no?
+[376.64s -> 377.16s]  ¿qué estábamos
+[377.16s -> 377.78s]  hablando de la mañana
+[377.78s -> 377.98s]  ¿no?
+[378.94s -> 379.70s]  en el grupo
+[379.70s -> 380.66s]  A, B y C
+[380.66s -> 382.30s]  hay tres grupos
+[382.30s -> 383.22s]  que están viendo riesgos
+[383.22s -> 384.20s]  acá también
+[384.20s -> 384.52s]  tienen que haber
+[384.52s -> 384.78s]  grupos
+[384.78s -> 385.10s]  que están viendo
+[385.10s -> 385.42s]  la gente
+[385.42s -> 385.88s]  de riesgos
+[385.88s -> 386.10s]  ¿no?
+[386.52s -> 386.90s]  entonces
+[386.90s -> 388.38s]  los líderes
+[388.38s -> 389.00s]  de riesgos
+[389.00s -> 389.48s]  de aquí
+[389.48s -> 391.46s]  de C y el A
+[391.46s -> 392.68s]  se ponen de acuerdo
+[392.68s -> 392.86s]  ¿no?
+[393.14s -> 393.50s]  y dicen
+[393.50s -> 393.96s]  a ver
+[393.96s -> 394.96s]  a ver
+[394.96s -> 395.78s]  ¿cómo es el fin de semana?
+[396.58s -> 397.10s]  pero si todo
+[397.10s -> 397.34s]  entra
+[397.34s -> 397.78s]  o funciona
+[397.78s -> 398.76s]  a ver
+[398.76s -> 399.26s]  ¿qué les parece
+[399.26s -> 400.10s]  si el grupo de riesgos
+[400.10s -> 400.48s]  de aquí
+[400.48s -> 401.82s]  registra
+[401.82s -> 402.80s]  diez riesgos
+[402.80s -> 404.00s]  el grupo
+[404.00s -> 404.50s]  del grupo
+[404.50s -> 404.68s]  C
+[404.68s -> 405.40s]  otros diez riesgos
+[405.40s -> 406.36s]  el grupo A
+[406.36s -> 407.04s]  con diez riesgos
+[407.04s -> 407.42s]  total
+[407.42s -> 408.60s]  treinta riesgos
+[408.60s -> 409.62s]  de privacidad
+[409.62s -> 409.98s]  y de formación
+[409.98s -> 410.48s]  de la universidad
+[410.48s -> 411.52s]  listo
+[411.52s -> 413.06s]  ¿y para cuándo?
+[413.48s -> 414.10s]  ¿para el domingo
+[414.10s -> 414.66s]  están llenos
+[414.66s -> 415.18s]  los diez riesgos?
+[415.36s -> 416.06s]  ¿los diez riesgos?
+[416.16s -> 416.32s]  sí
+[416.32s -> 417.20s]  ¿para el domingo?
+[417.40s -> 417.72s]  ¿para el domingo?
+[417.80s -> 418.22s]  listo
+[418.22s -> 418.50s]  queda
+[418.50s -> 419.44s]  ya está
+[419.44s -> 419.88s]  y el domingo
+[419.88s -> 421.36s]  en las fases de datos
+[421.36s -> 422.24s]  en las tablas de riesgos
+[422.24s -> 423.62s]  están los diez riesgos
+[423.62s -> 424.52s]  ya está
+[424.52s -> 425.60s]  y lo van a hacer
+[425.60s -> 426.82s]  entrevistando
+[426.82s -> 427.16s]  si no
+[427.16s -> 428.14s]  bueno
+[428.14s -> 428.86s]  ni siquiera lo van a hacer
+[428.86s -> 429.36s]  todos los días
+[429.36s -> 429.84s]  hay que hacerlo
+[429.84s -> 430.02s]  ¿no?
+[430.52s -> 431.20s]  entrevistando
+[431.20s -> 432.22s]  y llenando
+[432.22s -> 433.08s]  lo pueden hacer
+[433.08s -> 433.84s]  con la vida también
+[433.84s -> 434.76s]  ¿qué haría
+[434.76s -> 435.82s]  un agente inteligente?
+[437.26s -> 437.94s]  dentro de la parte
+[437.94s -> 438.66s]  de las organizaciones
+[438.66s -> 440.22s]  ya no quieren utilizar
+[440.22s -> 440.92s]  los
+[440.92s -> 442.08s]  los LLMS
+[442.08s -> 442.66s]  de paga
+[442.66s -> 443.82s]  porque en subir
+[443.82s -> 444.46s]  su data ahí
+[444.46s -> 445.92s]  se expone también
+[445.92s -> 446.78s]  a que utilizan
+[446.78s -> 447.96s]  otros
+[447.96s -> 448.92s]  otros clientes
+[448.92s -> 449.32s]  que pagan
+[449.32s -> 449.96s]  la asociación
+[449.96s -> 451.08s]  a los
+[451.08s -> 452.12s]  a estos LLMS
+[452.12s -> 452.36s]  ¿no?
+[452.68s -> 452.86s]  entonces
+[452.86s -> 453.30s]  ¿qué dicen?
+[453.30s -> 454.88s]  clavos
+[454.88s -> 455.36s]  o llamas
+[455.36s -> 455.52s]  y dicen
+[455.52s -> 456.28s]  ya yo te compro
+[456.28s -> 458.26s]  tu arquitectura
+[458.26s -> 459.30s]  pero todo esto
+[459.30s -> 460.20s]  lo tengo en casa
+[460.20s -> 461.20s]  en una
+[461.20s -> 462.52s]  en una
+[462.52s -> 463.64s]  en una pecera
+[463.64s -> 464.22s]  pues de vidrio
+[464.22s -> 464.40s]  ¿no?
+[464.78s -> 465.40s]  donde no
+[465.40s -> 466.66s]  todo lo que cargue aquí
+[466.66s -> 467.76s]  no salga hacia afuera
+[467.76s -> 468.06s]  no
+[468.06s -> 469.64s]  no lo vea nadie
+[469.64s -> 471.18s]  y ahí cargan sus cosas
+[471.18s -> 472.16s]  y aquí
+[472.16s -> 472.70s]  toda la
+[472.70s -> 473.86s]  pero bien
+[473.86s -> 474.30s]  privado
+[474.30s -> 475.02s]  para ellos nada más
+[475.02s -> 476.74s]  algo así
+[476.74s -> 478.40s]  con un
+[478.40s -> 479.88s]  con un
+[479.88s -> 480.76s]  todo enmarcado
+[480.76s -> 481.24s]  encerrado
+[481.24s -> 482.12s]  que no salga hacia afuera
+[482.12s -> 482.34s]  ¿no?
+[483.02s -> 483.32s]  ok
+[483.32s -> 484.20s]  entonces
+[484.20s -> 485.76s]  ¿qué sería un agente
+[485.76s -> 486.36s]  inteligente?
+[486.54s -> 487.90s]  ¿qué significa tener
+[487.90s -> 488.62s]  un agente inteligente?
+[488.72s -> 488.86s]  o sea
+[488.86s -> 490.02s]  que tenga
+[490.02s -> 491.16s]  alguien inteligente
+[491.16s -> 491.80s]  que esté ayudando
+[491.80s -> 493.16s]  a generar los registros
+[493.16s -> 493.62s]  de riesgos
+[493.62s -> 495.44s]  que podría ser una persona
+[495.44s -> 496.62s]  que sabe un montón
+[496.62s -> 497.96s]  que tiene experiencia
+[497.96s -> 498.16s]  ¿no?
+[498.54s -> 499.22s]  pues ¿qué pasaría
+[499.22s -> 500.20s]  cuando están picando
+[500.20s -> 501.46s]  cuando están picando
+[501.46s -> 502.42s]  este
+[502.42s -> 503.58s]  riesgos
+[503.58s -> 504.14s]  en la universidad
+[504.14s -> 504.76s]  al toque
+[504.76s -> 505.56s]  les tendría que mostrar
+[505.56s -> 506.00s]  mira estos
+[506.00s -> 506.36s]  tengo
+[506.36s -> 507.22s]  en memoria
+[507.22s -> 507.80s]  tengo un banco
+[507.80s -> 508.66s]  en base de conocimientos
+[508.66s -> 509.14s]  tengo estos
+[509.14s -> 510.24s]  o sea
+[510.24s -> 510.86s]  no este blanco
+[510.86s -> 511.30s]  viena
+[511.30s -> 511.82s]  blanco
+[511.82s -> 512.04s]  sino
+[512.04s -> 512.86s]  apenas
+[512.86s -> 515.12s]  registrar riesgos
+[515.12s -> 515.80s]  te sugiere
+[515.80s -> 516.36s]  estos ahí
+[516.36s -> 518.22s]  allá aplicas este
+[518.22s -> 518.38s]  ¿no?
+[518.68s -> 519.24s]  y al toque
+[519.24s -> 520.32s]  y el siguiente campo
+[520.32s -> 520.50s]  ¿no?
+[520.98s -> 522.14s]  ¿cuáles son los activadores?
+[522.72s -> 523.24s]  los thrillers
+[523.24s -> 523.38s]  ¿no?
+[523.38s -> 523.90s]  de ese riesgo
+[523.90s -> 524.82s]  y al toque
+[524.82s -> 525.90s]  te presenta esto
+[525.90s -> 526.42s]  ahí es cosa
+[526.42s -> 526.82s]  nada más
+[526.82s -> 527.50s]  luego
+[527.50s -> 528.16s]  ¿y cuál sería
+[528.16s -> 528.62s]  la probabilidad
+[528.62s -> 529.08s]  de ser presente?
+[529.96s -> 531.04s]  y los impactos
+[531.04s -> 531.54s]  de ser presente
+[531.54s -> 532.08s]  entonces
+[532.08s -> 532.48s]  te ayuda
+[532.48s -> 533.10s]  de la manito
+[533.10s -> 533.56s]  te va llevando
+[533.56s -> 533.98s]  para que
+[533.98s -> 535.08s]  hagas ese registro
+[535.08s -> 535.40s]  ¿no?
+[535.40s -> 536.26s]  eso sería
+[536.26s -> 536.96s]  más inteligente
+[536.96s -> 538.22s]  que te va ayudando
+[538.22s -> 538.92s]  a generar
+[538.92s -> 540.14s]  las tablas
+[540.14s -> 540.54s]  ¿no?
+[541.08s -> 543.20s]  eso no lo van a hacer
+[543.20s -> 543.50s]  ustedes
+[543.50s -> 544.36s]  eso sería
+[544.36s -> 545.78s]  una solución
+[545.78s -> 547.34s]  a tecnificar
+[547.34s -> 548.68s]  sobre un PIMS
+[548.68s -> 548.82s]  ¿no?
+[549.04s -> 549.80s]  este PIMS
+[549.80s -> 550.90s]  los PIMS
+[550.90s -> 553.08s]  no son inteligentes
+[553.08s -> 553.94s]  o sea
+[553.94s -> 554.32s]  pide que
+[554.32s -> 554.82s]  todo el mundo
+[554.82s -> 555.12s]  llene
+[555.12s -> 555.36s]  llene
+[555.36s -> 555.62s]  llene
+[555.62s -> 556.02s]  la cabeza
+[556.02s -> 556.22s]  ¿no?
+[556.54s -> 556.74s]  ahora
+[556.74s -> 557.90s]  este PIMS
+[557.90s -> 559.12s]  de ser inteligente
+[559.12s -> 560.96s]  en la segunda implementación
+[560.96s -> 561.92s]  ya tendría
+[561.92s -> 562.58s]  más experiencia
+[562.58s -> 562.84s]  ¿no?
+[563.04s -> 563.78s]  y va surgiendo
+[563.78s -> 564.18s]  más
+[564.18s -> 564.96s]  y es mucho más fácil
+[564.96s -> 565.16s]  que
+[579.80s -> 580.04s]  los grupos
+[580.04s -> 580.06s]  los grupos
+[580.06s -> 580.84s]  se van a
+[580.84s -> 583.02s]  organizar
+[583.02s -> 583.82s]  y empezar
+[583.82s -> 584.30s]  a poblar
+[584.30s -> 584.70s]  esa base
+[584.70s -> 585.04s]  de datos
+[585.04s -> 585.42s]  a través
+[585.42s -> 586.06s]  de la aplicación
+[586.06s -> 589.24s]  acciones correctivas
+[589.24s -> 590.02s]  incidentes
+[590.02s -> 591.14s]  efectos de capacitación
+[591.14s -> 592.74s]  política de privacidad
+[592.74s -> 594.72s]  todo lo que tiene la norma
+[594.72s -> 598.04s]  para llenar la política
+[598.04s -> 598.60s]  de privacidad
+[598.60s -> 599.34s]  el alcance
+[599.34s -> 600.66s]  de la gestión
+[600.66s -> 601.20s]  necesita
+[601.20s -> 601.94s]  pues la plantilla
+[601.94s -> 602.12s]  ¿no?
+[602.12s -> 602.32s]  de
+[609.80s -> 611.28s]  para 27701
+[611.28s -> 612.46s]  porque ese kit
+[612.46s -> 613.18s]  de plantillas
+[613.18s -> 614.20s]  vale 900
+[614.20s -> 615.28s]  casi 1000 euros
+[615.28s -> 616.44s]  actualizada
+[616.44s -> 616.62s]  ¿no?
+[617.20s -> 617.74s]  y ya
+[617.74s -> 618.54s]  para comprar eso
+[618.54s -> 619.56s]  ¿qué pasa?
+[619.64s -> 620.26s]  en el pasado
+[620.26s -> 620.84s]  yo compré
+[620.84s -> 622.38s]  el kit de plantillas
+[622.38s -> 623.62s]  para la 27001
+[623.62s -> 624.32s]  para la seguridad
+[624.32s -> 624.70s]  de información
+[624.70s -> 625.66s]  ¿no?
+[625.76s -> 626.56s]  y como es un sistema
+[626.56s -> 626.98s]  de gestión
+[626.98s -> 627.76s]  también tiene
+[627.76s -> 628.36s]  política
+[628.36s -> 629.10s]  pero de seguridad
+[629.10s -> 629.78s]  tiene
+[629.78s -> 630.88s]  enunciado de aplicabilidad
+[630.88s -> 631.48s]  pero de seguridad
+[631.48s -> 631.78s]  de información
+[631.78s -> 632.10s]  ¿no?
+[634.32s -> 635.18s]  plan de tratamiento
+[635.18s -> 635.76s]  de riesgos
+[635.76s -> 636.60s]  pero de la
+[636.60s -> 638.04s]  seguridad de información
+[638.04s -> 639.18s]  y este otro
+[639.18s -> 639.76s]  lo que nos ocupa
+[639.76s -> 640.30s]  es de la
+[640.30s -> 640.62s]  privación
+[640.62s -> 641.12s]  de información
+[641.12s -> 642.16s]  en el fondo
+[642.16s -> 642.70s]  es lo mismo
+[642.70s -> 644.72s]  la misma columna
+[644.72s -> 645.30s]  en las mismas tigas
+[645.30s -> 645.46s]  ¿no?
+[645.84s -> 646.28s]  solo que
+[646.28s -> 646.88s]  las traveseras
+[646.88s -> 647.14s]  dicen
+[647.14s -> 647.34s]  ¿no?
+[648.02s -> 648.36s]  este
+[648.36s -> 649.20s]  ahí está
+[649.20s -> 649.68s]  ok
+[649.68s -> 650.86s]  vamos a traer
+[650.86s -> 651.36s]  las tigas
+[651.36s -> 651.56s]  ¿no?
+[651.56s -> 665.50s]  las tigas
+[665.50s -> 666.50s]  Gracias.
