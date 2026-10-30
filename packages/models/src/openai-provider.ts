@@ -1,9 +1,19 @@
 import type { ModelConfig } from "@pims/config";
-import { DEFAULT_OPENAI_BASE_URL } from "@pims/types/constants.ts";
 import {
+  DEFAULT_RAG_RERANK_K,
+  MAX_CHAT_MAX_TOKENS,
+  MODEL_ROUTE_EMBEDDINGS,
+  MODEL_ROUTE_FAST,
+  MODEL_ROUTE_OPENAI,
+  MODEL_ROUTE_RERANKER,
+  MODEL_ROUTE_VISION,
+} from "@pims/types/constants.ts";
+import {
+  CitationFabricatedError,
   CitationInvalidError,
   ModelSchemaViolationError,
   ModelUnavailableError,
+  type PimsBaseError,
 } from "@pims/types/errors.ts";
 import {
   type ChatJsonArgs,
@@ -16,10 +26,13 @@ import {
   type RankedPassage,
   type RerankArgs,
   type RerankResponse,
+  RerankResponseSchema,
   type VisionJsonArgs,
   type VisionJsonResponse,
+  VisionJsonResponseSchema,
 } from "@pims/types/models.ts";
 import OpenAI from "openai";
+import { z } from "zod";
 
 export interface OpenAIProviderOptions {
   reasoningConfig: ModelConfig;
@@ -31,6 +44,12 @@ export interface OpenAIProviderOptions {
   baseURL?: string;
   cohereApiKey?: string;
 }
+
+const OpenAIProviderOptionsSchema = z.object({
+  apiKey: z.string().min(1),
+  baseURL: z.string().optional(),
+  cohereApiKey: z.string().optional(),
+});
 
 export class OpenAIModelProvider implements ModelProvider {
   private readonly reasoningConfig: ModelConfig;
@@ -44,7 +63,51 @@ export class OpenAIModelProvider implements ModelProvider {
 
   constructor(options: OpenAIProviderOptions) {
     if (!options.apiKey || options.apiKey.trim() === "") {
-      throw new ModelUnavailableError("OPENAI", "API key is missing or empty");
+      throw new ModelUnavailableError(
+        MODEL_ROUTE_OPENAI,
+        "API key is missing or empty",
+      );
+    }
+    const validation = OpenAIProviderOptionsSchema.safeParse({
+      apiKey: options.apiKey,
+      baseURL: options.baseURL,
+      cohereApiKey: options.cohereApiKey,
+    });
+    if (!validation.success) {
+      throw new ModelUnavailableError(
+        MODEL_ROUTE_OPENAI,
+        `Invalid provider options: ${validation.error.message}`,
+      );
+    }
+    if (!options.reasoningConfig) {
+      throw new ModelUnavailableError(
+        MODEL_ROUTE_OPENAI,
+        "reasoningConfig is required",
+      );
+    }
+    if (!options.fastConfig) {
+      throw new ModelUnavailableError(
+        MODEL_ROUTE_OPENAI,
+        "fastConfig is required",
+      );
+    }
+    if (!options.visionConfig) {
+      throw new ModelUnavailableError(
+        MODEL_ROUTE_OPENAI,
+        "visionConfig is required",
+      );
+    }
+    if (!options.embeddingsConfig) {
+      throw new ModelUnavailableError(
+        MODEL_ROUTE_OPENAI,
+        "embeddingsConfig is required",
+      );
+    }
+    if (!options.rerankerConfig) {
+      throw new ModelUnavailableError(
+        MODEL_ROUTE_OPENAI,
+        "rerankerConfig is required",
+      );
     }
     this.reasoningConfig = options.reasoningConfig;
     this.fastConfig = options.fastConfig;
@@ -56,18 +119,21 @@ export class OpenAIModelProvider implements ModelProvider {
     this.cohereApiKey = options.cohereApiKey;
   }
 
-  private resolveEndpoint(config: ModelConfig): string {
+  private resolveEndpoint(config: ModelConfig, route: string): string {
     if (config.endpoint && config.endpoint.trim() !== "") {
       return config.endpoint.replace(/\/+$/, "");
     }
     if (this.defaultBaseURL && this.defaultBaseURL.trim() !== "") {
       return this.defaultBaseURL.replace(/\/+$/, "");
     }
-    return DEFAULT_OPENAI_BASE_URL;
+    throw new ModelUnavailableError(
+      route,
+      "No endpoint configured: set ModelConfig.endpoint or provider baseURL",
+    );
   }
 
-  private getClient(config: ModelConfig): OpenAI {
-    const baseURL = this.resolveEndpoint(config);
+  private getClient(config: ModelConfig, route: string): OpenAI {
+    const baseURL = this.resolveEndpoint(config, route);
     return new OpenAI({
       apiKey: this.apiKey,
       baseURL,
@@ -76,11 +142,12 @@ export class OpenAIModelProvider implements ModelProvider {
     });
   }
 
-  private mapError(route: string, err: unknown): Error {
+  private mapError(route: string, err: unknown): PimsBaseError {
     if (
       err instanceof ModelUnavailableError ||
       err instanceof ModelSchemaViolationError ||
-      err instanceof CitationInvalidError
+      err instanceof CitationInvalidError ||
+      err instanceof CitationFabricatedError
     ) {
       return err;
     }
@@ -114,10 +181,16 @@ export class OpenAIModelProvider implements ModelProvider {
   }
 
   async chat_json(args: ChatJsonArgs): Promise<ChatJsonResponse> {
-    const route = args.temperature === 0 ? "FAST_MODEL" : "REASONING_MODEL";
+    const route = args.route;
     const config =
-      route === "FAST_MODEL" ? this.fastConfig : this.reasoningConfig;
-    const client = this.getClient(config);
+      route === MODEL_ROUTE_FAST ? this.fastConfig : this.reasoningConfig;
+    if (args.max_tokens > MAX_CHAT_MAX_TOKENS) {
+      throw new ModelSchemaViolationError(
+        route,
+        `max_tokens ${args.max_tokens} exceeds limit ${MAX_CHAT_MAX_TOKENS}`,
+      );
+    }
+    const client = this.getClient(config, route);
 
     const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [
       { role: "system", content: args.system },
@@ -129,100 +202,86 @@ export class OpenAIModelProvider implements ModelProvider {
         ) {
           return { role: m.role, content: m.content };
         }
-        return {
-          role: "assistant" as const,
-          content: m.content,
-        };
+        throw new ModelSchemaViolationError(
+          route,
+          "tool role requires OpenAI tool-call conversion; unsupported message role",
+        );
       }),
     ];
 
-    let attempts = 0;
-    while (attempts < 2) {
-      attempts++;
-      try {
-        const response = await client.chat.completions.create({
-          model: config.model,
-          messages,
-          temperature: args.temperature,
-          max_tokens: args.max_tokens,
-          response_format: { type: "json_object" },
-        });
+    try {
+      const response = await client.chat.completions.create({
+        model: config.model,
+        messages,
+        temperature: args.temperature,
+        max_tokens: args.max_tokens,
+        response_format: { type: "json_object" },
+      });
 
-        const rawContent = response.choices?.[0]?.message?.content;
-        if (!rawContent) {
-          if (attempts >= 2) {
-            throw new ModelSchemaViolationError(
-              route,
-              "Response from model did not contain message content",
-            );
-          }
-          continue;
-        }
-
-        let parsed: JsonObject;
-        try {
-          const rawParsed = JSON.parse(rawContent);
-          const validation = JsonObjectSchema.safeParse(rawParsed);
-          if (!validation.success) {
-            if (attempts >= 2) {
-              throw new ModelSchemaViolationError(
-                route,
-                `Model JSON output schema invalid: ${validation.error.message}`,
-              );
-            }
-            continue;
-          }
-          parsed = validation.data;
-        } catch (err: unknown) {
-          if (err instanceof ModelSchemaViolationError) {
-            throw err;
-          }
-          if (attempts >= 2) {
-            throw new ModelSchemaViolationError(
-              route,
-              `Failed to parse model output as JSON: ${String(err)}`,
-            );
-          }
-          continue;
-        }
-
-        const citationsRequested = Boolean(
-          parsed.citations_requested ||
-            (Array.isArray(parsed.citations) && parsed.citations.length > 0),
+      const rawContent = response.choices?.[0]?.message?.content;
+      if (!rawContent) {
+        throw new ModelSchemaViolationError(
+          route,
+          "Response from model did not contain message content",
         );
+      }
 
-        const logprobs: number[] = [];
-        const choiceLogprobs = response.choices?.[0]?.logprobs?.content;
-        if (Array.isArray(choiceLogprobs)) {
-          for (const item of choiceLogprobs) {
-            if (typeof item.logprob === "number") {
-              logprobs.push(item.logprob);
-            }
-          }
+      let parsed: JsonObject;
+      try {
+        const rawParsed: unknown = JSON.parse(rawContent);
+        const validation = JsonObjectSchema.safeParse(rawParsed);
+        if (!validation.success) {
+          throw new ModelSchemaViolationError(
+            route,
+            `Model JSON output schema invalid: ${validation.error.message}`,
+          );
         }
-
-        return {
-          content: parsed,
-          citations_requested: citationsRequested,
-          logprobs: logprobs.length > 0 ? logprobs : undefined,
-        };
+        parsed = validation.data;
       } catch (err: unknown) {
-        if (attempts >= 2 || err instanceof ModelSchemaViolationError) {
-          throw this.mapError(route, err);
+        if (err instanceof ModelSchemaViolationError) {
+          throw err;
+        }
+        throw new ModelSchemaViolationError(
+          route,
+          `Failed to parse model output as JSON: ${String(err)}`,
+        );
+      }
+
+      const citationsRequested = Boolean(
+        parsed.citations_requested ||
+          (Array.isArray(parsed.citations) && parsed.citations.length > 0),
+      );
+
+      const logprobs: number[] = [];
+      const choiceLogprobs = response.choices?.[0]?.logprobs?.content;
+      if (Array.isArray(choiceLogprobs)) {
+        for (const item of choiceLogprobs) {
+          if (typeof item.logprob === "number") {
+            logprobs.push(item.logprob);
+          }
         }
       }
-    }
 
-    throw new ModelSchemaViolationError(
-      route,
-      "Failed to produce valid schema conforming response after retry",
-    );
+      return {
+        content: parsed,
+        citations_requested: citationsRequested,
+        logprobs: logprobs.length > 0 ? logprobs : undefined,
+      };
+    } catch (err: unknown) {
+      throw this.mapError(route, err);
+    }
   }
 
   async vision_json(args: VisionJsonArgs): Promise<VisionJsonResponse> {
-    const route = "VISION_MODEL";
+    const route = MODEL_ROUTE_VISION;
     const config = this.visionConfig;
-    const client = this.getClient(config);
+    if (args.max_tokens > MAX_CHAT_MAX_TOKENS) {
+      throw new ModelSchemaViolationError(
+        route,
+        `max_tokens ${args.max_tokens} exceeds limit ${MAX_CHAT_MAX_TOKENS}`,
+      );
+    }
+    const client = this.getClient(config, route);
 
     const imageUrl = args.image_or_pdf_ref.startsWith("data:")
       ? args.image_or_pdf_ref
@@ -249,22 +308,19 @@ export class OpenAIModelProvider implements ModelProvider {
         response_format: { type: "json_object" },
       });
 
-      const rawContent = response.choices?.[0]?.message?.content ?? "{}";
-      const parsed = JSON.parse(rawContent) as Partial<VisionJsonResponse>;
-
-      return {
-        extracted_text_redacted: parsed.extracted_text_redacted ?? "",
-        iocs: Array.isArray(parsed.iocs) ? parsed.iocs : [],
-        pii_detected: Array.isArray(parsed.pii_detected)
-          ? parsed.pii_detected
-          : [],
-        encryption_proof_verified: Boolean(parsed.encryption_proof_verified),
-        tamper_score:
-          typeof parsed.tamper_score === "number" ? parsed.tamper_score : 0,
-        layout_hashes: Array.isArray(parsed.layout_hashes)
-          ? parsed.layout_hashes
-          : [],
-      };
+      const rawContent = response.choices?.[0]?.message?.content;
+      if (!rawContent) {
+        throw new ModelSchemaViolationError(
+          route,
+          "Vision model returned no message content",
+        );
+      }
+      const parsed: unknown = JSON.parse(rawContent);
+      const validation = VisionJsonResponseSchema.safeParse(parsed);
+      if (!validation.success) {
+        throw new ModelSchemaViolationError(route, validation.error.message);
+      }
+      return validation.data;
     } catch (err: unknown) {
       if (err instanceof SyntaxError) {
         throw new ModelSchemaViolationError(
@@ -277,9 +333,9 @@ export class OpenAIModelProvider implements ModelProvider {
   }
 
   async embed(args: EmbedArgs): Promise<EmbedResponse> {
-    const route = "EMBEDDINGS_MODEL";
+    const route = MODEL_ROUTE_EMBEDDINGS;
     const config = this.embeddingsConfig;
-    const client = this.getClient(config);
+    const client = this.getClient(config, route);
 
     try {
       const response = await client.embeddings.create({
@@ -311,7 +367,7 @@ export class OpenAIModelProvider implements ModelProvider {
   }
 
   async rerank(args: RerankArgs): Promise<RerankResponse> {
-    const route = "RERANKER_MODEL";
+    const route = MODEL_ROUTE_RERANKER;
     const config = this.rerankerConfig;
 
     if (args.passages.length === 0) {
@@ -325,16 +381,24 @@ export class OpenAIModelProvider implements ModelProvider {
           "Cohere API key is missing but provider is configured as cohere",
         );
       }
-      const endpoint =
-        config.endpoint && config.endpoint.trim() !== ""
-          ? config.endpoint
-          : "https://api.cohere.com";
+      if (
+        !config.endpoint ||
+        config.endpoint.trim() === "" ||
+        !config.model ||
+        config.model.trim() === ""
+      ) {
+        throw new ModelUnavailableError(
+          route,
+          "Cohere endpoint/model must be explicit in RERANKER_MODEL",
+        );
+      }
+      const endpoint = config.endpoint;
       const url = `${endpoint.replace(/\/+$/, "")}/v2/rerank`;
       const body = {
-        model: config.model || "rerank-v3.5",
+        model: config.model,
         query: args.query,
         documents: args.passages.map((p) => p.text),
-        top_n: args.passages.length,
+        top_n: Math.min(args.passages.length, DEFAULT_RAG_RERANK_K * 2),
       };
 
       try {
@@ -386,65 +450,67 @@ export class OpenAIModelProvider implements ModelProvider {
       }
     }
 
-    const queryEmbRes = await this.embed({ texts: [args.query] });
-    const queryVector = queryEmbRes.vectors[0];
-    if (!queryVector) {
-      throw new ModelUnavailableError(
-        route,
-        "Failed to compute query vector for reranking",
-      );
+    try {
+      const client = this.getClient(config, route);
+      const res = await client.chat.completions.create({
+        model: config.model,
+        messages: [
+          {
+            role: "system",
+            content:
+              "Rank the passages by relevance to the query. Return strict JSON {ranked:[{chunk_id,score,rank}]}.",
+          },
+          {
+            role: "user",
+            content: JSON.stringify({
+              query: args.query,
+              passages: args.passages.map((p) => ({
+                chunk_id: p.chunk_id,
+                text: p.text,
+              })),
+            }),
+          },
+        ],
+        temperature: 0,
+        response_format: { type: "json_object" },
+      });
+
+      const rawContent = res.choices?.[0]?.message?.content;
+      if (!rawContent) {
+        throw new ModelSchemaViolationError(
+          route,
+          "Reranker model returned no message content",
+        );
+      }
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(rawContent);
+      } catch (err: unknown) {
+        throw new ModelSchemaViolationError(
+          route,
+          `Reranker model output is not valid JSON: ${String(err)}`,
+        );
+      }
+      const validation = RerankResponseSchema.safeParse(parsed);
+      if (!validation.success) {
+        throw new ModelSchemaViolationError(route, validation.error.message);
+      }
+
+      const byId = new Map(args.passages.map((p) => [p.chunk_id, p]));
+      const ranked: RankedPassage[] = validation.data.ranked.map((r) => {
+        const passage = byId.get(r.chunk_id);
+        if (!passage) {
+          throw new CitationFabricatedError(r.chunk_id);
+        }
+        return {
+          ...passage,
+          score: r.score,
+          rank: r.rank,
+        };
+      });
+      return { ranked };
+    } catch (err: unknown) {
+      throw this.mapError(route, err);
     }
-
-    const passageTexts = args.passages.map((p) => p.text);
-    const passEmbRes = await this.embed({ texts: passageTexts });
-
-    const queryTerms = args.query
-      .toLowerCase()
-      .replace(/[^\p{L}\p{N}]+/gu, " ")
-      .trim()
-      .split(/\s+/)
-      .filter((w) => w.length > 1);
-
-    const scoredPassages = args.passages.map((passage, idx) => {
-      const pVec = passEmbRes.vectors[idx];
-      let cosSim = 0;
-      if (pVec) {
-        let dot = 0;
-        let normQ = 0;
-        let normP = 0;
-        for (let i = 0; i < queryVector.length; i++) {
-          const qVal = queryVector[i] ?? 0;
-          const pVal = pVec[i] ?? 0;
-          dot += qVal * pVal;
-          normQ += qVal * qVal;
-          normP += pVal * pVal;
-        }
-        const denom = Math.sqrt(normQ) * Math.sqrt(normP);
-        cosSim = denom > 0 ? Math.max(0, Math.min(1, dot / denom)) : 0;
-      }
-
-      let matchCount = 0;
-      const lowerText = passage.text.toLowerCase();
-      for (const t of queryTerms) {
-        if (lowerText.includes(t)) {
-          matchCount++;
-        }
-      }
-      const matchRatio =
-        queryTerms.length > 0 ? matchCount / queryTerms.length : 0;
-
-      const score = Math.max(0, Math.min(1, 0.65 * cosSim + 0.35 * matchRatio));
-      return { passage, score };
-    });
-
-    scoredPassages.sort((a, b) => b.score - a.score);
-
-    const ranked: RankedPassage[] = scoredPassages.map((item, rankIdx) => ({
-      ...item.passage,
-      score: Number(item.score.toFixed(4)),
-      rank: rankIdx + 1,
-    }));
-
-    return { ranked };
   }
 }

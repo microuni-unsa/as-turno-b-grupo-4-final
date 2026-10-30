@@ -4,6 +4,7 @@ import {
   PimsGateBlockedError,
   PimsThrottledError,
 } from "@pims/types";
+import { PIMS_TEST_SEED_PASSWORD } from "@pims/types/constants.ts";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 describe("PIMS Adapter Unit & Resilience Suite", () => {
@@ -14,7 +15,7 @@ describe("PIMS Adapter Unit & Resilience Suite", () => {
       baseUrl: "https://mock.pims.test",
       schema: "unsa",
       username: "admin",
-      password: "secretpassword",
+      password: PIMS_TEST_SEED_PASSWORD,
       timeoutMs: 5000,
       maxRetries: 2,
     });
@@ -94,7 +95,7 @@ describe("PIMS Adapter Unit & Resilience Suite", () => {
 
     const listPromise = adapter.listIncidents();
     const expectation =
-      expect(listPromise).rejects.toThrowError(PimsThrottledError);
+      expect(listPromise).rejects.toThrow(PimsThrottledError);
 
     await vi.runAllTimersAsync();
     await expectation;
@@ -113,7 +114,7 @@ describe("PIMS Adapter Unit & Resilience Suite", () => {
         );
       });
 
-    await expect(adapter.getIncident(1)).rejects.toThrowError(
+    await expect(adapter.getIncident(1)).rejects.toThrow(
       PimsClientBugError,
     );
     expect(fetchSpy).toHaveBeenCalledTimes(1);
@@ -130,7 +131,7 @@ describe("PIMS Adapter Unit & Resilience Suite", () => {
       );
     });
 
-    await expect(adapter.getIncident(1)).rejects.toThrowError(
+    await expect(adapter.getIncident(1)).rejects.toThrow(
       PimsGateBlockedError,
     );
   });

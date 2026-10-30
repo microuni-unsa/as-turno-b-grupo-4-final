@@ -1,4 +1,13 @@
-import { DEFAULT_ANCHOR_SIMILARITY_THRESHOLD } from "@pims/types/constants.ts";
+import {
+  DEFAULT_ANCHOR_SIMILARITY_THRESHOLD,
+  KG_ANCHOR_TOP_K,
+  KG_LINK_TOP_K,
+  KG_NODE_EMBEDDINGS_MISSING_MESSAGE,
+  MODEL_ROUTE_RAG,
+  PPR_ALPHA,
+  PPR_MAX_ITER,
+  RAG_EMBED_BATCH_SIZE,
+} from "@pims/types/constants.ts";
 import { ModelUnavailableError, RagIndexError } from "@pims/types/errors.ts";
 import type { ModelProvider } from "@pims/types/models.ts";
 import type {
@@ -40,7 +49,7 @@ export class NormativeKnowledgeGraph {
 
   addEdge(edge: KnowledgeGraphEdge): void {
     if (!this.graph.hasNode(edge.source) || !this.graph.hasNode(edge.target)) {
-      return;
+      throw new RagIndexError("Cannot add edge with missing node");
     }
     if (!this.graph.hasEdge(edge.source, edge.target)) {
       this.graph.addEdge(edge.source, edge.target, {
@@ -294,18 +303,16 @@ export class NormativeKnowledgeGraph {
   ): Promise<void> {
     this.nodeToChunkIds.clear();
     if (this.nodeEmbeddings.size === 0) {
-      throw new RagIndexError(
-        "Knowledge graph node embeddings have not been indexed. Call indexNodeEmbeddings() first.",
-      );
+      throw new RagIndexError(KG_NODE_EMBEDDINGS_MISSING_MESSAGE);
     }
     const minSimilarity =
       options?.minSimilarity ?? DEFAULT_ANCHOR_SIMILARITY_THRESHOLD;
-    const topK = options?.topK ?? 3;
+    const topK = options?.topK ?? KG_LINK_TOP_K;
     if (chunks.length === 0) {
       return;
     }
     const nodeIds = this.getNodeIds();
-    const batchSize = 25;
+    const batchSize = RAG_EMBED_BATCH_SIZE;
     for (let i = 0; i < chunks.length; i += batchSize) {
       const batch = chunks.slice(i, i + batchSize);
       const res = await modelProvider.embed({
@@ -314,13 +321,16 @@ export class NormativeKnowledgeGraph {
       for (const [j, chunk] of batch.entries()) {
         const chunkVec = res.vectors[j];
         if (chunkVec === undefined) {
-          continue;
+          throw new ModelUnavailableError(
+            MODEL_ROUTE_RAG,
+            "chunk embedding missing for linkChunks",
+          );
         }
         const scored: Array<{ id: string; similarity: number }> = [];
         for (const nodeId of nodeIds) {
           const nodeVec = this.nodeEmbeddings.get(nodeId);
           if (nodeVec === undefined) {
-            continue;
+            throw new RagIndexError(`node embedding missing for ${nodeId}`);
           }
           const similarity = this.cosine(chunkVec, nodeVec);
           if (similarity >= minSimilarity) {
@@ -337,8 +347,8 @@ export class NormativeKnowledgeGraph {
 
   computePersonalizedPageRank(
     anchorNodeIds: string[],
-    alpha = 0.85,
-    maxIter = 25,
+    alpha = PPR_ALPHA,
+    maxIter = PPR_MAX_ITER,
   ): Map<string, number> {
     const nodes = this.graph.nodes();
     const n = nodes.length;
@@ -435,19 +445,21 @@ export class NormativeKnowledgeGraph {
       const vec = res.vectors[i];
       if (node && vec) {
         this.nodeEmbeddings.set(node.id, vec);
-      }
+      } else
+        throw new ModelUnavailableError(
+          MODEL_ROUTE_RAG,
+          "node embedding missing",
+        );
     }
   }
 
   findAnchorsByVector(
     queryVector: number[],
     minSimilarity = DEFAULT_ANCHOR_SIMILARITY_THRESHOLD,
-    topK = 5,
+    topK = KG_ANCHOR_TOP_K,
   ): string[] {
     if (this.nodeEmbeddings.size === 0) {
-      throw new RagIndexError(
-        "Knowledge graph node embeddings have not been indexed. Call indexNodeEmbeddings() first.",
-      );
+      throw new RagIndexError(KG_NODE_EMBEDDINGS_MISSING_MESSAGE);
     }
 
     const scored: Array<{ id: string; similarity: number }> = [];
@@ -472,16 +484,14 @@ export class NormativeKnowledgeGraph {
     },
   ): Promise<string[]> {
     if (this.nodeEmbeddings.size === 0) {
-      throw new RagIndexError(
-        "Knowledge graph node embeddings have not been indexed. Call indexNodeEmbeddings() first.",
-      );
+      throw new RagIndexError(KG_NODE_EMBEDDINGS_MISSING_MESSAGE);
     }
 
     const res = await modelProvider.embed({ texts: [query] });
     const qVec = res.vectors[0];
     if (!qVec) {
       throw new ModelUnavailableError(
-        "rag",
+        MODEL_ROUTE_RAG,
         "Failed to compute query vector for anchor resolution",
       );
     }

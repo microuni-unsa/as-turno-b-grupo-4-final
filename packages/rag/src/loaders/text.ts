@@ -1,6 +1,7 @@
 import type { SectionLoader } from "@pims/rag/loaders/registry.ts";
 import { normalizeLines } from "@pims/rag/loaders/text-utils.ts";
 import type { DocumentSection } from "@pims/rag/loaders/types.ts";
+import { RagIndexError } from "@pims/types/errors.ts";
 
 interface Paragraph {
   lines: string[];
@@ -13,7 +14,7 @@ export function loadTextSections(
   countTokens: (t: string) => number,
 ): DocumentSection[] {
   if (maxTokens <= 0) {
-    throw new RangeError(
+    throw new RagIndexError(
       `loadTextSections requires maxTokens > 0, received ${maxTokens}`,
     );
   }

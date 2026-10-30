@@ -1,4 +1,4 @@
-import { execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import {
   DEFAULT_IDEMPOTENCY_KEY_PREFIX,
   DEFAULT_PIMS_MAX_RETRIES,
@@ -972,9 +972,12 @@ export class PimsAdapter {
     }
 
     if (this.tokenCmd && this.tokenCmd.length > 0) {
+      const [cmd, ...args] = this.tokenCmd;
+      if (!cmd) {
+        throw new PimsAuthFailedError("PIMS_TOKEN_CMD is empty");
+      }
       try {
-        const cmd = this.tokenCmd.join(" ");
-        const output = execSync(cmd, { encoding: "utf-8" }).trim();
+        const output = execFileSync(cmd, args, { encoding: "utf-8" }).trim();
         this.accessToken = output;
         return;
       } catch (err: unknown) {

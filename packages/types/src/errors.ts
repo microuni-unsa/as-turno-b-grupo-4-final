@@ -27,12 +27,12 @@ export class ConfigError extends PimsBaseError {
 
 export class PimsValidationError extends PimsBaseError {
   readonly field: string;
-  readonly fields?: Record<string, string[]>;
+  readonly fields?: PimsErrorDetails;
 
   constructor(
     field: string,
     message?: string,
-    fields?: Record<string, string[]>,
+    fields?: PimsErrorDetails,
     details?: PimsErrorDetails,
   ) {
     const errorDetails = details ?? fields;

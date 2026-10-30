@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import type { AgentConfig } from "@pims/config";
 import { OpenAIModelProvider } from "@pims/models";
 import {
   CorpusLoader,
@@ -15,6 +16,7 @@ import {
   RagIndexError,
   RagNoEvidenceError,
 } from "@pims/types";
+import type postgres from "postgres";
 import { describe, expect, it, vi } from "vitest";
 
 describe("Tri-Modal RAG Subsystem Unit Suite", () => {
@@ -28,6 +30,13 @@ describe("Tri-Modal RAG Subsystem Unit Suite", () => {
     fallback: "none" as const,
   };
 
+  const testRagConfig = {
+    RAG_TOP_K: 24,
+    RAG_RERANK_K: 6,
+    RAG_MIN_SCORE: 0.35,
+    RAG_TIMEOUT_MS: 30000,
+  } as unknown as AgentConfig;
+
   const dummyProvider = new OpenAIModelProvider({
     reasoningConfig: dummyModelConfig,
     fastConfig: { ...dummyModelConfig, model: "gpt-4o-mini" },
@@ -40,6 +49,7 @@ describe("Tri-Modal RAG Subsystem Unit Suite", () => {
   describe("Corpus Loader & Contextual Prefixing", () => {
     it("loads corpus files and formats contextual prefixes deterministically", async () => {
       const loader = new CorpusLoader({
+        projectRoot: process.cwd(),
         source: { type: "local", dirPath: "corpus" },
       });
       const corpus = await loader.loadAll();
@@ -71,6 +81,7 @@ describe("Tri-Modal RAG Subsystem Unit Suite", () => {
 
     it("derives docIds from filename stems without hardcoded mappings", async () => {
       const loader = new CorpusLoader({
+        projectRoot: process.cwd(),
         source: { type: "local", dirPath: "corpus" },
       });
       const corpus = await loader.loadAll();
@@ -89,9 +100,10 @@ describe("Tri-Modal RAG Subsystem Unit Suite", () => {
           "utf-8",
         );
         const loader = new CorpusLoader({
+          projectRoot: tempDir,
           source: {
             type: "local",
-            dirPath: path.relative(process.cwd(), tempDir),
+            dirPath: ".",
           },
         });
         loader.registerSectionLoader({
@@ -134,9 +146,10 @@ Notify the designated Incident Commander within 30 minutes.
         );
 
         const loader = new CorpusLoader({
+          projectRoot: tempDir,
           source: {
             type: "local",
-            dirPath: path.relative(process.cwd(), tempDir),
+            dirPath: ".",
           },
           defaultNormative: false,
         });
@@ -211,9 +224,10 @@ Notify the designated Incident Commander within 30 minutes.
         fs.writeFileSync(path.join(tempDir, "tiny.txt"), txtContent, "utf-8");
 
         const loader = new CorpusLoader({
+          projectRoot: tempDir,
           source: {
             type: "local",
-            dirPath: path.relative(process.cwd(), tempDir),
+            dirPath: ".",
           },
           maxTokens: 12,
           chunkOverlap: 0,
@@ -234,6 +248,7 @@ Notify the designated Incident Commander within 30 minutes.
 
     it("rejects duplicate section loader extensions", () => {
       const loader = new CorpusLoader({
+        projectRoot: process.cwd(),
         source: { type: "local", dirPath: "corpus" },
       });
       expect(() =>
@@ -280,7 +295,7 @@ Notify the designated Incident Commander within 30 minutes.
           maxTokens: 0,
           chunkOverlap: 0,
         }),
-      ).toThrow(RangeError);
+      ).toThrow(RagIndexError);
     });
   });
 
@@ -305,11 +320,11 @@ Notify the designated Incident Commander within 30 minutes.
 
     it("performs dense bi-encoder anchor resolution using pre-embedded vectors", async () => {
       const kg = new NormativeKnowledgeGraph();
-      const nodeCount = 5;
-      const fakeVectors = Array.from({ length: nodeCount }, (_, i) => [
+      const nodeIds = kg.getNodeIds();
+      const fakeVectors = nodeIds.map((_, i) => [
         i === 0 ? 1 : 0,
         i === 1 ? 1 : 0,
-        0,
+        i > 1 ? 1 : 0,
       ]);
 
       vi.spyOn(dummyProvider, "embed").mockResolvedValueOnce({
@@ -401,6 +416,7 @@ Notify the designated Incident Commander within 30 minutes.
         modelProvider: dummyProvider,
         indexer,
         knowledgeGraph: kg,
+        config: testRagConfig,
       });
 
       const cite = ragService.formatCitation({
@@ -421,12 +437,14 @@ Notify the designated Incident Commander within 30 minutes.
 
       expect(() =>
         ragService.validateCitation("invalid-format", true),
-      ).toThrowError(CitationInvalidError);
+      ).toThrow(CitationInvalidError);
     });
 
     it("raises RagNoEvidenceError when candidate scores fall below threshold", async () => {
+      const sqlStub = vi.fn().mockResolvedValue([]);
       const indexer = new RagIndexer({
         modelProvider: dummyProvider,
+        pgClient: sqlStub as unknown as postgres.Sql,
       });
       const kg = new NormativeKnowledgeGraph();
 
@@ -467,10 +485,10 @@ Notify the designated Incident Commander within 30 minutes.
         modelProvider: dummyProvider,
         indexer,
         knowledgeGraph: kg,
-        config: { RAG_MIN_SCORE: 0.35 },
+        config: testRagConfig,
       });
 
-      await expect(ragService.query("unrelated question")).rejects.toThrowError(
+      await expect(ragService.query("unrelated question")).rejects.toThrow(
         RagNoEvidenceError,
       );
     });

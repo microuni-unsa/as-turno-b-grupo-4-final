@@ -1,11 +1,23 @@
 import type { NormativeKnowledgeGraph } from "@pims/rag/knowledge-graph.ts";
-import { RagIngestLockedError } from "@pims/types/errors.ts";
+import {
+  DEFAULT_EMBEDDING_DIM,
+  MODEL_ROUTE_RAG,
+  RAG_EMBED_BATCH_SIZE,
+  RAG_EMBED_CONCURRENCY,
+  RAG_REWRITE_BM25_K,
+} from "@pims/types/constants.ts";
+import {
+  ModelUnavailableError,
+  RagIndexError,
+  RagIngestLockedError,
+} from "@pims/types/errors.ts";
 import type { ModelProvider } from "@pims/types/models.ts";
 import type { CorpusChunk } from "@pims/types/rag.ts";
 import MiniSearch from "minisearch";
 import type postgres from "postgres";
 
 export interface IndexerOptions {
+  // Runtime-DI exemption: class instances; no serializable config member
   modelProvider: ModelProvider;
   pgClient?: postgres.Sql;
   knowledgeGraph?: NormativeKnowledgeGraph;
@@ -47,8 +59,7 @@ export class RagIndexer {
   private async initPgvector(): Promise<void> {
     if (!this.pgClient) return;
     await this.pgClient`CREATE EXTENSION IF NOT EXISTS vector;`;
-    await this.pgClient`
-      CREATE TABLE IF NOT EXISTS rag_corpus_chunks (
+    await this.pgClient.unsafe(`CREATE TABLE IF NOT EXISTS rag_corpus_chunks (
         chunk_id text PRIMARY KEY,
         doc_id text NOT NULL,
         article_or_clause text NOT NULL,
@@ -56,20 +67,22 @@ export class RagIndexer {
         normative boolean NOT NULL,
         header text NOT NULL,
         text text NOT NULL,
-        embedding vector(1024)
-      );
-    `;
+        embedding vector(${DEFAULT_EMBEDDING_DIM})
+      );`);
   }
 
   async indexCorpus(
     chunks: CorpusChunk[],
     version: string,
-    batchSize = 25,
+    batchSize = RAG_EMBED_BATCH_SIZE,
   ): Promise<void> {
     if (this.isIngesting) {
       throw new RagIngestLockedError(
         "RAG ingestion is currently locked by an active process",
       );
+    }
+    if (batchSize <= 0 || batchSize > RAG_EMBED_BATCH_SIZE) {
+      throw new RagIndexError(`Invalid embed batch size: ${batchSize}`);
     }
 
     this.isIngesting = true;
@@ -94,12 +107,11 @@ export class RagIndexer {
         await this.pgClient`DELETE FROM rag_corpus_chunks;`;
 
         const batches: Array<CorpusChunk[]> = [];
-        const effectiveBatchSize = Math.min(batchSize, 25);
-        for (let i = 0; i < chunks.length; i += effectiveBatchSize) {
-          batches.push(chunks.slice(i, i + effectiveBatchSize));
+        for (let i = 0; i < chunks.length; i += batchSize) {
+          batches.push(chunks.slice(i, i + batchSize));
         }
 
-        const CONCURRENCY = 2;
+        const CONCURRENCY = RAG_EMBED_CONCURRENCY;
         for (let i = 0; i < batches.length; i += CONCURRENCY) {
           const currentGroup = batches.slice(i, i + CONCURRENCY);
           await Promise.all(
@@ -118,7 +130,11 @@ export class RagIndexer {
                       embedding = EXCLUDED.embedding,
                       text = EXCLUDED.text;
                   `;
-                }
+                } else
+                  throw new ModelUnavailableError(
+                    MODEL_ROUTE_RAG,
+                    "embed response missing vector for chunk",
+                  );
               }
             }),
           );
@@ -129,16 +145,9 @@ export class RagIndexer {
     }
   }
 
-  searchFts5(
-    query: string,
-    limit = 20,
-  ): Array<{ chunk_id: string; score: number }> {
-    return this.searchBM25(query, limit);
-  }
-
   searchBM25(
     query: string,
-    limit = 20,
+    limit = RAG_REWRITE_BM25_K,
   ): Array<{ chunk_id: string; score: number }> {
     const results = this.miniSearch.search(query);
     return results.slice(0, limit).map((r) => ({
@@ -149,10 +158,13 @@ export class RagIndexer {
 
   async searchPgvector(
     vector: number[],
-    limit = 20,
+    limit = RAG_REWRITE_BM25_K,
   ): Promise<Array<{ chunk_id: string; score: number }>> {
     if (!this.pgClient) {
-      return [];
+      throw new ModelUnavailableError(
+        MODEL_ROUTE_RAG,
+        "pgvector client is not configured",
+      );
     }
 
     const vecStr = `[${vector.join(",")}]`;

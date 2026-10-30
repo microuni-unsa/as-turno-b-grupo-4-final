@@ -58,9 +58,9 @@ All later sections cite this section; none re-derive law. Required by: B.3.11 (e
 
 ### 2.1 Breach definition and risk framing (GDPR Art 4(12), Recitals 85–88)
 
-Art 4(12) (from `data/GDPR.txt:1032`): "‘personal data breach’ means a breach of security leading to the accidental or unlawful destruction, loss, alteration, unauthorised disclosure of, or access to, personal data transmitted, stored or otherwise processed".
+ Art 4(12) (from `corpus/gdpr-full.txt:1030`): "‘personal data breach’ means a breach of security leading to the accidental or unlawful destruction, loss, alteration, unauthorised disclosure of, or access to, personal data transmitted, stored or otherwise processed".
 
-Recitals (from `data/GDPR.txt:456-471`, full lines):
+ Recitals (from `corpus/gdpr-full.txt:454-469`, full lines):
 
 - (85): "A personal data breach may, if not addressed in an appropriate and timely manner, result in physical, material or non-material damage to natural persons such as loss of control over their personal data or limitation of their rights, discrimination, identity theft or fraud, financial loss, unauthorised reversal of pseudonymisation, damage to reputation, loss of confidentiality of personal data protected by professional secrecy or any other significant economic or social disadvantage to the natural person concerned. Therefore, as soon as the controller becomes aware that a personal data breach has occurred, the controller should notify the personal data breach to the supervisory authority without undue delay and, where feasible, not later than 72 hours after having become aware of it, unless the controller is able to demonstrate, in accordance with the accountability principle, that the personal data breach is unlikely to result in a risk to the rights and freedoms of natural persons. Where such notification cannot be achieved within 72 hours, the reasons for the delay should accompany the notification and information may be provided in phases without undue further delay."
 - (86): "The controller should communicate to the data subject a personal data breach, without undue delay, where that personal data breach is likely to result in a high risk to the rights and freedoms of the natural person in order to allow him or her to take the necessary precautions. The communication should describe the nature of the personal data breach as well as recommendations for the natural person concerned to mitigate potential adverse effects. Such communications to data subjects should be made as soon as reasonably feasible and in close cooperation with the supervisory authority, respecting guidance provided by it or by other relevant authorities such as law-enforcement authorities. For example, the need to mitigate an immediate risk of damage would call for prompt communication with data subjects whereas the need to implement appropriate measures against continuing or similar personal data breaches may justify more time for communication."
@@ -69,7 +69,7 @@ Recitals (from `data/GDPR.txt:456-471`, full lines):
 
 The agent's severity/impact classification (§9.2) and high-risk gate (§9.5) MUST use the (85)–(87) factors: nature, gravity, consequences, adverse effects, volume (subjects and records), sensitivity of data categories, and whether protective measures (e.g. encryption) limit misuse likelihood.
 
-### 2.2 Authority notification (GDPR Art 33, verbatim from `data/GDPR.txt:2171-2203`)
+ ### 2.2 Authority notification (GDPR Art 33, verbatim from `corpus/gdpr-full.txt:2169-2201`)
 
 Art 33(1): "In the case of a personal data breach, the controller shall without undue delay and, where feasible, not later than 72 hours after having become aware of it, notify the personal data breach to the supervisory authority competent in accordance with Article 55, unless the personal data breach is unlikely to result in a risk to the rights and freedoms of natural persons. Where the notification to the supervisory authority is not made within 72 hours, it shall be accompanied by reasons for the delay."
 
@@ -90,7 +90,7 @@ Art 33(5): "The controller shall document any personal data breaches, comprising
 
 Do not paraphrase away "where possible" / "where feasible": when a quantity is genuinely unknown at pack time, the agent writes the explicit marker `unknown` with reason code `PHASED_PENDING` and arms a follow-up phase; it MUST NOT guess numbers or omit the item.
 
-### 2.3 Data-subject communication (GDPR Art 34, verbatim from `data/GDPR.txt:2205-2230`)
+ ### 2.3 Data-subject communication (GDPR Art 34, verbatim from `corpus/gdpr-full.txt:2203-2228`)
 
 Art 34(1): "When the personal data breach is likely to result in a high risk to the rights and freedoms of natural persons, the controller shall communicate the personal data breach to the data subject without undue delay."
 
@@ -457,7 +457,9 @@ Routing table (concrete values live ONLY in §13; this table fixes the routing R
 | `FAST_MODEL` | classification, extraction, split-conformal triage, HyDE/CRAG | Latency-sensitive; temperature `TEMP_CLASSIFIER` (§13); `logprobs` + JSON-schema enforced |
 | `VISION_MODEL` | multimodal forensic attachment inspection (`investigator`) | Multimodal OCR + visual PII bounding-box detection + ELA/metadata tamper score + Art 34(3)(a) proof check; temperature `TEMP_CLASSIFIER` (§13); local pre-redaction crop |
 | `EMBEDDINGS_MODEL` | RAG ingest + query | Single model per corpus version; changing it REQUIRES full re-ingest (new corpus version) |
-| `RERANKER_MODEL` | RAG rerank stage | Cross-encoder or LLM-rank; score threshold §7.4 |
+ | `RERANKER_MODEL` | RAG rerank stage | Cross-encoder or LLM-rank; score threshold §7.4 |
+ | `chat_json` route selection | classification/HyDE/CRAG/decomposition vs ToT/drafting/review | `route` arg (`FAST_MODEL` = classification/HyDE/CRAG/decomposition; `REASONING_MODEL` = ToT/drafting/review); caller-supplied, never inferred from temperature |
+ | `RERANKER_MODEL` provider `cohere` | RAG rerank stage via native API | `POST {endpoint}/v2/rerank` (`{query, documents, top_n}`, `top_n` bounded); explicit endpoint+model required in `RERANKER_MODEL`, missing → `MODEL_UNAVAILABLE:RERANKER_MODEL` |
 | `STT_PROVIDER`/`STT_MODEL` | voice intake | Streaming-capable; word timestamps REQUIRED for slot-fill audit |
 | `TTS_PROVIDER`/`TTS_MODEL`/`TTS_VOICE` | readback + prompts | `es-PE` voice default; redacted text only |
 
@@ -473,7 +475,7 @@ The Bun + TypeScript implementation follows this exact layout (zero unmapped fil
 - `src/orchestrator/scheduler.ts` — Persistent timer wheel (`T72_AUTHORITY`, `T_PROCESSOR`, `T_SUBJECT`, `T_REVIEW_SLA`, `T_PERU_ADVISORY`, `T_PHASE_FOLLOWUP`, `T_RETRY`).
 - `src/orchestrator/roles.ts` — The 8 role definitions, SHA-256 prompt pin verifier, and §5.4 capability-handle factory.
 - `src/adapter/pims-adapter.ts` — §3.1 E01–E26 client, startup `NESTED_PROBE` runner, idempotency reconciler, soft-delete restore handler.
-- `src/rag/rag-service.ts` — Contextual chunker, SQLite FTS5 BM25 + vector index + normative knowledge graph, HyDE + 3-way RRF + CRAG grader + §7.6 eval runner.
+ - `src/rag/rag-service.ts` — Contextual chunker, MiniSearch BM25 + pgvector vector index + normative knowledge graph, HyDE + 3-way RRF + CRAG grader + §7.6 eval runner.
 - `src/voice/voice-gateway.ts` — WebSocket audio streamer, VAD barge-in, prosody urgency extractor, dual-pass NER+regex redactor, STT/TTS client.
 - `src/composer/notice-composer.ts` — Art 33/34 pack builder, canonical content hasher, 4-judge constitutional rubric evaluator.
 - `src/evidence/evidence-store.ts` — AES-256-GCM encrypted SQLite WAL (`timers`, `leases`, `dedupe_index`, `draft_packs`, `risk_queue`, `indicator_spool`, `tool_ledger`, `audio_refs`) + content-addressed blob store.
@@ -723,7 +725,9 @@ The normative compliance corpus consists of:
 | `gdpr-full` | `corpus/gdpr-full.txt` | Yes | Sole ground truth for Art 33/34. Paragraph windows; splits may fall mid-article. |
 | `iso27701` | `corpus/iso27701.md` | Yes | B.3.11/B.3.12 verbatim; Clause 10.2 corrective actions; A.3.11/A.3.12 via crosswalk. Heading sections via mdast AST. |
 
-Ingest: each file hashed (SHA-256); corpus version = `sha256(sorted(file hashes))`. `EMBEDDINGS_MODEL` change REQUIRES full re-ingest (new version). `RAG_CORPUS_STALE` raised when query-time version ≠ ingest version.
+ Ingest: each file hashed (SHA-256); corpus version = `sha256(sorted(file hashes))`. `EMBEDDINGS_MODEL` change REQUIRES full re-ingest (new version). `RAG_CORPUS_STALE` raised when query-time version ≠ ingest version.
+
+ `data/GDPR.txt` is a frozen reference copy, not read by any harness; `corpus/gdpr-full.txt` is the sole ground truth.
 
 ### 7.2 Chunking
 
@@ -740,7 +744,7 @@ Every normative chunk is indexed with **Contextual Retrieval Headers**: at inges
 
 ### 7.4 Retrieval
 
-Pipeline (fixed): (1) **Agentic Self-RAG Query Decomposition + Dense Bi-Encoder Grounding** (`FAST_MODEL` decomposes compound legal/technical questions, generates a hypothetical normative clause/schema snippet; pre-embedded Knowledge Graph nodes matched via dense vector cosine similarity extract entity anchors), (2) **3-Way Reciprocal Rank Fusion (RRF)** over Dense Vector + BM25 + Multi-Hop Personalized PageRank (PPR) over the Knowledge Graph neighbourhood → `top_k` (`RAG_TOP_K`, §13), (3) cross-encoder rerank (`RERANKER_MODEL`) → top `RAG_RERANK_K` (§13), (4) **CRAG (Corrective RAG) Self-Grading** (`supported | ambiguous | unsupported`; unsupported passages are stripped immediately, and if only ambiguous passages remain, one automated query-rewrite loop executes within budget) with cite threshold `min_score` (`RAG_MIN_SCORE`, §13, scores normalized 0..1). Any passage below threshold is dropped; if ALL drop → `RAG_NO_EVIDENCE` (see §6.5 waiver rule: legal content MUST NOT proceed; operational fields need reviewer-signed waiver). `normative_only=true` restricts to `normative:true` chunks (REQUIRED for notice drafting and exemption evaluation). Retrieval latency budget `RAG_TIMEOUT_MS` (§13); timeout → `MODEL_UNAVAILABLE:rag` → park per §4.3 (no ungrounded fallback).
+ Pipeline (fixed): (1) **Agentic Self-RAG Query Decomposition + Dense Bi-Encoder Grounding** (`FAST_MODEL` decomposes compound legal/technical questions, generates a hypothetical normative clause/schema snippet; pre-embedded Knowledge Graph nodes matched via dense vector cosine similarity extract entity anchors), (2) **3-Way Reciprocal Rank Fusion (RRF)** over Dense Vector + BM25 + Multi-Hop Personalized PageRank (PPR) over the Knowledge Graph neighbourhood → `top_k` (`RAG_TOP_K`, §13), (3) cross-encoder rerank (`RERANKER_MODEL`) → top `RAG_RERANK_K` (§13), (4) **CRAG (Corrective RAG) Self-Grading** (`supported | ambiguous | unsupported`; unsupported passages are stripped immediately, and if only ambiguous passages remain, one automated query-rewrite loop executes within budget) with cite threshold `min_score` (`RAG_MIN_SCORE`, §13, scores normalized 0..1). Any passage below threshold is dropped; if ALL drop → `RAG_NO_EVIDENCE` (see §6.5 waiver rule: legal content MUST NOT proceed; operational fields need reviewer-signed waiver). `normative_only=true` restricts to `normative:true` chunks (REQUIRED for notice drafting and exemption evaluation). Retrieval latency budget `RAG_TIMEOUT_MS` (§13); timeout → `MODEL_UNAVAILABLE:rag` → park per §4.3 (no ungrounded fallback). Fixed retrieval constants (named in `@pims/types/constants.ts`): RRF k=60, weights dense 1.0 / BM25 1.2 / PPR 1.5; CRAG supported ≥ 0.65; rerank blend 0.85·score + 0.15·min(1, ppr·2.5); candidate limits dense 30 / BM25 40 / rewrite 20; PPR α=0.85, 25 iters; decomposition max_tokens 1500.
 
 ### 7.5 Citations
 
@@ -1097,7 +1101,7 @@ Required by: B.3.11 (documented, communicated procedures — configuration IS pr
 | `VISION_MODEL` | same | — | Yes | §4.3/§9.3 multimodal forensic attachment scanner |
 | `EMBEDDINGS_MODEL` | same | — | Yes | §4.3/§7 (change ⇒ re-ingest) |
 | `RERANKER_MODEL` | same | — | Yes | §4.3/§7.4 |
-| `TEMP_CLASSIFIER` / `TEMP_REASONING` | floats | `0.0` / `0.2` | No | §4.3/§5.1 fixed role temperatures |
+ | `TEMP_CLASSIFIER` / `TEMP_REASONING` | floats | `0.0` / `0.2` | No | §4.3/§5.1 fixed role temperatures; `TEMP_CLASSIFIER` is passed with `FAST_MODEL` calls, `TEMP_REASONING` with `REASONING_MODEL` calls; values fixed, not routing signals |
 | `TOT_BRANCH_FACTOR` | int | `3` | No | §5.2/§9.3 Tree-of-Thoughts candidate hypothesis count |
 | `MAX_REVIEW_CYCLES` / `NLI_ENTAILMENT_MIN` / `PLAIN_LANG_MAX_WORDS` / `MAX_SEMANTIC_ENTROPY` | int/float/int/float | `3` / `0.85` / `25` / `0.65` | No | §6.1/§9.5 constitutional review rubric & semantic-entropy thresholds |
 | `DEDUPE_TRIGRAM_THRESHOLD` / `DEDUPE_COSINE_THRESHOLD` | floats | `0.85` / `0.90` | No | §6.6 hybrid lexical+semantic dedupe thresholds |

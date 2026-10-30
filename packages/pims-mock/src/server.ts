@@ -24,6 +24,7 @@ import {
 } from "@pims/pims-mock/fixtures.ts";
 import {
   EVENT_TYPE_LABELS,
+  EventTypeSchema,
   PimsAuditCreateSchema,
   PimsAuditUpdateSchema,
   PimsIncidentCreateSchema,
@@ -133,17 +134,22 @@ export function buildPimsApp(
         desc(coreIncidentHistory.id),
       );
 
-    const history = historyRows.map((h) => ({
-      id: h.id,
-      event_type: h.event_type,
-      event_type_label: EVENT_TYPE_LABELS[h.event_type] ?? h.event_type,
-      changed_at: h.changed_at ? new Date(h.changed_at).toISOString() : "",
-      actor: h.actor,
-      changed_by: h.changed_by,
-      changed_by_name: h.changed_by_name,
-      description: h.description,
-      recipients_snapshot: h.recipients_snapshot,
-    }));
+    const history = historyRows.map((h) => {
+      const parsedEventType = EventTypeSchema.safeParse(h.event_type);
+      return {
+        id: h.id,
+        event_type: h.event_type,
+        event_type_label: parsedEventType.success
+          ? EVENT_TYPE_LABELS[parsedEventType.data]
+          : h.event_type,
+        changed_at: h.changed_at ? new Date(h.changed_at).toISOString() : "",
+        actor: h.actor,
+        changed_by: h.changed_by,
+        changed_by_name: h.changed_by_name,
+        description: h.description,
+        recipients_snapshot: h.recipients_snapshot,
+      };
+    });
 
     return {
       id: inc.id,
@@ -685,11 +691,16 @@ export function buildPimsApp(
       );
 
     return c.json(
-      historyRows.map((h) => ({
-        ...h,
-        event_type_label: EVENT_TYPE_LABELS[h.event_type] ?? h.event_type,
-        changed_at: h.changed_at.toISOString(),
-      })),
+      historyRows.map((h) => {
+        const parsedEventType = EventTypeSchema.safeParse(h.event_type);
+        return {
+          ...h,
+          event_type_label: parsedEventType.success
+            ? EVENT_TYPE_LABELS[parsedEventType.data]
+            : h.event_type,
+          changed_at: h.changed_at.toISOString(),
+        };
+      }),
     );
   });
 

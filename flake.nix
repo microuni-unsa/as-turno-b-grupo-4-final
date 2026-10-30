@@ -29,6 +29,7 @@
           (with pkgs; [
             sops
             postgresql
+            docker
           ])
           (with unstable; [
             bun
@@ -48,7 +49,8 @@
           packages = pkgs.lib.flatten [
             shellPkgs
           ];
-          shellHook = "";
+          shellHook = ''
+          '';
           buildInputs = [ pkgs.bashInteractive ];
         };
       }

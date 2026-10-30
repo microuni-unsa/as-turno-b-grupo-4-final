@@ -1,3 +1,5 @@
+import { RagIndexError } from "@pims/types/errors.ts";
+
 function isAsciiWhitespace(code: number): boolean {
   return (
     code === 0x09 ||
@@ -80,14 +82,16 @@ export function slugifyStem(stem: string): string {
     end--;
   }
   const trimmed = out.slice(start, end);
-  return trimmed === "" ? "doc" : trimmed;
+  if (trimmed === "") {
+    throw new RagIndexError("slugifyStem produced empty doc_id");
+  }
+  return trimmed;
 }
 
 export interface TrimmedSectionLines {
   lines: string[];
   startLine: number;
 }
-
 export function trimBlankEdges(
   lines: string[],
   startLine: number,

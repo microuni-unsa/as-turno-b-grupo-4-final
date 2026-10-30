@@ -5,15 +5,15 @@ import {
 } from "@pims/rag/loaders/text-utils.ts";
 import type { DocumentSection } from "@pims/rag/loaders/types.ts";
 import { RagIndexError } from "@pims/types/errors.ts";
-import type { Heading, Root } from "mdast";
+import type { Heading, Root, RootContent } from "mdast";
 import { remark } from "remark";
 
 interface ValueNode {
-  value?: unknown;
-  children?: unknown;
+  value?: string;
+  children?: RootContent[];
 }
 
-function collectText(node: unknown): string {
+function collectText(node: RootContent | Root | unknown): string {
   if (typeof node !== "object" || node === null) {
     return "";
   }
@@ -73,7 +73,7 @@ export function loadMarkdownSections(sourceText: string): DocumentSection[] {
   for (let j = 0; j < headings.length; j++) {
     const current = headings[j];
     if (current === undefined) {
-      continue;
+      throw new RagIndexError("Markdown heading index out of bounds");
     }
     const next = headings[j + 1];
     const start = current.startLine;

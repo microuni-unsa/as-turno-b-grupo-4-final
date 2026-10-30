@@ -1,5 +1,1 @@
-export interface DocumentSection {
-  label: string;
-  lines: string[];
-  startLine: number;
-}
+export type { DocumentSection } from "@pims/types/rag.ts";

@@ -7,7 +7,7 @@
 - **Integration Tests with Real Data Store**: For PIMS integration tests, we run our reverse-engineered PIMS API server (built with Hono and Drizzle ORM) backed by a real PostgreSQL data store in testcontainers. The schema and initial data are mounted into `/docker-entrypoint-initdb.d/` (`01-gestitel.sql` and `02-seed.sql`) and run natively on container boot.
 
 ## 2. Secrets, Tooling & Configuration
-- **Secrets Management**: Secrets are managed via `sops`. No plaintext API keys, passwords, or tokens in git or plain config files.
+- **Secrets Management**: Production secrets are managed via `sops`; no plaintext production API keys, passwords, or tokens in git or plain config files. A local gitignored `.env` (never committed; template in `.env.example`) MAY hold development-only or dummy credentials for local runs; production credentials live exclusively in SOPS-encrypted files.
 - **Tooling & Nix Policy**: NEVER assume Nix is available dynamically at runtime. If system packages or CLI tools are needed, declare them explicitly in `flake.nix`. All JavaScript/TypeScript dependencies must be managed via `bun` in `package.json`.
 - **LLM Provider**: Configurable model provider abstraction implemented via `OpenAIModelProvider` (OpenAI SDK / OpenAI-compatible cloud endpoint, e.g. Mistral API via OpenAI client compatibility). SOPS credentials manage API keys deterministically. Keep token usage strictly bounded and cheap.
 

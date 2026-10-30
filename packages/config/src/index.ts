@@ -11,15 +11,16 @@ import {
 import { ConfigError } from "@pims/types/errors.ts";
 import { z } from "zod";
 
-export interface ModelConfig {
-  provider: string;
-  model: string;
-  endpoint?: string;
-  auth_env: string;
-  timeout_ms: number;
-  max_retries: number;
-  fallback: "none";
-}
+export const ModelConfigSchema = z.object({
+  provider: z.string().min(1),
+  model: z.string().min(1),
+  endpoint: z.string().optional(),
+  auth_env: z.string().min(1),
+  timeout_ms: z.number().int().positive(),
+  max_retries: z.number().int().nonnegative(),
+  fallback: z.literal("none"),
+});
+export type ModelConfig = z.infer<typeof ModelConfigSchema>;
 
 export const JurisdictionDeadlinesSchema = z.record(
   z.string(),
@@ -118,7 +119,7 @@ export function decryptSopsFile(filePath: string): Record<string, string> {
   }
 
   try {
-    const output = childProcess.execSync(`sops -d "${filePath}"`, {
+    const output = childProcess.execFileSync("sops", ["-d", filePath], {
       encoding: "utf-8",
       stdio: ["ignore", "pipe", "pipe"],
     });
@@ -142,6 +143,27 @@ export function decryptSopsFile(filePath: string): Record<string, string> {
       "CONFIG_SOPS_DECRYPT_FAILED",
     );
   }
+}
+
+export function loadModelProviderOptions(decrypted: Record<string, string>): {
+  apiKey: string;
+  cohereApiKey?: string;
+  baseURL?: string;
+} {
+  const apiKey = decrypted.OPENAI_API_KEY;
+  if (!apiKey || apiKey.trim() === "")
+    throw new ConfigError(
+      "OPENAI_API_KEY is missing or empty in SOPS credentials",
+      "CONFIG_MISSING:OPENAI_API_KEY",
+    );
+  const out: { apiKey: string; cohereApiKey?: string; baseURL?: string } = {
+    apiKey,
+  };
+  const cohere = decrypted.COHERE_API_KEY;
+  if (cohere !== undefined && cohere !== "") out.cohereApiKey = cohere;
+  const base = decrypted.OPENAI_BASE_URL;
+  if (base !== undefined && base !== "") out.baseURL = base;
+  return out;
 }
 
 function parseModelConfig(
@@ -180,53 +202,59 @@ function parseModelConfig(
         `CONFIG_TYPE:${key}`,
       );
     }
+    const candidate = {
+      provider,
+      model,
+      endpoint: endpoint === "" ? undefined : endpoint,
+      auth_env,
+      timeout_ms,
+      max_retries,
+      fallback: "none" as const,
+    };
+    const result = ModelConfigSchema.safeParse(candidate);
+    if (!result.success) {
+      throw new ConfigError(
+        `Invalid model config for ${key}: ${result.error.message}`,
+        `CONFIG_TYPE:${key}`,
+      );
+    }
     if (!auth_env || !env[auth_env]) {
       throw new ConfigError(
         `Referenced auth env ${auth_env} for ${key} is missing or empty`,
         `CONFIG_MISSING:${auth_env}`,
       );
     }
-    return {
-      provider: provider ?? "",
-      model: model ?? "",
-      endpoint: endpoint || undefined,
-      auth_env: auth_env,
-      timeout_ms,
-      max_retries,
-      fallback: "none",
-    };
+    return result.data;
   }
 
   if (typeof raw === "object" && raw !== null) {
     const obj = raw as Record<string, unknown>;
-    if (
-      typeof obj.provider !== "string" ||
-      typeof obj.model !== "string" ||
-      typeof obj.auth_env !== "string" ||
-      typeof obj.timeout_ms !== "number" ||
-      typeof obj.max_retries !== "number" ||
-      obj.fallback !== "none"
-    ) {
-      throw new ConfigError(
-        `Invalid object shape for ${key}`,
-        `CONFIG_TYPE:${key}`,
-      );
-    }
-    if (!obj.auth_env || !env[obj.auth_env]) {
-      throw new ConfigError(
-        `Referenced auth env ${obj.auth_env} for ${key} is missing or empty`,
-        `CONFIG_MISSING:${obj.auth_env}`,
-      );
-    }
-    return {
+    const candidate = {
       provider: obj.provider,
       model: obj.model,
-      endpoint: typeof obj.endpoint === "string" ? obj.endpoint : undefined,
+      endpoint:
+        typeof obj.endpoint === "string" && obj.endpoint !== ""
+          ? obj.endpoint
+          : undefined,
       auth_env: obj.auth_env,
       timeout_ms: obj.timeout_ms,
       max_retries: obj.max_retries,
-      fallback: "none",
+      fallback: obj.fallback,
     };
+    const result = ModelConfigSchema.safeParse(candidate);
+    if (!result.success) {
+      throw new ConfigError(
+        `Invalid model config for ${key}: ${result.error.message}`,
+        `CONFIG_TYPE:${key}`,
+      );
+    }
+    if (!result.data.auth_env || !env[result.data.auth_env]) {
+      throw new ConfigError(
+        `Referenced auth env ${result.data.auth_env} for ${key} is missing or empty`,
+        `CONFIG_MISSING:${result.data.auth_env}`,
+      );
+    }
+    return result.data;
   }
 
   throw new ConfigError(`Invalid type for ${key}`, `CONFIG_TYPE:${key}`);

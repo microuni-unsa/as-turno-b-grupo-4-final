@@ -2,16 +2,30 @@ import type { AgentConfig } from "@pims/config";
 import type { RagIndexer } from "@pims/rag/indexer.ts";
 import type { NormativeKnowledgeGraph } from "@pims/rag/knowledge-graph.ts";
 import {
-  DEFAULT_RAG_MIN_SCORE,
-  DEFAULT_RAG_RERANK_K,
-  DEFAULT_RAG_TIMEOUT_MS,
-  DEFAULT_RAG_TOP_K,
+  DEFAULT_CRAG_SUPPORTED_THRESHOLD,
+  DEFAULT_RAG_DECOMPOSITION_PROMPT,
+  MODEL_ROUTE_FAST,
+  MODEL_ROUTE_RAG,
+  RAG_BM25_K,
+  RAG_DECOMPOSE_MAX_TOKENS,
+  RAG_DENSE_K,
+  RAG_REWRITE_BM25_K,
+  RERANK_PPR_COMPLEMENT,
+  RERANK_PPR_SCALE,
+  RERANK_PPR_WEIGHT,
+  RRF_K,
+  RRF_WEIGHT_BM25,
+  RRF_WEIGHT_DENSE,
+  RRF_WEIGHT_PPR,
 } from "@pims/types/constants.ts";
 import {
   CitationFabricatedError,
   CitationInvalidError,
+  ConfigError,
+  ModelSchemaViolationError,
   ModelUnavailableError,
   RagCorpusStaleError,
+  RagIndexError,
   RagNoEvidenceError,
 } from "@pims/types/errors.ts";
 import type {
@@ -24,12 +38,13 @@ import type {
   QueryDecomposition,
   RagQueryResult,
 } from "@pims/types/rag.ts";
+import { QueryDecompositionSchema } from "@pims/types/rag.ts";
 
 export interface RAGServiceOptions {
   modelProvider: ModelProvider;
   indexer: RagIndexer;
   knowledgeGraph: NormativeKnowledgeGraph;
-  config?: Partial<AgentConfig>;
+  config: AgentConfig;
   decompositionPrompt?: string;
 }
 
@@ -44,56 +59,50 @@ export class RAGService {
   private readonly decompositionPrompt?: string;
 
   constructor(options: RAGServiceOptions) {
+    if (!options.config)
+      throw new ConfigError(
+        "RAGService requires explicit RAG config",
+        "CONFIG_MISSING:RAG",
+      );
     this.modelProvider = options.modelProvider;
     this.indexer = options.indexer;
     this.knowledgeGraph = options.knowledgeGraph;
-    this.topK = options.config?.RAG_TOP_K ?? DEFAULT_RAG_TOP_K;
-    this.rerankK = options.config?.RAG_RERANK_K ?? DEFAULT_RAG_RERANK_K;
-    this.minScore = options.config?.RAG_MIN_SCORE ?? DEFAULT_RAG_MIN_SCORE;
-    this.timeoutMs = options.config?.RAG_TIMEOUT_MS ?? DEFAULT_RAG_TIMEOUT_MS;
+    this.topK = options.config.RAG_TOP_K;
+    this.rerankK = options.config.RAG_RERANK_K;
+    this.minScore = options.config.RAG_MIN_SCORE;
+    this.timeoutMs = options.config.RAG_TIMEOUT_MS;
     this.decompositionPrompt = options.decompositionPrompt;
   }
 
   async decomposeAndHyde(query: string): Promise<QueryDecomposition> {
     try {
       const systemPrompt =
-        this.decompositionPrompt ??
-        `You are an expert regulatory, legal, and technical query analyst.
-Given a query, return strict JSON with:
-1. "sub_queries": Array of 1-3 targeted short sub-queries breaking down compound elements.
-2. "hyde_clause": A concise 1-2 sentence hypothetical normative clause snippet (under 50 words).
-3. "graph_anchors": Key domain entity anchors (e.g. "gdpr:art33.1", "gdpr:art33.5", "iso:b.3.12", "iso:10.2").
-Keep the response concise and strictly valid JSON.`;
+        this.decompositionPrompt ?? DEFAULT_RAG_DECOMPOSITION_PROMPT;
 
       const res = await this.modelProvider.chat_json({
+        route: MODEL_ROUTE_FAST,
         system: systemPrompt,
         messages: [{ role: "user", content: `Query: ${query}` }],
-        max_tokens: 1500,
+        max_tokens: RAG_DECOMPOSE_MAX_TOKENS,
         temperature: 0.0,
       });
 
-      const parsed = res.content as Partial<QueryDecomposition>;
-      const subQueries =
-        Array.isArray(parsed.sub_queries) && parsed.sub_queries.length > 0
-          ? (parsed.sub_queries as string[])
-          : [query];
-      const hydeClause =
-        typeof parsed.hyde_clause === "string" ? parsed.hyde_clause : query;
-      const graphAnchors = Array.isArray(parsed.graph_anchors)
-        ? (parsed.graph_anchors as string[])
-        : [];
-
-      return {
-        sub_queries: subQueries,
-        hyde_clause: hydeClause,
-        graph_anchors: graphAnchors,
-      };
+      const v = QueryDecompositionSchema.safeParse(res.content);
+      if (!v.success)
+        throw new ModelSchemaViolationError(
+          MODEL_ROUTE_FAST,
+          `Query decomposition returned invalid shape: ${v.error.message}`,
+        );
+      return v.data;
     } catch (err: unknown) {
-      if (err instanceof ModelUnavailableError) {
+      if (
+        err instanceof ModelUnavailableError ||
+        err instanceof ModelSchemaViolationError
+      ) {
         throw err;
       }
       throw new ModelUnavailableError(
-        "rag",
+        MODEL_ROUTE_RAG,
         `Query decomposition failed: ${err instanceof Error ? err.message : String(err)}`,
       );
     }
@@ -103,23 +112,22 @@ Keep the response concise and strictly valid JSON.`;
     denseRankings: string[],
     bm25Rankings: string[],
     pprRankings: string[],
-    k = 60,
+    k = RRF_K,
   ): Map<string, number> {
     const rrfScores = new Map<string, number>();
 
     const addRank = (list: string[], weight = 1.0) => {
       for (let r = 0; r < list.length; r++) {
         const id = list[r];
-        if (!id) continue;
+        if (!id) throw new RagIndexError("RRF ranking contains empty chunk id");
         const current = rrfScores.get(id) ?? 0;
         rrfScores.set(id, current + weight / (k + (r + 1)));
       }
     };
 
-    addRank(denseRankings, 1.0);
-    addRank(bm25Rankings, 1.2);
-    addRank(pprRankings, 1.5);
-
+    addRank(denseRankings, RRF_WEIGHT_DENSE);
+    addRank(bm25Rankings, RRF_WEIGHT_BM25);
+    addRank(pprRankings, RRF_WEIGHT_PPR);
     return rrfScores;
   }
 
@@ -144,8 +152,10 @@ Keep the response concise and strictly valid JSON.`;
       };
     }
 
-    const topScore = eligible[0]?.score ?? 0;
-    if (topScore >= 0.65) {
+    const top = eligible[0];
+    if (!top) throw new RagIndexError("CRAG eligible set unexpectedly empty");
+    const topScore = top.score;
+    if (topScore >= DEFAULT_CRAG_SUPPORTED_THRESHOLD) {
       return {
         grade: "supported",
         reason: `Top passage score ${topScore} strongly supports the query`,
@@ -219,7 +229,7 @@ Keep the response concise and strictly valid JSON.`;
 
     if (Date.now() - startTime > this.timeoutMs) {
       throw new ModelUnavailableError(
-        "rag",
+        MODEL_ROUTE_RAG,
         `RAG retrieval timeout after ${this.timeoutMs}ms`,
       );
     }
@@ -228,12 +238,13 @@ Keep the response concise and strictly valid JSON.`;
     const qVec = embRes.vectors[0];
     if (!qVec) {
       throw new ModelUnavailableError(
-        "rag",
+        MODEL_ROUTE_RAG,
         "Failed to compute query vector for dense retrieval",
       );
     }
 
-    const pgvectorHits = await this.indexer.searchPgvector(qVec, 30);
+    const pgvectorHits = await this.indexer.searchPgvector(qVec, RAG_DENSE_K);
+
     const denseRankings = pgvectorHits.map((h) => h.chunk_id);
 
     const biEncoderAnchors = this.knowledgeGraph.findAnchorsByVector(qVec);
@@ -252,9 +263,9 @@ Keep the response concise and strictly valid JSON.`;
       .map((a) => this.knowledgeGraph.getNode(a)?.label ?? "")
       .filter(Boolean)
       .join(" ");
-    const bm25Hits = this.indexer.searchFts5(
+    const bm25Hits = this.indexer.searchBM25(
       `${userQuery} ${decomposed.sub_queries.join(" ")} ${anchorLabels}`,
-      40,
+      RAG_BM25_K,
     );
     const bm25Rankings = bm25Hits.map((h) => h.chunk_id);
 
@@ -279,7 +290,10 @@ Keep the response concise and strictly valid JSON.`;
           text: chunk.text,
           normative: chunk.normative,
         });
-      }
+      } else
+        throw new CitationFabricatedError(
+          `Fused chunk id not in index: ${cid}`,
+        );
     }
 
     const rerankRes = await this.modelProvider.rerank({
@@ -290,7 +304,10 @@ Keep the response concise and strictly valid JSON.`;
     const blendedRanked = rerankRes.ranked.map((p) => {
       const pprVal = chunkPprMap.get(p.chunk_id) ?? 0;
       const combinedScore = Number(
-        (0.85 * p.score + 0.15 * Math.min(1, pprVal * 2.5)).toFixed(4),
+        (
+          RERANK_PPR_WEIGHT * p.score +
+          RERANK_PPR_COMPLEMENT * Math.min(1, pprVal * RERANK_PPR_SCALE)
+        ).toFixed(4),
       );
       return {
         ...p,
@@ -304,9 +321,9 @@ Keep the response concise and strictly valid JSON.`;
     let cragResult = await this.cragGrade(userQuery, topPassages);
 
     if (cragResult.grade === "ambiguous" && cragResult.rewritten_query) {
-      const rewriteBm25 = this.indexer.searchFts5(
+      const rewriteBm25 = this.indexer.searchBM25(
         cragResult.rewritten_query,
-        20,
+        RAG_REWRITE_BM25_K,
       );
       const additionalChunks = rewriteBm25
         .map((h) => this.indexer.getChunk(h.chunk_id))

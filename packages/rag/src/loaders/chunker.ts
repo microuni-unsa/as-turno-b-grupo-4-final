@@ -1,22 +1,27 @@
 import { countApproxTokens, splitWords } from "@pims/rag/loaders/text-utils.ts";
-import type { DocumentSection } from "@pims/rag/loaders/types.ts";
+import { RagIndexError } from "@pims/types/errors.ts";
+import type { DocumentSection } from "@pims/types/rag.ts";
+import { DocumentSectionSchema } from "@pims/types/rag.ts";
+import { z } from "zod";
 
-export interface ChunkingInput {
-  sections: DocumentSection[];
-  maxTokens: number;
-  chunkOverlap: number;
-}
+export const ChunkingInputSchema = z.object({
+  sections: z.array(DocumentSectionSchema),
+  maxTokens: z.number().int().positive(),
+  chunkOverlap: z.number().int().nonnegative(),
+});
+export type ChunkingInput = z.infer<typeof ChunkingInputSchema>;
 
-export interface ChunkWindow {
-  sectionLabel: string;
-  sectionIndex: number;
-  windowIndex: number;
-  windowCount: number;
-  body: string;
-  firstLine: number;
-  lastLine: number;
-  tokenCount: number;
-}
+export const ChunkWindowSchema = z.object({
+  sectionLabel: z.string(),
+  sectionIndex: z.number().int().nonnegative(),
+  windowIndex: z.number().int().nonnegative(),
+  windowCount: z.number().int().positive(),
+  body: z.string(),
+  firstLine: z.number().int(),
+  lastLine: z.number().int(),
+  tokenCount: z.number().int().nonnegative(),
+});
+export type ChunkWindow = z.infer<typeof ChunkWindowSchema>;
 
 interface PseudoLine {
   text: string;
@@ -101,15 +106,9 @@ function packWindows(
 }
 
 export function chunkSections(input: ChunkingInput): ChunkWindow[] {
-  if (input.maxTokens <= 0) {
-    throw new RangeError(
-      `chunkSections requires maxTokens > 0, received ${input.maxTokens}`,
-    );
-  }
-  if (input.chunkOverlap < 0) {
-    throw new RangeError(
-      `chunkSections requires chunkOverlap >= 0, received ${input.chunkOverlap}`,
-    );
+  const v = ChunkingInputSchema.safeParse(input);
+  if (!v.success) {
+    throw new RagIndexError(`Invalid chunkSections input: ${v.error.message}`);
   }
   const windows: ChunkWindow[] = [];
   for (const [sectionIndex, section] of input.sections.entries()) {

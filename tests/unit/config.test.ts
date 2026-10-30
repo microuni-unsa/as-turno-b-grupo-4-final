@@ -1,6 +1,10 @@
 import childProcess from "node:child_process";
 import fs from "node:fs";
-import { decryptSopsFile, loadConfig } from "@pims/config";
+import {
+  decryptSopsFile,
+  loadConfig,
+  loadModelProviderOptions,
+} from "@pims/config";
 import { ConfigError } from "@pims/types";
 import { describe, expect, it, vi } from "vitest";
 
@@ -43,7 +47,7 @@ describe("Configuration Manager", () => {
   it("fails fast when PIMS_TOKEN_CMD is missing", () => {
     const env = { ...baseValidEnv };
     delete env.PIMS_TOKEN_CMD;
-    expect(() => loadConfig(env)).toThrowError(ConfigError);
+    expect(() => loadConfig(env)).toThrow(ConfigError);
     try {
       loadConfig(env);
     } catch (err) {
@@ -54,7 +58,7 @@ describe("Configuration Manager", () => {
   it("fails fast when a required model config is missing", () => {
     const env = { ...baseValidEnv };
     delete env.REASONING_MODEL;
-    expect(() => loadConfig(env)).toThrowError(ConfigError);
+    expect(() => loadConfig(env)).toThrow(ConfigError);
     try {
       loadConfig(env);
     } catch (err) {
@@ -65,7 +69,7 @@ describe("Configuration Manager", () => {
   it("fails fast when model referenced auth env is missing", () => {
     const env = { ...baseValidEnv };
     delete env.MISTRAL_API_KEY;
-    expect(() => loadConfig(env)).toThrowError(ConfigError);
+    expect(() => loadConfig(env)).toThrow(ConfigError);
     try {
       loadConfig(env);
     } catch (err) {
@@ -76,7 +80,7 @@ describe("Configuration Manager", () => {
   it("fails fast when EVIDENCE_KEY_ENV referenced variable is missing", () => {
     const env = { ...baseValidEnv };
     delete env.EVIDENCE_KEY;
-    expect(() => loadConfig(env)).toThrowError(ConfigError);
+    expect(() => loadConfig(env)).toThrow(ConfigError);
     try {
       loadConfig(env);
     } catch (err) {
@@ -86,7 +90,7 @@ describe("Configuration Manager", () => {
 
   it("strictly rejects LOG_PII=true", () => {
     const env = { ...baseValidEnv, LOG_PII: "true" };
-    expect(() => loadConfig(env)).toThrowError(ConfigError);
+    expect(() => loadConfig(env)).toThrow(ConfigError);
     try {
       loadConfig(env);
     } catch (err) {
@@ -96,7 +100,7 @@ describe("Configuration Manager", () => {
 
   it("strictly rejects ATTACHMENT_MAX_MB > 10", () => {
     const env = { ...baseValidEnv, ATTACHMENT_MAX_MB: "15" };
-    expect(() => loadConfig(env)).toThrowError(ConfigError);
+    expect(() => loadConfig(env)).toThrow(ConfigError);
     try {
       loadConfig(env);
     } catch (err) {
@@ -108,7 +112,7 @@ describe("Configuration Manager", () => {
 
   it("strictly rejects invalid SUBJECT_NOTICE_POLICY", () => {
     const env = { ...baseValidEnv, SUBJECT_NOTICE_POLICY: "notify_all" };
-    expect(() => loadConfig(env)).toThrowError(ConfigError);
+    expect(() => loadConfig(env)).toThrow(ConfigError);
     try {
       loadConfig(env);
     } catch (err) {
@@ -120,7 +124,7 @@ describe("Configuration Manager", () => {
 
   it("strictly rejects invalid EVIDENCE_HASH", () => {
     const env = { ...baseValidEnv, EVIDENCE_HASH: "md5" };
-    expect(() => loadConfig(env)).toThrowError(ConfigError);
+    expect(() => loadConfig(env)).toThrow(ConfigError);
     try {
       loadConfig(env);
     } catch (err) {
@@ -130,7 +134,7 @@ describe("Configuration Manager", () => {
 
   it("validates PIMS_BASE_URL type format", () => {
     const env = { ...baseValidEnv, PIMS_BASE_URL: "not-a-valid-url" };
-    expect(() => loadConfig(env)).toThrowError(ConfigError);
+    expect(() => loadConfig(env)).toThrow(ConfigError);
     try {
       loadConfig(env);
     } catch (err) {
@@ -143,7 +147,7 @@ describe("Configuration Manager", () => {
       ...baseValidEnv,
       JURISDICTION_DEADLINES_JSON: "invalid-json",
     };
-    expect(() => loadConfig(env)).toThrowError(ConfigError);
+    expect(() => loadConfig(env)).toThrow(ConfigError);
     try {
       loadConfig(env);
     } catch (err) {
@@ -156,7 +160,7 @@ describe("Configuration Manager", () => {
   describe("SOPS Decryption", () => {
     it("fails fast when SOPS file does not exist", () => {
       vi.spyOn(fs, "existsSync").mockReturnValue(false);
-      expect(() => decryptSopsFile("secrets/missing.enc.json")).toThrowError(
+      expect(() => decryptSopsFile("secrets/missing.enc.json")).toThrow(
         ConfigError,
       );
       try {
@@ -167,9 +171,9 @@ describe("Configuration Manager", () => {
       vi.restoreAllMocks();
     });
 
-    it("decrypts SOPS file with mocked execSync", () => {
+    it("decrypts SOPS file with mocked execFileSync", () => {
       vi.spyOn(fs, "existsSync").mockReturnValue(true);
-      vi.spyOn(childProcess, "execSync").mockReturnValue(
+      vi.spyOn(childProcess, "execFileSync").mockReturnValue(
         JSON.stringify({ SECRET_TOKEN: "decrypted_secret_val" }),
       );
 
@@ -178,11 +182,27 @@ describe("Configuration Manager", () => {
       vi.restoreAllMocks();
     });
 
-    it("decrypts credentials.enc.json with valid SOPS age keys", () => {
-      expect(fs.existsSync("credentials.enc.json")).toBe(true);
-      const creds = decryptSopsFile("credentials.enc.json");
-      expect(creds.OPENAI_API_KEY).toBeDefined();
-      expect(creds.EVIDENCE_KEY).toBeDefined();
+    it("builds provider options from decrypted SOPS credentials", () => {
+      expect(
+        loadModelProviderOptions({
+          OPENAI_API_KEY: "k",
+          COHERE_API_KEY: "c",
+          OPENAI_BASE_URL: "u",
+        }),
+      ).toEqual({ apiKey: "k", cohereApiKey: "c", baseURL: "u" });
+      expect(
+        loadModelProviderOptions({
+          OPENAI_API_KEY: "k",
+          COHERE_API_KEY: "",
+          OPENAI_BASE_URL: "",
+        }),
+      ).toEqual({ apiKey: "k" });
+      try {
+        loadModelProviderOptions({});
+        expect.unreachable();
+      } catch (err) {
+        expect((err as ConfigError).code).toBe("CONFIG_MISSING:OPENAI_API_KEY");
+      }
     });
   });
 });

@@ -12,6 +12,7 @@ import {
   PimsNotFoundError,
   PimsValidationError,
 } from "@pims/types";
+import { PIMS_TEST_SEED_PASSWORD } from "@pims/types/constants.ts";
 import {
   PostgreSqlContainer,
   type StartedPostgreSqlContainer,
@@ -63,7 +64,7 @@ describe("PIMS Client Adapter & Reverse-Engineered DRF API Integration Suite", (
       baseUrl: serverInstance.url,
       schema: "unsa",
       username: "admin",
-      password: "password123",
+      password: PIMS_TEST_SEED_PASSWORD,
       timeoutMs: 15000,
     });
   }, 120_000);
@@ -233,7 +234,7 @@ describe("PIMS Client Adapter & Reverse-Engineered DRF API Integration Suite", (
     it("E09: logically deletes incident (setting is_deleted=true)", async () => {
       await adapter.deleteIncident(createdIncidentId);
 
-      await expect(adapter.getIncident(createdIncidentId)).rejects.toThrowError(
+      await expect(adapter.getIncident(createdIncidentId)).rejects.toThrow(
         PimsNotFoundError,
       );
 
@@ -265,7 +266,7 @@ describe("PIMS Client Adapter & Reverse-Engineered DRF API Integration Suite", (
 
       await expect(
         adapter.notifyIncident(incidentForNotify),
-      ).rejects.toThrowError(NotifyNoRecipientsError);
+      ).rejects.toThrow(NotifyNoRecipientsError);
     });
 
     it("E15: creates new notification recipient", async () => {
@@ -288,7 +289,7 @@ describe("PIMS Client Adapter & Reverse-Engineered DRF API Integration Suite", (
           label: "Duplicate DPO",
           is_active: true,
         }),
-      ).rejects.toThrowError(PimsValidationError);
+      ).rejects.toThrow(PimsValidationError);
     });
 
     it("E14: lists active notification recipients", async () => {
@@ -391,7 +392,7 @@ describe("PIMS Client Adapter & Reverse-Engineered DRF API Integration Suite", (
           controlled_impact: 4,
           assets: [],
         }),
-      ).rejects.toThrowError(PimsValidationError);
+      ).rejects.toThrow(PimsValidationError);
     });
 
     it("E21: creates risk evaluation with asset linkage and generates code R-###", async () => {
@@ -444,11 +445,11 @@ describe("PIMS Client Adapter & Reverse-Engineered DRF API Integration Suite", (
           incident_type: "OT";
           status: "O";
         }),
-      ).rejects.toThrowError(PimsValidationError);
+      ).rejects.toThrow(PimsValidationError);
     });
 
     it("maps 404 to PimsNotFoundError", async () => {
-      await expect(adapter.getIncident(999999)).rejects.toThrowError(
+      await expect(adapter.getIncident(999999)).rejects.toThrow(
         PimsNotFoundError,
       );
     });

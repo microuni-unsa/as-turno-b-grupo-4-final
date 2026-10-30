@@ -1,3 +1,7 @@
+import {
+  DEFAULT_CHUNK_MAX_TOKENS,
+  DEFAULT_CHUNK_OVERLAP,
+} from "@pims/types/constants.ts";
 import { RankedPassageSchema } from "@pims/types/models.ts";
 import { z } from "zod";
 
@@ -23,9 +27,9 @@ export const DocumentMetadataSchema = z.object({
 export type DocumentMetadata = z.infer<typeof DocumentMetadataSchema>;
 
 export const ChunkingOptionsSchema = z.object({
-  maxTokens: z.number().int().positive().optional(),
-  chunkOverlap: z.number().int().nonnegative().optional(),
-  defaultNormative: z.boolean().optional(),
+  maxTokens: z.number().int().positive().default(DEFAULT_CHUNK_MAX_TOKENS),
+  chunkOverlap: z.number().int().nonnegative().default(DEFAULT_CHUNK_OVERLAP),
+  defaultNormative: z.boolean().default(true),
 });
 export type ChunkingOptions = z.infer<typeof ChunkingOptionsSchema>;
 
@@ -141,3 +145,17 @@ export const RAGTriadScoresSchema = z.object({
   answer_relevance: z.number(),
 });
 export type RAGTriadScores = z.infer<typeof RAGTriadScoresSchema>;
+
+export const LoadedCorpusSchema = z.object({
+  version: z.string(),
+  chunks: z.array(CorpusChunkSchema),
+  docHashes: z.record(z.string(), z.string()),
+});
+export type LoadedCorpus = z.infer<typeof LoadedCorpusSchema>;
+
+export const DocumentSectionSchema = z.object({
+  label: z.string(),
+  lines: z.array(z.string()),
+  startLine: z.number().int(),
+});
+export type DocumentSection = z.infer<typeof DocumentSectionSchema>;

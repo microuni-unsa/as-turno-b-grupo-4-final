@@ -93,6 +93,16 @@ export const ACTION_PLAN_STATUSES = ["O", "P", "C"] as const;
 export const RISK_EVAL_STATUSES = ["B", "O", "T", "C"] as const;
 export const ASSET_RELEVANCES = ["BAJO", "MEDIO", "ALTO", "CRITICO"] as const;
 export const FORM_MEASURE_VALUES = ["Y", "N", "U"] as const;
+export const EVENT_TYPES = [
+  "created",
+  "updated",
+  "notified",
+  "status_changed",
+  "closed",
+  "reopened",
+] as const;
+export const EventTypeSchema = z.enum(EVENT_TYPES);
+export type EventType = z.infer<typeof EventTypeSchema>;
 
 export const AuditModelSchema = z.object({
   created_at: z.string(),

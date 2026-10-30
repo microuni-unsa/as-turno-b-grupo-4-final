@@ -10,7 +10,6 @@
     "@pims/models": "workspace:*",
     "@pims/types": "workspace:*",
     "graphology": "^0.26.0",
-    "graphology-pagerank": "^1.1.0",
     "mdast": "^3.0.0",
     "minisearch": "^7.2.0",
     "pgvector": "^0.3.0",

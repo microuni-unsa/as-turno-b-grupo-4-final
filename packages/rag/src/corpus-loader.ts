@@ -18,11 +18,17 @@ import {
   countApproxTokens,
   slugifyStem,
 } from "@pims/rag/loaders/text-utils.ts";
+import {
+  DEFAULT_CHUNK_MAX_TOKENS,
+  DEFAULT_CHUNK_OVERLAP,
+  DEFAULT_CORPUS_DIR,
+  formatCorpusHeader,
+} from "@pims/types/constants.ts";
 import { RagIndexError } from "@pims/types/errors.ts";
 import type {
-  ChunkingOptions,
   CorpusChunk,
   CorpusSource,
+  LoadedCorpus,
 } from "@pims/types/rag.ts";
 import { ChunkingOptionsSchema } from "@pims/types/rag.ts";
 
@@ -34,15 +40,12 @@ function createDefaultSectionLoaders(): SectionLoaderRegistry {
   return registry;
 }
 
-export interface LoadedCorpus {
-  version: string;
-  chunks: CorpusChunk[];
-  docHashes: Record<string, string>;
-}
-
-export interface CorpusLoaderOptions extends ChunkingOptions {
+export interface CorpusLoaderOptions {
   source?: CorpusSource;
-  projectRoot?: string;
+  projectRoot: string;
+  maxTokens?: number;
+  chunkOverlap?: number;
+  defaultNormative?: boolean;
   sectionLoaders?: SectionLoaderRegistry;
 }
 
@@ -55,20 +58,24 @@ export class CorpusLoader {
   private readonly defaultNormative: boolean;
   private readonly seqByDoc: Map<string, number> = new Map();
 
-  constructor(options: CorpusLoaderOptions = {}) {
-    this.projectRoot = options.projectRoot ?? process.cwd();
+  constructor(options: CorpusLoaderOptions) {
+    if (!options.projectRoot || options.projectRoot.trim() === "") {
+      throw new RagIndexError("CorpusLoader requires explicit projectRoot");
+    }
+    this.projectRoot = options.projectRoot;
     this.source = options.source ?? {
       type: "local",
-      dirPath: "corpus",
+      dirPath: DEFAULT_CORPUS_DIR,
     };
     const chunking = ChunkingOptionsSchema.parse({
-      maxTokens: options.maxTokens ?? 450,
-      chunkOverlap: options.chunkOverlap ?? 1,
+      maxTokens: options.maxTokens ?? DEFAULT_CHUNK_MAX_TOKENS,
+      chunkOverlap: options.chunkOverlap ?? DEFAULT_CHUNK_OVERLAP,
       defaultNormative: options.defaultNormative ?? true,
     });
-    this.maxTokens = chunking.maxTokens ?? 450;
-    this.chunkOverlap = chunking.chunkOverlap ?? 1;
-    this.defaultNormative = chunking.defaultNormative ?? true;
+    this.maxTokens = chunking.maxTokens;
+    this.chunkOverlap = chunking.chunkOverlap;
+    this.defaultNormative = chunking.defaultNormative;
+    // Phase-2 default extension-point registry
     this.sectionLoaders =
       options.sectionLoaders ?? createDefaultSectionLoaders();
   }
@@ -94,7 +101,11 @@ export class CorpusLoader {
         window.windowCount > 1
           ? `${window.sectionLabel} part ${window.windowIndex + 1}`
           : window.sectionLabel;
-      const header = `[DOC:${docId} | CLAUSE:${articleOrClause} | NORMATIVE:${this.defaultNormative}]`;
+      const header = formatCorpusHeader(
+        docId,
+        articleOrClause,
+        this.defaultNormative,
+      );
       const text = `${header}\n${window.body}`;
       chunks.push({
         chunk_id: `${docId}:${String(seq).padStart(4, "0")}`,
@@ -132,6 +143,10 @@ export class CorpusLoader {
 
     if (this.source.type === "local") {
       const dir = path.resolve(this.projectRoot, this.source.dirPath);
+      const root = path.resolve(this.projectRoot);
+      if (dir !== root && !dir.startsWith(root + path.sep)) {
+        throw new RagIndexError(`Corpus path escapes project root: ${dir}`);
+      }
       if (!fs.existsSync(dir)) {
         throw new RagIndexError(`Corpus directory not found: ${dir}`);
       }
@@ -208,8 +223,10 @@ export class CorpusLoader {
       }
     }
 
+    const fileHashes: string[] = [];
     for (const entry of fileEntries) {
       const fileHash = this.sha256(entry.buffer);
+      fileHashes.push(fileHash);
       docHashes[entry.filename] = fileHash;
       const docId = this.determineDocId(entry.filename);
       docHashes[docId] = fileHash;
@@ -240,11 +257,7 @@ export class CorpusLoader {
       chunks.push(...docChunks);
     }
 
-    const sortedHashes = Object.keys(docHashes)
-      .sort()
-      .map((k) => `${k}:${docHashes[k]}`)
-      .join("\n");
-    const version = this.sha256(sortedHashes);
+    const version = this.sha256([...fileHashes].sort().join("\n"));
 
     return {
       version,

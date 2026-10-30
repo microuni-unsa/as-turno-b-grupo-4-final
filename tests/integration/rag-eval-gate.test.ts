@@ -1,3 +1,4 @@
+import type { AgentConfig } from "@pims/config";
 import { OpenAIModelProvider } from "@pims/models";
 import {
   CorpusLoader,
@@ -247,6 +248,7 @@ describe("Automated RAG Evaluation Gate (§7.6 Integration Suite)", () => {
     );
 
     const loader = new CorpusLoader({
+      projectRoot: process.cwd(),
       source: { type: "local", dirPath: "corpus" },
     });
     const corpus = await loader.loadAll();
@@ -265,12 +267,13 @@ describe("Automated RAG Evaluation Gate (§7.6 Integration Suite)", () => {
       modelProvider,
       indexer,
       knowledgeGraph,
+      // RAGService reads only the four RAG_* keys.
       config: {
         RAG_TOP_K: 24,
         RAG_RERANK_K: 6,
         RAG_MIN_SCORE: 0.35,
         RAG_TIMEOUT_MS: 30000,
-      },
+      } as unknown as AgentConfig,
     });
   }, 180_000);
 

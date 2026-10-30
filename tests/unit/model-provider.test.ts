@@ -72,7 +72,7 @@ describe("OpenAIModelProvider (§4.3 Unit Suite)", () => {
           rerankerConfig: dummyRerankConfig,
           apiKey: "",
         }),
-    ).toThrowError(ModelUnavailableError);
+    ).toThrow(ModelUnavailableError);
   });
 
   it("chat_json succeeds and extracts valid JSON payload", async () => {
@@ -99,6 +99,7 @@ describe("OpenAIModelProvider (§4.3 Unit Suite)", () => {
     );
 
     const res = await provider.chat_json({
+      route: "FAST_MODEL",
       system: "You are a privacy expert",
       messages: [{ role: "user", content: "Is this a breach?" }],
       max_tokens: 500,
@@ -115,8 +116,8 @@ describe("OpenAIModelProvider (§4.3 Unit Suite)", () => {
     expect(res.logprobs).toEqual([-0.15, -0.05]);
   });
 
-  it("chat_json retries on malformed JSON and throws ModelSchemaViolationError on repeated failure", async () => {
-    vi.spyOn(globalThis, "fetch").mockImplementation(() =>
+  it("chat_json throws ModelSchemaViolationError on malformed JSON without retry", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(() =>
       Promise.resolve(
         new Response(
           JSON.stringify({
@@ -129,12 +130,14 @@ describe("OpenAIModelProvider (§4.3 Unit Suite)", () => {
 
     await expect(
       provider.chat_json({
+        route: "FAST_MODEL",
         system: "System prompt",
         messages: [{ role: "user", content: "Hello" }],
         max_tokens: 100,
         temperature: 0.0,
       }),
-    ).rejects.toThrowError(ModelSchemaViolationError);
+    ).rejects.toThrow(ModelSchemaViolationError);
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
   });
 
   it("embed succeeds with batch float vectors", async () => {
@@ -195,23 +198,43 @@ describe("OpenAIModelProvider (§4.3 Unit Suite)", () => {
   });
 
   it("rerank orders passages descending by similarity", async () => {
-    vi.spyOn(globalThis, "fetch")
-      .mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({
-            data: [{ embedding: [1, 0, 0] }],
-          }),
-          { status: 200, headers: { "Content-Type": "application/json" } },
-        ),
-      )
-      .mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({
-            data: [{ embedding: [0, 1, 0] }, { embedding: [0.9, 0.1, 0] }],
-          }),
-          { status: 200, headers: { "Content-Type": "application/json" } },
-        ),
-      );
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  ranked: [
+                    {
+                      chunk_id: "p2",
+                      doc_id: "doc2",
+                      article_or_clause: "art2",
+                      lines: "11-20",
+                      text: "Passage close",
+                      normative: true,
+                      score: 0.9,
+                      rank: 1,
+                    },
+                    {
+                      chunk_id: "p1",
+                      doc_id: "doc1",
+                      article_or_clause: "art1",
+                      lines: "1-10",
+                      text: "Passage orthogonal",
+                      normative: true,
+                      score: 0.3,
+                      rank: 2,
+                    },
+                  ],
+                }),
+              },
+            },
+          ],
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
 
     const passages = [
       {
@@ -238,6 +261,7 @@ describe("OpenAIModelProvider (§4.3 Unit Suite)", () => {
     expect(res.ranked[0]?.rank).toBe(1);
     expect(res.ranked[1]?.chunk_id).toBe("p1");
     expect(res.ranked[1]?.rank).toBe(2);
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
   });
 
   it("handles HTTP 500 with retry and throws ModelUnavailableError on exhaustion", async () => {
@@ -245,7 +269,7 @@ describe("OpenAIModelProvider (§4.3 Unit Suite)", () => {
       Promise.resolve(new Response("Internal Server Error", { status: 500 })),
     );
 
-    await expect(provider.embed({ texts: ["test"] })).rejects.toThrowError(
+    await expect(provider.embed({ texts: ["test"] })).rejects.toThrow(
       ModelUnavailableError,
     );
   });

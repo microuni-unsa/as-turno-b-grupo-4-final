@@ -47,3 +47,7 @@ Implement the configurable `ModelProvider` abstraction utilizing OpenAI-compatib
 - §7.6 evaluation suite passes 10/10 queries with exact citations.
 - Ingestion produces deterministic corpus SHA-256 hash and unique chunk IDs.
 - Unit tests run with zero mock provider classes.
+
+## Audit sync 2026-10-30
+
+Temperature→route rule replaced by an explicit caller-supplied `route` arg on `chat_json` (`FAST_MODEL`/`REASONING_MODEL`); all retrieval constants centralized in `@pims/types/constants.ts` (RRF/PPR/CRAG/blend/top-K); Cohere-native `/v2/rerank` branch documented with explicit endpoint+model requirements; corpus version formula fixed to `sha256(sorted(file hashes))`; `searchFts5` alias removed (canonical `searchBM25`); `graphology-pagerank` dependency and orphan type shim removed (hand-rolled PPR retained); local gitignored `.env` for dev/dummy credentials explicitly allowed by the updated AGENTS.md secrets rule.
