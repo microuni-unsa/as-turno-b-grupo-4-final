@@ -8,7 +8,7 @@
 ## 2. Secrets, Tooling & Configuration
 - **Secrets Management**: Secrets are managed via `sops`. No plaintext API keys, passwords, or tokens in git or plain config files.
 - **Tooling & Nix Policy**: NEVER assume Nix is available dynamically at runtime. If system packages or CLI tools are needed, declare them explicitly in `flake.nix`. All JavaScript/TypeScript dependencies must be managed via `bun` in `package.json`.
-- **LLM Provider**: Configurable model provider. Mistral API key is available for cost-effective execution on free tier (`V392gd36SfruU1rb7Lk5Z13TIWgnunwh`). Keep token usage strictly bounded and cheap.
+- **LLM Provider**: Configurable model provider. Mistral API key is available for cost-effective execution on free tier. Keep token usage strictly bounded and cheap.
 
 ## 3. Architecture & Code Quality
 - **Monorepo Structure**: The repository is organized as a Bun workspace monorepo under `packages/`:

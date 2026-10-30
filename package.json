@@ -10,8 +10,7 @@
     "test": "vitest run",
     "test:unit": "vitest run tests/unit",
     "test:integration": "vitest run tests/integration",
-    "check": "biome check --write packages tests",
-    "typecheck": "tsc --noEmit"
+    "check": "biome check --write && tsc --noEmit"
   },
   "dependencies": {
     "@hono/node-server": "^2.1.5",
