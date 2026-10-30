@@ -1,6 +1,6 @@
+import { loadConfig } from "@pims/config";
+import { ConfigError } from "@pims/types";
 import { describe, expect, it } from "vitest";
-import { loadConfig } from "@/config/index.ts";
-import { ConfigError } from "@/types/errors.ts";
 
 describe("Configuration Manager", () => {
   const baseValidEnv: Record<string, string> = {

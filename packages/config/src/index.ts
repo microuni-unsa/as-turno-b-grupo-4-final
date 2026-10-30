@@ -1,6 +1,6 @@
 import { execSync } from "node:child_process";
 import fs from "node:fs";
-import { ConfigError } from "@/types/errors.ts";
+import { ConfigError } from "@pims/types/errors.ts";
 
 export interface ModelConfig {
   provider: string;
@@ -94,18 +94,10 @@ export function decryptSopsFile(filePath: string): Record<string, unknown> {
   }
 
   try {
-    let output: string;
-    try {
-      output = execSync(`sops -d "${filePath}"`, {
-        encoding: "utf-8",
-        stdio: ["ignore", "pipe", "pipe"],
-      });
-    } catch {
-      output = execSync(`nix run nixpkgs#sops -- -d "${filePath}"`, {
-        encoding: "utf-8",
-        stdio: ["ignore", "pipe", "pipe"],
-      });
-    }
+    const output = execSync(`sops -d "${filePath}"`, {
+      encoding: "utf-8",
+      stdio: ["ignore", "pipe", "pipe"],
+    });
     return JSON.parse(output) as Record<string, unknown>;
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);

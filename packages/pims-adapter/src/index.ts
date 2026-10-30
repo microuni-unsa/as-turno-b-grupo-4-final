@@ -10,23 +10,45 @@ import {
   PimsThrottledError,
   PimsUnavailableError,
   PimsValidationError,
-} from "@/types/errors.ts";
+} from "@pims/types/errors.ts";
 import type {
-  LoginRequest,
-  LoginResponse,
+  PaginatedResult,
   PimsAnnexAMetaResponse,
+  PimsAsset,
   PimsAudit,
+  PimsAuditCreate,
+  PimsAuditUpdate,
   PimsDashboardResponse,
   PimsIncident,
   PimsIncidentAction,
   PimsIncidentAttachment,
+  PimsIncidentCreate,
   PimsIncidentHistory,
   PimsIncidentRecipient,
+  PimsIncidentRecipientCreate,
+  PimsIncidentUpdate,
   PimsRiskCatalogResponse,
   PimsRiskEvaluation,
-  TokenRefreshResponse,
+  PimsRiskEvaluationCreate,
   UserProfile,
-} from "@/types/pims.ts";
+} from "@pims/types/pims.ts";
+import {
+  AnnexAControlsMetaSchema,
+  DashboardKpisSchema,
+  LoginResponseSchema,
+  PimsAssetSchema,
+  PimsAuditSchema,
+  PimsIncidentAttachmentSchema,
+  PimsIncidentHistorySchema,
+  PimsIncidentRecipientSchema,
+  PimsIncidentSchema,
+  PimsRiskCatalogSchema,
+  PimsRiskEvaluationSchema,
+  paginatedResultSchema,
+  TenantInfoSchema,
+  TokenRefreshResponseSchema,
+  UserProfileSchema,
+} from "@pims/types/pims.ts";
 
 export interface PimsAdapterConfig {
   baseUrl: string;
@@ -37,13 +59,6 @@ export interface PimsAdapterConfig {
   tokenCmd?: string[];
   username?: string;
   password?: string;
-}
-
-export interface PaginatedResult<T> {
-  count: number;
-  next: string | null;
-  previous: string | null;
-  results: T[];
 }
 
 export class PimsAdapter {
@@ -86,23 +101,38 @@ export class PimsAdapter {
 
   // --- Endpoints E01-E04 Auth ---
 
-  async login(username?: string, password?: string): Promise<LoginResponse> {
+  async login(
+    username?: string,
+    password?: string,
+  ): Promise<{
+    access: string;
+    refresh: string;
+    user: { id: number; username: string; is_platform_admin?: boolean };
+  }> {
     const user = username ?? this.username;
     const pass = password ?? this.password;
     if (!user || !pass) {
       throw new PimsAuthFailedError("No credentials available for PIMS login");
     }
 
-    const payload: LoginRequest = { username: user, password: pass };
-    const res = await this.request<LoginResponse>("POST", "/business/login/", {
+    const payload = { username: user, password: pass };
+    const raw = await this.request<unknown>("POST", "/business/login/", {
       body: payload,
       isPublic: true,
       operation: "login",
     });
 
-    this.accessToken = res.access;
-    this.refreshTokenVal = res.refresh;
-    return res;
+    const parsed = LoginResponseSchema.safeParse(raw);
+    if (!parsed.success) {
+      throw new PimsErrorShapeUnknownError(
+        "Invalid login response format from PIMS",
+        JSON.stringify(raw),
+      );
+    }
+
+    this.accessToken = parsed.data.access;
+    this.refreshTokenVal = parsed.data.refresh;
+    return parsed.data;
   }
 
   async refreshToken(refreshTokenToUse?: string): Promise<string> {
@@ -113,7 +143,7 @@ export class PimsAdapter {
       );
     }
 
-    const res = await this.request<TokenRefreshResponse>(
+    const raw = await this.request<unknown>(
       "POST",
       "/business/token/refresh/",
       {
@@ -123,20 +153,44 @@ export class PimsAdapter {
       },
     );
 
-    this.accessToken = res.access;
-    return res.access;
+    const parsed = TokenRefreshResponseSchema.safeParse(raw);
+    if (!parsed.success) {
+      throw new PimsErrorShapeUnknownError(
+        "Invalid token refresh response from PIMS",
+        JSON.stringify(raw),
+      );
+    }
+
+    this.accessToken = parsed.data.access;
+    return parsed.data.access;
   }
 
-  async getTenantInfo(): Promise<{ name: string }> {
-    return this.request<{ name: string }>("GET", "/business/info/", {
+  async getTenantInfo(): Promise<{ name: string; schema_name?: string }> {
+    const raw = await this.request<unknown>("GET", "/business/info/", {
       operation: "tenant_info",
     });
+    const parsed = TenantInfoSchema.safeParse(raw);
+    if (!parsed.success) {
+      throw new PimsErrorShapeUnknownError(
+        "Invalid tenant info format from PIMS",
+        JSON.stringify(raw),
+      );
+    }
+    return parsed.data;
   }
 
   async getProfile(): Promise<UserProfile> {
-    return this.request<UserProfile>("GET", "/business/profile/", {
+    const raw = await this.request<unknown>("GET", "/business/profile/", {
       operation: "profile",
     });
+    const parsed = UserProfileSchema.safeParse(raw);
+    if (!parsed.success) {
+      throw new PimsErrorShapeUnknownError(
+        "Invalid user profile format from PIMS",
+        JSON.stringify(raw),
+      );
+    }
+    return parsed.data;
   }
 
   // --- Endpoints E05-E13 Incidents ---
@@ -158,34 +212,67 @@ export class PimsAdapter {
     if (params?.page_size) query.set("page_size", String(params.page_size));
 
     const path = `/api/incidents/${query.toString() ? `?${query.toString()}` : ""}`;
-    return this.request<PaginatedResult<PimsIncident>>("GET", path, {
+    const raw = await this.request<unknown>("GET", path, {
       operation: "list_incidents",
     });
+    const schema = paginatedResultSchema(PimsIncidentSchema);
+    const parsed = schema.safeParse(raw);
+    if (!parsed.success) {
+      throw new PimsErrorShapeUnknownError(
+        "Invalid incident list response from PIMS",
+        JSON.stringify(raw),
+      );
+    }
+    return parsed.data;
   }
 
-  async createIncident(data: Partial<PimsIncident>): Promise<PimsIncident> {
-    return this.request<PimsIncident>("POST", "/api/incidents/", {
+  async createIncident(data: PimsIncidentCreate): Promise<PimsIncident> {
+    const raw = await this.request<unknown>("POST", "/api/incidents/", {
       body: data,
       operation: "create_incident",
       incidentCode: data.incident_code,
     });
+    const parsed = PimsIncidentSchema.safeParse(raw);
+    if (!parsed.success) {
+      throw new PimsErrorShapeUnknownError(
+        "Invalid incident response on create from PIMS",
+        JSON.stringify(raw),
+      );
+    }
+    return parsed.data;
   }
 
   async getIncident(id: number): Promise<PimsIncident> {
-    return this.request<PimsIncident>("GET", `/api/incidents/${id}/`, {
+    const raw = await this.request<unknown>("GET", `/api/incidents/${id}/`, {
       operation: "get_incident",
     });
+    const parsed = PimsIncidentSchema.safeParse(raw);
+    if (!parsed.success) {
+      throw new PimsErrorShapeUnknownError(
+        `Invalid incident format for id ${id}`,
+        JSON.stringify(raw),
+      );
+    }
+    return parsed.data;
   }
 
   async updateIncident(
     id: number,
-    data: Partial<PimsIncident>,
+    data: PimsIncidentUpdate,
   ): Promise<PimsIncident> {
-    return this.request<PimsIncident>("PATCH", `/api/incidents/${id}/`, {
+    const raw = await this.request<unknown>("PATCH", `/api/incidents/${id}/`, {
       body: data,
       operation: "update_incident",
       incidentCode: data.incident_code,
     });
+    const parsed = PimsIncidentSchema.safeParse(raw);
+    if (!parsed.success) {
+      throw new PimsErrorShapeUnknownError(
+        `Invalid incident format on update for id ${id}`,
+        JSON.stringify(raw),
+      );
+    }
+    return parsed.data;
   }
 
   async deleteIncident(id: number): Promise<void> {
@@ -195,23 +282,41 @@ export class PimsAdapter {
   }
 
   async getIncidentHistory(id: number): Promise<PimsIncidentHistory[]> {
-    return this.request<PimsIncidentHistory[]>(
+    const raw = await this.request<unknown>(
       "GET",
       `/api/incidents/${id}/history/`,
       {
         operation: "get_incident_history",
       },
     );
+    const schema = PimsIncidentHistorySchema.array();
+    const parsed = schema.safeParse(raw);
+    if (!parsed.success) {
+      throw new PimsErrorShapeUnknownError(
+        `Invalid incident history format for id ${id}`,
+        JSON.stringify(raw),
+      );
+    }
+    return parsed.data;
   }
 
   async getIncidentAttachments(id: number): Promise<PimsIncidentAttachment[]> {
-    return this.request<PimsIncidentAttachment[]>(
+    const raw = await this.request<unknown>(
       "GET",
       `/api/incidents/${id}/attachments/`,
       {
         operation: "get_incident_attachments",
       },
     );
+    const schema = PimsIncidentAttachmentSchema.array();
+    const parsed = schema.safeParse(raw);
+    if (!parsed.success) {
+      throw new PimsErrorShapeUnknownError(
+        `Invalid attachments response for id ${id}`,
+        JSON.stringify(raw),
+      );
+    }
+    return parsed.data;
   }
 
   async uploadIncidentAttachment(
@@ -224,7 +329,7 @@ export class PimsAdapter {
       file instanceof Blob ? file : new Blob([Buffer.from(file as Uint8Array)]);
     formData.append("file", blob, fileName);
 
-    return this.request<PimsIncidentAttachment[]>(
+    const raw = await this.request<unknown>(
       "POST",
       `/api/incidents/${id}/attachments/`,
       {
@@ -232,33 +337,61 @@ export class PimsAdapter {
         operation: "upload_attachment",
       },
     );
+    const schema = PimsIncidentAttachmentSchema.array();
+    const parsed = schema.safeParse(raw);
+    if (!parsed.success) {
+      throw new PimsErrorShapeUnknownError(
+        `Invalid upload attachment response for id ${id}`,
+        JSON.stringify(raw),
+      );
+    }
+    return parsed.data;
   }
 
   async notifyIncident(id: number): Promise<PimsIncident> {
-    return this.request<PimsIncident>("POST", `/api/incidents/${id}/notify/`, {
-      body: {},
-      operation: "notify_incident",
-    });
+    const raw = await this.request<unknown>(
+      "POST",
+      `/api/incidents/${id}/notify/`,
+      {
+        body: {},
+        operation: "notify_incident",
+      },
+    );
+    const parsed = PimsIncidentSchema.safeParse(raw);
+    if (!parsed.success) {
+      throw new PimsErrorShapeUnknownError(
+        `Invalid notify response format for id ${id}`,
+        JSON.stringify(raw),
+      );
+    }
+    return parsed.data;
   }
 
   // --- Endpoints E14-E16 Incident Recipients ---
 
   async listRecipients(): Promise<PaginatedResult<PimsIncidentRecipient>> {
-    return this.request<PaginatedResult<PimsIncidentRecipient>>(
+    const raw = await this.request<unknown>(
       "GET",
       "/api/incident-recipients/",
       {
         operation: "list_recipients",
       },
     );
+    const schema = paginatedResultSchema(PimsIncidentRecipientSchema);
+    const parsed = schema.safeParse(raw);
+    if (!parsed.success) {
+      throw new PimsErrorShapeUnknownError(
+        "Invalid incident recipient list from PIMS",
+        JSON.stringify(raw),
+      );
+    }
+    return parsed.data;
   }
 
-  async createRecipient(data: {
-    email: string;
-    label: string;
-    is_active: boolean;
-  }): Promise<PimsIncidentRecipient> {
-    return this.request<PimsIncidentRecipient>(
+  async createRecipient(
+    data: PimsIncidentRecipientCreate,
+  ): Promise<PimsIncidentRecipient> {
+    const raw = await this.request<unknown>(
       "POST",
       "/api/incident-recipients/",
       {
@@ -266,6 +399,14 @@ export class PimsAdapter {
         operation: "create_recipient",
       },
     );
+    const parsed = PimsIncidentRecipientSchema.safeParse(raw);
+    if (!parsed.success) {
+      throw new PimsErrorShapeUnknownError(
+        "Invalid create recipient response from PIMS",
+        JSON.stringify(raw),
+      );
+    }
+    return parsed.data;
   }
 
   async deleteRecipient(id: number): Promise<void> {
@@ -282,61 +423,104 @@ export class PimsAdapter {
     const query = new URLSearchParams();
     if (params?.status) query.set("status", params.status);
     const path = `/api/audits/${query.toString() ? `?${query.toString()}` : ""}`;
-    return this.request<PaginatedResult<PimsAudit>>("GET", path, {
+    const raw = await this.request<unknown>("GET", path, {
       operation: "list_audits",
     });
+    const schema = paginatedResultSchema(PimsAuditSchema);
+    const parsed = schema.safeParse(raw);
+    if (!parsed.success) {
+      throw new PimsErrorShapeUnknownError(
+        "Invalid audit list format from PIMS",
+        JSON.stringify(raw),
+      );
+    }
+    return parsed.data;
   }
 
-  async createAudit(data: Record<string, unknown>): Promise<PimsAudit> {
-    return this.request<PimsAudit>("POST", "/api/audits/", {
+  async createAudit(data: PimsAuditCreate): Promise<PimsAudit> {
+    const raw = await this.request<unknown>("POST", "/api/audits/", {
       body: data,
       operation: "create_audit",
     });
+    const parsed = PimsAuditSchema.safeParse(raw);
+    if (!parsed.success) {
+      throw new PimsErrorShapeUnknownError(
+        "Invalid audit response on create from PIMS",
+        JSON.stringify(raw),
+      );
+    }
+    return parsed.data;
   }
 
-  async updateAudit(
-    id: number,
-    data: Record<string, unknown>,
-  ): Promise<PimsAudit> {
-    return this.request<PimsAudit>("PATCH", `/api/audits/${id}/`, {
+  async updateAudit(id: number, data: PimsAuditUpdate): Promise<PimsAudit> {
+    const raw = await this.request<unknown>("PATCH", `/api/audits/${id}/`, {
       body: data,
       operation: "update_audit",
     });
+    const parsed = PimsAuditSchema.safeParse(raw);
+    if (!parsed.success) {
+      throw new PimsErrorShapeUnknownError(
+        `Invalid audit response on update for id ${id}`,
+        JSON.stringify(raw),
+      );
+    }
+    return parsed.data;
   }
 
   // --- Endpoints E20-E24 Risks & Assets ---
 
   async listRiskEvaluations(): Promise<PaginatedResult<PimsRiskEvaluation>> {
-    return this.request<PaginatedResult<PimsRiskEvaluation>>(
-      "GET",
-      "/api/risk-evaluations/",
-      {
-        operation: "list_risk_evaluations",
-      },
-    );
+    const raw = await this.request<unknown>("GET", "/api/risk-evaluations/", {
+      operation: "list_risk_evaluations",
+    });
+    const schema = paginatedResultSchema(PimsRiskEvaluationSchema);
+    const parsed = schema.safeParse(raw);
+    if (!parsed.success) {
+      throw new PimsErrorShapeUnknownError(
+        "Invalid risk evaluations list from PIMS",
+        JSON.stringify(raw),
+      );
+    }
+    return parsed.data;
   }
 
   async createRiskEvaluation(
-    data: Record<string, unknown>,
+    data: PimsRiskEvaluationCreate,
   ): Promise<PimsRiskEvaluation> {
-    return this.request<PimsRiskEvaluation>("POST", "/api/risk-evaluations/", {
+    const raw = await this.request<unknown>("POST", "/api/risk-evaluations/", {
       body: data,
       operation: "create_risk_evaluation",
     });
+    const parsed = PimsRiskEvaluationSchema.safeParse(raw);
+    if (!parsed.success) {
+      throw new PimsErrorShapeUnknownError(
+        "Invalid risk evaluation response from PIMS",
+        JSON.stringify(raw),
+      );
+    }
+    return parsed.data;
   }
 
   async getRiskCatalogs(): Promise<PimsRiskCatalogResponse> {
-    return this.request<PimsRiskCatalogResponse>(
+    const raw = await this.request<unknown>(
       "GET",
       "/api/risk-evaluations/catalogs/",
       {
         operation: "get_risk_catalogs",
       },
     );
+    const parsed = PimsRiskCatalogSchema.safeParse(raw);
+    if (!parsed.success) {
+      throw new PimsErrorShapeUnknownError(
+        "Invalid risk catalogs format from PIMS",
+        JSON.stringify(raw),
+      );
+    }
+    return parsed.data;
   }
 
-  async getEligibleAssets(): Promise<PaginatedResult<unknown>> {
-    return this.request<PaginatedResult<unknown>>(
+  async getEligibleAssets(): Promise<PaginatedResult<Partial<PimsAsset>>> {
+    return this.request<PaginatedResult<Partial<PimsAsset>>>(
       "GET",
       "/api/risk-evaluations/eligible-assets/",
       {
@@ -345,32 +529,57 @@ export class PimsAdapter {
     );
   }
 
-  async listAssets(): Promise<PaginatedResult<unknown>> {
-    return this.request<PaginatedResult<unknown>>("GET", "/api/assets/", {
+  async listAssets(): Promise<PaginatedResult<PimsAsset>> {
+    const raw = await this.request<unknown>("GET", "/api/assets/", {
       operation: "list_assets",
     });
+    const schema = paginatedResultSchema(PimsAssetSchema);
+    const parsed = schema.safeParse(raw);
+    if (!parsed.success) {
+      throw new PimsErrorShapeUnknownError(
+        "Invalid assets list from PIMS",
+        JSON.stringify(raw),
+      );
+    }
+    return parsed.data;
   }
 
   // --- Endpoints E25-E26 Dashboard & Annex A ---
 
   async getDashboardKpis(tab = "summary"): Promise<PimsDashboardResponse> {
-    return this.request<PimsDashboardResponse>(
+    const raw = await this.request<unknown>(
       "GET",
       `/api/dashboard/?tab=${encodeURIComponent(tab)}`,
       {
         operation: "get_dashboard_kpis",
       },
     );
+    const parsed = DashboardKpisSchema.safeParse(raw);
+    if (!parsed.success) {
+      throw new PimsErrorShapeUnknownError(
+        "Invalid dashboard KPIs format from PIMS",
+        JSON.stringify(raw),
+      );
+    }
+    return parsed.data;
   }
 
   async getAnnexAControlsMeta(): Promise<PimsAnnexAMetaResponse> {
-    return this.request<PimsAnnexAMetaResponse>(
+    const raw = await this.request<unknown>(
       "GET",
       "/api/annex-a-controls/meta/",
       {
         operation: "get_annex_a_meta",
       },
     );
+    const parsed = AnnexAControlsMetaSchema.safeParse(raw);
+    if (!parsed.success) {
+      throw new PimsErrorShapeUnknownError(
+        "Invalid Annex A controls meta format from PIMS",
+        JSON.stringify(raw),
+      );
+    }
+    return parsed.data;
   }
 
   // --- Startup Probes ---
@@ -542,10 +751,10 @@ export class PimsAdapter {
       );
     }
 
-    // Handle 401 unauthorized
+    // Handle 401 unauthorized: deterministic refresh or single re-login
     if (response.status === 401 && !options.isPublic) {
       if (attempt === 1) {
-        const refreshed = await this.tryRefreshTokenOrReLogin();
+        const refreshed = await this.reAuthenticate();
         if (refreshed) {
           return this.request<T>(method, endpoint, {
             ...options,
@@ -690,13 +899,14 @@ export class PimsAdapter {
     );
   }
 
-  private async tryRefreshTokenOrReLogin(): Promise<boolean> {
+  private async reAuthenticate(): Promise<boolean> {
     if (this.refreshTokenVal) {
       try {
         await this.refreshToken();
         return true;
       } catch {
-        // Refresh token failed, try re-login
+        // Refresh token failed, clear and fall through to primary auth method
+        this.refreshTokenVal = null;
       }
     }
 
@@ -709,7 +919,7 @@ export class PimsAdapter {
       }
     }
 
-    if (this.tokenCmd) {
+    if (this.tokenCmd && this.tokenCmd.length > 0) {
       try {
         await this.obtainToken();
         return true;

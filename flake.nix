@@ -27,6 +27,8 @@
         };
         shellPkgs = pkgs.lib.flatten [
           (with pkgs; [
+            sops
+            postgresql
           ])
           (with unstable; [
             bun

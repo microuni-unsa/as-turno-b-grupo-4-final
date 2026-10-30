@@ -1,24 +1,32 @@
 {
-  "name": "incident-agent",
+  "name": "incident-agent-monorepo",
   "version": "1.0.0",
   "type": "module",
+  "private": true,
+  "workspaces": [
+    "packages/*"
+  ],
   "scripts": {
     "test": "vitest run",
     "test:unit": "vitest run tests/unit",
     "test:integration": "vitest run tests/integration",
-    "check": "biome check --write src tests",
+    "check": "biome check --write packages tests",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "postgres": "^3.4.5",
-    "zod": "^3.24.2",
+    "@hono/node-server": "^2.1.5",
     "@testcontainers/postgresql": "^10.18.0",
-    "testcontainers": "^10.18.0"
+    "drizzle-orm": "^0.45.4",
+    "hono": "^4.13.14",
+    "postgres": "^3.4.5",
+    "testcontainers": "^10.18.0",
+    "zod": "^3.24.2"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.6.4",
     "@types/bun": "^1.4.4",
     "@types/node": "^22.13.10",
+    "drizzle-kit": "^0.31.11",
     "typescript": "^5.8.2",
     "vitest": "^5.0.5"
   }

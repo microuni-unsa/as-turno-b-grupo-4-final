@@ -1,42 +1,69 @@
+import fs from "node:fs";
+import path from "node:path";
+import { PimsAdapter } from "@pims/pims-adapter";
+import {
+  createMockDatabase,
+  createPimsTestServer,
+  type MockDatabaseClient,
+  type PimsTestServerInstance,
+} from "@pims/pims-mock";
+import {
+  NotifyNoRecipientsError,
+  PimsNotFoundError,
+  PimsValidationError,
+} from "@pims/types";
 import {
   PostgreSqlContainer,
   type StartedPostgreSqlContainer,
 } from "@testcontainers/postgresql";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { PimsAdapter } from "@/adapter/index.ts";
-import {
-  createPimsTestServer,
-  createSqlClient,
-  initDatabase,
-  type PimsTestServerInstance,
-  type SqlClient,
-} from "@/testing/pims-server/index.ts";
-import {
-  NotifyNoRecipientsError,
-  PimsNotFoundError,
-  PimsValidationError,
-} from "@/types/errors.ts";
 
 describe("PIMS Client Adapter & Reverse-Engineered DRF API Integration Suite", () => {
   let container: StartedPostgreSqlContainer;
-  let sql: SqlClient;
+  let dbClient: MockDatabaseClient;
   let serverInstance: PimsTestServerInstance;
   let adapter: PimsAdapter;
 
   beforeAll(async () => {
-    // 1. Boot PostgreSQL container
-    container = await new PostgreSqlContainer("postgres:16-alpine").start();
+    // 1. Resolve SQL initialization scripts strictly without fallback paths
+    const projectRoot = process.cwd();
+    const dumpPath = path.resolve(
+      projectRoot,
+      "data/gestitel_base_de_datos.sql",
+    );
+    const seedPath = path.resolve(projectRoot, "data/02-init-unsa-seed.sql");
 
-    // 2. Initialize database schema from data/gestitel_base_de_datos.sql and seed test data
-    sql = createSqlClient(container.getConnectionUri());
-    await initDatabase(sql);
+    if (!fs.existsSync(dumpPath) || !fs.existsSync(seedPath)) {
+      throw new Error(
+        `Required SQL initialization files missing in ${projectRoot}/data`,
+      );
+    }
 
-    // 3. Launch reverse-engineered DRF test API server
-    serverInstance = await createPimsTestServer(sql, {
+    // 2. Boot PostgreSQL container mounting autorun init scripts
+    container = await new PostgreSqlContainer("postgres:16-alpine")
+      .withBindMounts([
+        {
+          source: dumpPath,
+          target: "/docker-entrypoint-initdb.d/01-gestitel.sql",
+          mode: "ro",
+        },
+        {
+          source: seedPath,
+          target: "/docker-entrypoint-initdb.d/02-seed.sql",
+          mode: "ro",
+        },
+      ])
+      .start();
+
+    // 3. Connect Drizzle ORM client
+    dbClient = createMockDatabase(container.getConnectionUri());
+
+    // 4. Launch reverse-engineered DRF test API server with Hono & Drizzle
+    serverInstance = await createPimsTestServer(dbClient, {
       nestedActionMode: "replace",
     });
 
-    // 4. Initialize production PIMS adapter client
+    // 5. Initialize production PIMS adapter client
     adapter = new PimsAdapter({
       baseUrl: serverInstance.url,
       schema: "unsa",
@@ -50,8 +77,8 @@ describe("PIMS Client Adapter & Reverse-Engineered DRF API Integration Suite", (
     if (serverInstance) {
       await serverInstance.stop();
     }
-    if (sql) {
-      await sql.end();
+    if (dbClient) {
+      await dbClient.sql.end();
     }
     if (container) {
       await container.stop();
@@ -158,8 +185,8 @@ describe("PIMS Client Adapter & Reverse-Engineered DRF API Integration Suite", (
 
       expect(updated.status).toBe("I");
       expect(updated.severity).toBe("C");
-      expect(updated.actions.length).toBe(1);
-      expect(updated.actions[0]?.description).toContain("perimeter firewall");
+      expect(updated.actions?.length).toBe(1);
+      expect(updated.actions?.[0]?.description).toContain("perimeter firewall");
     });
 
     it("E10: retrieves immutable history showing creation and triage updates", async () => {
@@ -300,7 +327,7 @@ describe("PIMS Client Adapter & Reverse-Engineered DRF API Integration Suite", (
       });
 
       expect(audit.id).toBeDefined();
-      expect(audit.audit_code).toMatch(/^AUD-2026-\d+$/);
+      expect(audit.code).toMatch(/^AUD-2026-\d+$/);
       auditId = audit.id;
     });
 
@@ -377,7 +404,7 @@ describe("PIMS Client Adapter & Reverse-Engineered DRF API Integration Suite", (
       });
 
       expect(risk.id).toBeDefined();
-      expect(risk.risk_code).toMatch(/^R-\d+$/);
+      expect(risk.code).toMatch(/^R-\d+$/);
     });
 
     it("E20: lists risk evaluations", async () => {
@@ -409,6 +436,12 @@ describe("PIMS Client Adapter & Reverse-Engineered DRF API Integration Suite", (
         adapter.createIncident({
           // missing title and incident_date
           involves_personal_data: true,
+        } as unknown as {
+          title: string;
+          involves_personal_data: boolean;
+          incident_date: string;
+          incident_type: "OT";
+          status: "O";
         }),
       ).rejects.toThrowError(PimsValidationError);
     });

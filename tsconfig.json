@@ -10,7 +10,14 @@
     "moduleResolution": "bundler",
     "allowImportingTsExtensions": true,
     "paths": {
-      "@/*": ["./src/*"]
+      "@pims/types": ["./packages/types/src/index.ts"],
+      "@pims/types/*": ["./packages/types/src/*"],
+      "@pims/config": ["./packages/config/src/index.ts"],
+      "@pims/config/*": ["./packages/config/src/*"],
+      "@pims/pims-mock": ["./packages/pims-mock/src/index.ts"],
+      "@pims/pims-mock/*": ["./packages/pims-mock/src/*"],
+      "@pims/pims-adapter": ["./packages/pims-adapter/src/index.ts"],
+      "@pims/pims-adapter/*": ["./packages/pims-adapter/src/*"]
     },
     "verbatimModuleSyntax": true,
 
@@ -20,5 +27,5 @@
     "noUncheckedIndexedAccess": true,
     "noImplicitOverride": true
   },
-  "include": ["src", "tests", "vitest.config.ts"]
+  "include": ["packages", "tests", "vitest.config.ts"]
 }
