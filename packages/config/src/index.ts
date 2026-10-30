@@ -1,6 +1,15 @@
-import { execSync } from "node:child_process";
+import childProcess from "node:child_process";
 import fs from "node:fs";
+import {
+  DEFAULT_IDEMPOTENCY_KEY_PREFIX,
+  DEFAULT_PIMS_BASE_URL,
+  DEFAULT_PIMS_MAX_RETRIES,
+  DEFAULT_PIMS_SCHEMA,
+  DEFAULT_PIMS_TIMEOUT_MS,
+  MAX_ATTACHMENT_SIZE_MB,
+} from "@pims/types/constants.ts";
 import { ConfigError } from "@pims/types/errors.ts";
+import { z } from "zod";
 
 export interface ModelConfig {
   provider: string;
@@ -12,6 +21,15 @@ export interface ModelConfig {
   fallback: "none";
 }
 
+export const JurisdictionDeadlinesSchema = z.record(
+  z.string(),
+  z.object({
+    authority_h: z.union([z.number(), z.string()]),
+    processor_to_controller: z.string().optional(),
+  }),
+);
+export type JurisdictionDeadlines = z.infer<typeof JurisdictionDeadlinesSchema>;
+
 export interface AgentConfig {
   PIMS_BASE_URL: string;
   PIMS_SCHEMA: string;
@@ -20,7 +38,7 @@ export interface AgentConfig {
   PIMS_MAX_RETRIES: number;
   PIMS_PAGE_SIZE: { default: number; max: number };
   IDEMPOTENCY_KEY_PREFIX: string;
-  JURISDICTION_DEADLINES_JSON: Record<string, unknown>;
+  JURISDICTION_DEADLINES_JSON: JurisdictionDeadlines;
   SUBJECT_NOTICE_POLICY: "high_risk_only";
   HUMAN_VETO_WINDOW_MIN: number;
   ASSIGNEES: string[];
@@ -85,7 +103,13 @@ export interface AgentConfig {
   DEPLOY_DATA_DIR: string;
 }
 
-export function decryptSopsFile(filePath: string): Record<string, unknown> {
+export function decryptSopsFile(filePath: string): Record<string, string> {
+  if (!filePath || filePath.trim() === "") {
+    throw new ConfigError(
+      "SOPS file path cannot be empty",
+      "CONFIG_SOPS_PATH_EMPTY",
+    );
+  }
   if (!fs.existsSync(filePath)) {
     throw new ConfigError(
       `SOPS file does not exist: ${filePath}`,
@@ -94,11 +118,23 @@ export function decryptSopsFile(filePath: string): Record<string, unknown> {
   }
 
   try {
-    const output = execSync(`sops -d "${filePath}"`, {
+    const output = childProcess.execSync(`sops -d "${filePath}"`, {
       encoding: "utf-8",
       stdio: ["ignore", "pipe", "pipe"],
     });
-    return JSON.parse(output) as Record<string, unknown>;
+    const parsed = JSON.parse(output) as unknown;
+    if (
+      typeof parsed !== "object" ||
+      parsed === null ||
+      Array.isArray(parsed)
+    ) {
+      throw new Error("Decrypted SOPS content is not a key-value object");
+    }
+    const result: Record<string, string> = {};
+    for (const [k, v] of Object.entries(parsed)) {
+      result[k] = typeof v === "string" ? v : JSON.stringify(v);
+    }
+    return result;
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     throw new ConfigError(
@@ -213,7 +249,7 @@ export function loadConfig(
   }
 
   // Required keys
-  const pimsBaseUrl = env.PIMS_BASE_URL ?? "https://unsa.27k.pe";
+  const pimsBaseUrl = env.PIMS_BASE_URL ?? DEFAULT_PIMS_BASE_URL;
   try {
     new URL(pimsBaseUrl);
   } catch {
@@ -223,7 +259,7 @@ export function loadConfig(
     );
   }
 
-  const pimsSchema = env.PIMS_SCHEMA ?? "unsa";
+  const pimsSchema = env.PIMS_SCHEMA ?? DEFAULT_PIMS_SCHEMA;
 
   if (!env.PIMS_TOKEN_CMD) {
     throw new ConfigError(
@@ -233,15 +269,20 @@ export function loadConfig(
   }
   const tokenCmdParts = env.PIMS_TOKEN_CMD.trim().split(/\s+/);
 
-  let jurisdictionDeadlines: Record<string, unknown>;
+  let jurisdictionDeadlines: JurisdictionDeadlines;
   const rawJurisdiction =
     env.JURISDICTION_DEADLINES_JSON ??
     '{"EU_GDPR":{"authority_h":72,"processor_to_controller":"without_undue_delay"},"PE_PDP":{"authority_h":"48_unverified"}}';
   try {
-    jurisdictionDeadlines = JSON.parse(rawJurisdiction);
+    const rawParsed = JSON.parse(rawJurisdiction);
+    const valid = JurisdictionDeadlinesSchema.safeParse(rawParsed);
+    if (!valid.success) {
+      throw new Error();
+    }
+    jurisdictionDeadlines = valid.data;
   } catch {
     throw new ConfigError(
-      "JURISDICTION_DEADLINES_JSON must be valid JSON",
+      "JURISDICTION_DEADLINES_JSON must be valid JSON matching deadline schema",
       "CONFIG_TYPE:JURISDICTION_DEADLINES_JSON",
     );
   }
@@ -316,16 +357,16 @@ export function loadConfig(
   // Attachment max mb
   const attachmentMaxMb = env.ATTACHMENT_MAX_MB
     ? Number.parseInt(env.ATTACHMENT_MAX_MB, 10)
-    : 10;
+    : MAX_ATTACHMENT_SIZE_MB;
   if (Number.isNaN(attachmentMaxMb)) {
     throw new ConfigError(
       "ATTACHMENT_MAX_MB must be an integer",
       "CONFIG_TYPE:ATTACHMENT_MAX_MB",
     );
   }
-  if (attachmentMaxMb > 10) {
+  if (attachmentMaxMb > MAX_ATTACHMENT_SIZE_MB) {
     throw new ConfigError(
-      `ATTACHMENT_MAX_MB (${attachmentMaxMb}) exceeds PIMS maximum of 10 MB`,
+      `ATTACHMENT_MAX_MB (${attachmentMaxMb}) exceeds PIMS maximum of ${MAX_ATTACHMENT_SIZE_MB} MB`,
       "CONFIG_REJECTED:ATTACHMENT_MAX_MB",
     );
   }
@@ -341,7 +382,7 @@ export function loadConfig(
 
   const pimsTimeoutMs = env.PIMS_TIMEOUT_MS
     ? Number.parseInt(env.PIMS_TIMEOUT_MS, 10)
-    : 15000;
+    : DEFAULT_PIMS_TIMEOUT_MS;
   if (Number.isNaN(pimsTimeoutMs)) {
     throw new ConfigError(
       "PIMS_TIMEOUT_MS must be an integer",
@@ -351,7 +392,7 @@ export function loadConfig(
 
   const pimsMaxRetries = env.PIMS_MAX_RETRIES
     ? Number.parseInt(env.PIMS_MAX_RETRIES, 10)
-    : 3;
+    : DEFAULT_PIMS_MAX_RETRIES;
   if (Number.isNaN(pimsMaxRetries)) {
     throw new ConfigError(
       "PIMS_MAX_RETRIES must be an integer",
@@ -400,7 +441,8 @@ export function loadConfig(
     PIMS_TIMEOUT_MS: pimsTimeoutMs,
     PIMS_MAX_RETRIES: pimsMaxRetries,
     PIMS_PAGE_SIZE: pimsPageSize,
-    IDEMPOTENCY_KEY_PREFIX: env.IDEMPOTENCY_KEY_PREFIX ?? "agi1",
+    IDEMPOTENCY_KEY_PREFIX:
+      env.IDEMPOTENCY_KEY_PREFIX ?? DEFAULT_IDEMPOTENCY_KEY_PREFIX,
     JURISDICTION_DEADLINES_JSON: jurisdictionDeadlines,
     SUBJECT_NOTICE_POLICY: "high_risk_only",
     HUMAN_VETO_WINDOW_MIN: env.HUMAN_VETO_WINDOW_MIN

@@ -1,7 +1,14 @@
 import { execSync } from "node:child_process";
 import {
+  DEFAULT_IDEMPOTENCY_KEY_PREFIX,
+  DEFAULT_PIMS_MAX_RETRIES,
+  DEFAULT_PIMS_TIMEOUT_MS,
+  DEFAULT_RETRY_BACKOFF_MS,
+} from "@pims/types/constants.ts";
+import {
   NotifyNoRecipientsError,
   PimsAuthFailedError,
+  PimsClientBugError,
   PimsConflictCodeError,
   PimsErrorShapeUnknownError,
   PimsGateBlockedError,
@@ -79,9 +86,10 @@ export class PimsAdapter {
   constructor(config: PimsAdapterConfig) {
     this.baseUrl = config.baseUrl.replace(/\/+$/, "");
     this.schema = config.schema;
-    this.timeoutMs = config.timeoutMs ?? 15000;
-    this.maxRetries = config.maxRetries ?? 3;
-    this.idempotencyKeyPrefix = config.idempotencyKeyPrefix ?? "agi1";
+    this.timeoutMs = config.timeoutMs ?? DEFAULT_PIMS_TIMEOUT_MS;
+    this.maxRetries = config.maxRetries ?? DEFAULT_PIMS_MAX_RETRIES;
+    this.idempotencyKeyPrefix =
+      config.idempotencyKeyPrefix ?? DEFAULT_IDEMPOTENCY_KEY_PREFIX;
     this.tokenCmd = config.tokenCmd;
     this.username = config.username;
     this.password = config.password;
@@ -94,7 +102,7 @@ export class PimsAdapter {
 
   setTokens(access: string, refresh?: string): void {
     this.accessToken = access;
-    if (refresh) {
+    if (refresh !== undefined) {
       this.refreshTokenVal = refresh;
     }
   }
@@ -223,7 +231,35 @@ export class PimsAdapter {
         JSON.stringify(raw),
       );
     }
-    return parsed.data;
+
+    let results = parsed.data.results;
+
+    // Spec §3.1 E05: If severity or incident_type filter was ignored by backend, filter client-side and log warning
+    if (params?.severity) {
+      const ignored = results.some((i) => i.severity !== params.severity);
+      if (ignored) {
+        console.warn("PIMS_FILTER_IGNORED:severity");
+        results = results.filter((i) => i.severity === params.severity);
+      }
+    }
+
+    if (params?.incident_type) {
+      const ignored = results.some(
+        (i) => i.incident_type !== params.incident_type,
+      );
+      if (ignored) {
+        console.warn("PIMS_FILTER_IGNORED:incident_type");
+        results = results.filter(
+          (i) => i.incident_type === params.incident_type,
+        );
+      }
+    }
+
+    return {
+      ...parsed.data,
+      count: results.length,
+      results,
+    };
   }
 
   async createIncident(data: PimsIncidentCreate): Promise<PimsIncident> {
@@ -520,13 +556,22 @@ export class PimsAdapter {
   }
 
   async getEligibleAssets(): Promise<PaginatedResult<Partial<PimsAsset>>> {
-    return this.request<PaginatedResult<Partial<PimsAsset>>>(
+    const raw = await this.request<unknown>(
       "GET",
       "/api/risk-evaluations/eligible-assets/",
       {
         operation: "get_eligible_assets",
       },
     );
+    const schema = paginatedResultSchema(PimsAssetSchema.partial());
+    const parsed = schema.safeParse(raw);
+    if (!parsed.success) {
+      throw new PimsErrorShapeUnknownError(
+        "Invalid eligible assets response from PIMS",
+        JSON.stringify(raw),
+      );
+    }
+    return parsed.data;
   }
 
   async listAssets(): Promise<PaginatedResult<PimsAsset>> {
@@ -619,11 +664,16 @@ export class PimsAdapter {
       const retrieved = await this.getIncident(throwaway.id);
       const actions = retrieved.actions ?? [];
 
-      let strategy: "replace" | "merge" = "replace";
+      let strategy: "replace" | "merge";
       if (actions.length === 1 && actions[0]?.action_type === "A") {
         strategy = "replace";
       } else if (actions.length >= 2) {
         strategy = "merge";
+      } else {
+        throw new PimsErrorShapeUnknownError(
+          "probeNestedArrayMutationStrategy returned unexpected actions shape",
+          JSON.stringify(actions),
+        );
       }
 
       console.info(`NESTED_PROBE:${strategy}`);
@@ -641,45 +691,76 @@ export class PimsAdapter {
       status: "P",
     });
 
+    await this.updateAudit(throwawayAudit.id, {
+      findings: [
+        {
+          classification: "N",
+          description: "Probe finding 1",
+          evidence: "",
+          actions: [],
+        },
+      ],
+    });
+
+    await this.updateAudit(throwawayAudit.id, {
+      findings: [
+        {
+          classification: "M",
+          description: "Probe finding 2",
+          evidence: "",
+          actions: [],
+        },
+      ],
+    });
+
+    const auditList = await this.listAudits();
+    const current = auditList.results.find((a) => a.id === throwawayAudit.id);
+    const findings = current?.findings ?? [];
+
+    let strategy: "replace" | "merge";
+    if (findings.length === 1 && findings[0]?.classification === "M") {
+      strategy = "replace";
+    } else if (findings.length >= 2) {
+      strategy = "merge";
+    } else {
+      throw new PimsErrorShapeUnknownError(
+        "probeAuditMutationStrategy returned unexpected findings shape",
+        JSON.stringify(findings),
+      );
+    }
+
+    console.info(`NESTED_PROBE:audit:${strategy}`);
+    this.nestedAuditMode = strategy;
+    return strategy;
+  }
+
+  async probeNullClearCapability(
+    field: keyof PimsIncidentUpdate = "description",
+  ): Promise<"ok" | "rejected"> {
+    const throwaway = await this.createIncident({
+      title: "STARTUP_NULL_CLEAR_PROBE_THROWAWAY",
+      involves_personal_data: false,
+      incident_date: "2026-01-01",
+      incident_type: "OT",
+      status: "O",
+      [field]: "initial-probe-val",
+    });
+
     try {
-      await this.updateAudit(throwawayAudit.id, {
-        findings: [
-          {
-            classification: "N",
-            description: "Probe finding 1",
-            evidence: "",
-            actions: [],
-          },
-        ],
+      await this.updateIncident(throwaway.id, {
+        [field]: null,
       });
 
-      await this.updateAudit(throwawayAudit.id, {
-        findings: [
-          {
-            classification: "M",
-            description: "Probe finding 2",
-            evidence: "",
-            actions: [],
-          },
-        ],
-      });
+      const retrieved = await this.getIncident(throwaway.id);
+      const val = retrieved[field as keyof PimsIncident];
+      const isCleared =
+        val === null || val === "" || (Array.isArray(val) && val.length === 0);
 
-      const auditList = await this.listAudits();
-      const current = auditList.results.find((a) => a.id === throwawayAudit.id);
-      const findings = current?.findings ?? [];
-
-      let strategy: "replace" | "merge" = "replace";
-      if (findings.length === 1 && findings[0]?.classification === "M") {
-        strategy = "replace";
-      } else if (findings.length >= 2) {
-        strategy = "merge";
-      }
-
-      console.info(`NESTED_PROBE:audit:${strategy}`);
-      this.nestedAuditMode = strategy;
-      return strategy;
+      const result: "ok" | "rejected" = isCleared ? "ok" : "rejected";
+      console.info(`NULL_CLEAR:${String(field)}:${result}`);
+      return result;
     } finally {
-      // Completed audit probe
+      await this.deleteIncident(throwaway.id);
     }
   }
 
@@ -694,6 +775,7 @@ export class PimsAdapter {
       isPublic?: boolean;
       operation: string;
       incidentCode?: string | null;
+      idempotencyKey?: string;
       attempt?: number;
     },
   ): Promise<T> {
@@ -712,10 +794,13 @@ export class PimsAdapter {
       headers.Authorization = `Bearer ${this.accessToken}`;
     }
 
+    let idempotencyKey = options.idempotencyKey;
     if (method !== "GET") {
       const code = options.incidentCode ?? "global";
-      headers["Idempotency-Key"] =
+      idempotencyKey =
+        idempotencyKey ??
         `${this.idempotencyKeyPrefix}:${code}:${options.operation}:${crypto.randomUUID()}`;
+      headers["Idempotency-Key"] = idempotencyKey;
     }
 
     let requestBody: string | FormData | undefined;
@@ -739,10 +824,13 @@ export class PimsAdapter {
       clearTimeout(timer);
     } catch (_err: unknown) {
       if (attempt <= this.maxRetries) {
-        const backoff = attempt === 1 ? 1000 : attempt === 2 ? 5000 : 30000;
+        const backoff =
+          DEFAULT_RETRY_BACKOFF_MS[attempt - 1] ??
+          DEFAULT_RETRY_BACKOFF_MS[DEFAULT_RETRY_BACKOFF_MS.length - 1];
         await new Promise((r) => setTimeout(r, backoff));
         return this.request<T>(method, endpoint, {
           ...options,
+          idempotencyKey,
           attempt: attempt + 1,
         });
       }
@@ -751,13 +839,32 @@ export class PimsAdapter {
       );
     }
 
-    // Handle 401 unauthorized: deterministic refresh or single re-login
+    // Handle 401 unauthorized: check bad_authorization_header bug vs normal token expiry
     if (response.status === 401 && !options.isPublic) {
+      const rawBody = await response.text().catch(() => "");
+      let parsedBody: Record<string, unknown> = {};
+      try {
+        parsedBody = rawBody ? JSON.parse(rawBody) : {};
+      } catch {
+        parsedBody = {};
+      }
+
+      if (
+        parsedBody.detail === "bad_authorization_header" ||
+        rawBody.includes("bad_authorization_header")
+      ) {
+        throw new PimsClientBugError(
+          "PIMS client bug: bad_authorization_header received",
+          { rawBody },
+        );
+      }
+
       if (attempt === 1) {
         const refreshed = await this.reAuthenticate();
         if (refreshed) {
           return this.request<T>(method, endpoint, {
             ...options,
+            idempotencyKey,
             attempt: attempt + 1,
           });
         }
@@ -770,10 +877,13 @@ export class PimsAdapter {
     // Handle 429 rate limit
     if (response.status === 429) {
       if (attempt <= 3) {
-        const backoff = attempt === 1 ? 1000 : attempt === 2 ? 5000 : 30000;
+        const backoff =
+          DEFAULT_RETRY_BACKOFF_MS[attempt - 1] ??
+          DEFAULT_RETRY_BACKOFF_MS[DEFAULT_RETRY_BACKOFF_MS.length - 1];
         await new Promise((r) => setTimeout(r, backoff));
         return this.request<T>(method, endpoint, {
           ...options,
+          idempotencyKey,
           attempt: attempt + 1,
         });
       }
@@ -785,10 +895,13 @@ export class PimsAdapter {
       const rawError = await response.text().catch(() => "");
       console.error(`PIMS HTTP ${response.status} at ${endpoint}:`, rawError);
       if (attempt <= this.maxRetries) {
-        const backoff = attempt === 1 ? 1000 : attempt === 2 ? 5000 : 30000;
+        const backoff =
+          DEFAULT_RETRY_BACKOFF_MS[attempt - 1] ??
+          DEFAULT_RETRY_BACKOFF_MS[DEFAULT_RETRY_BACKOFF_MS.length - 1];
         await new Promise((r) => setTimeout(r, backoff));
         return this.request<T>(method, endpoint, {
           ...options,
+          idempotencyKey,
           attempt: attempt + 1,
         });
       }
@@ -849,7 +962,8 @@ export class PimsAdapter {
       const errObj = data as Record<string, unknown>;
       if (
         errObj.detail === "LICENSE_EXPIRED" ||
-        errObj.detail === "SERVICE_SUSPENDED"
+        errObj.detail === "SERVICE_SUSPENDED" ||
+        errObj.detail === "DOCUMENT_LIMIT_REACHED"
       ) {
         throw new PimsGateBlockedError(errObj.detail as string);
       }
@@ -861,7 +975,10 @@ export class PimsAdapter {
 
     // Handle HTTP 404 Not Found
     if (response.status === 404) {
-      throw new PimsNotFoundError(endpoint, "resource");
+      const match = endpoint.match(/\/api\/([^/]+)\/(?:(\d+)\/)?/);
+      const model = match?.[1] ?? "resource";
+      const id = match?.[2] ?? "unknown";
+      throw new PimsNotFoundError(model, id);
     }
 
     // Handle HTTP 409 Conflict
@@ -905,29 +1022,24 @@ export class PimsAdapter {
         await this.refreshToken();
         return true;
       } catch {
-        // Refresh token failed, clear and fall through to primary auth method
+        // Refresh token failed, clear and proceed to primary re-login once
         this.refreshTokenVal = null;
       }
     }
 
+    // Single primary authentication attempt
     if (this.username && this.password) {
-      try {
-        await this.login(this.username, this.password);
-        return true;
-      } catch {
-        return false;
-      }
+      await this.login(this.username, this.password);
+      return true;
     }
 
     if (this.tokenCmd && this.tokenCmd.length > 0) {
-      try {
-        await this.obtainToken();
-        return true;
-      } catch {
-        return false;
-      }
+      await this.obtainToken();
+      return true;
     }
 
-    return false;
+    throw new PimsAuthFailedError(
+      "No primary authentication credentials configured for PIMS re-authentication",
+    );
   }
 }

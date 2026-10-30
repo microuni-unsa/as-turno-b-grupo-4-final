@@ -1,6 +1,8 @@
-import { loadConfig } from "@pims/config";
+import childProcess from "node:child_process";
+import fs from "node:fs";
+import { decryptSopsFile, loadConfig } from "@pims/config";
 import { ConfigError } from "@pims/types";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 describe("Configuration Manager", () => {
   const baseValidEnv: Record<string, string> = {
@@ -34,6 +36,8 @@ describe("Configuration Manager", () => {
     expect(config.LOG_PII).toBe(false);
     expect(config.ATTACHMENT_MAX_MB).toBe(10);
     expect(config.EVIDENCE_HASH).toBe("sha256");
+    expect(config.JURISDICTION_DEADLINES_JSON).toBeDefined();
+    expect(config.JURISDICTION_DEADLINES_JSON.EU_GDPR?.authority_h).toBe(72);
   });
 
   it("fails fast when PIMS_TOKEN_CMD is missing", () => {
@@ -132,5 +136,46 @@ describe("Configuration Manager", () => {
     } catch (err) {
       expect((err as ConfigError).code).toBe("CONFIG_TYPE:PIMS_BASE_URL");
     }
+  });
+
+  it("strictly validates JURISDICTION_DEADLINES_JSON schema", () => {
+    const env = {
+      ...baseValidEnv,
+      JURISDICTION_DEADLINES_JSON: "invalid-json",
+    };
+    expect(() => loadConfig(env)).toThrowError(ConfigError);
+    try {
+      loadConfig(env);
+    } catch (err) {
+      expect((err as ConfigError).code).toBe(
+        "CONFIG_TYPE:JURISDICTION_DEADLINES_JSON",
+      );
+    }
+  });
+
+  describe("SOPS Decryption", () => {
+    it("fails fast when SOPS file does not exist", () => {
+      vi.spyOn(fs, "existsSync").mockReturnValue(false);
+      expect(() => decryptSopsFile("secrets/missing.enc.json")).toThrowError(
+        ConfigError,
+      );
+      try {
+        decryptSopsFile("secrets/missing.enc.json");
+      } catch (err) {
+        expect((err as ConfigError).code).toBe("CONFIG_SOPS_NOT_FOUND");
+      }
+      vi.restoreAllMocks();
+    });
+
+    it("decrypts SOPS file with mocked execSync", () => {
+      vi.spyOn(fs, "existsSync").mockReturnValue(true);
+      vi.spyOn(childProcess, "execSync").mockReturnValue(
+        JSON.stringify({ SECRET_TOKEN: "decrypted_secret_val" }),
+      );
+
+      const secrets = decryptSopsFile("secrets/dev.enc.json");
+      expect(secrets.SECRET_TOKEN).toBe("decrypted_secret_val");
+      vi.restoreAllMocks();
+    });
   });
 });

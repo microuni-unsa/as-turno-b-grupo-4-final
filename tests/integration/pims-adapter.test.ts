@@ -127,6 +127,12 @@ describe("PIMS Client Adapter & Reverse-Engineered DRF API Integration Suite", (
       expect(["replace", "merge"]).toContain(mode);
       expect(adapter.nestedAuditMode).toBe(mode);
     });
+
+    it("probeNullClearCapability: probes clearing a nullable field and logs NULL_CLEAR:<field>:<ok|rejected>", async () => {
+      const result = await adapter.probeNullClearCapability("description");
+      expect(["ok", "rejected"]).toContain(result);
+      expect(result).toBe("ok");
+    });
   });
 
   describe("Incident Management Lifecycle (E05–E12)", () => {
@@ -140,11 +146,12 @@ describe("PIMS Client Adapter & Reverse-Engineered DRF API Integration Suite", (
         incident_date: "2026-10-29",
         incident_type: "DS",
         status: "O",
-        severity: "A",
-        impact: "C",
+        severity: "H",
+        impact: "V",
         affected_data_types: ["identificativos", "contacto"],
         security_measures_adopted: ["monitorizacion_logs"],
         affected_cid: ["C", "I"],
+        measure_new_security: "Y",
       });
 
       expect(incident.id).toBeDefined();
@@ -152,6 +159,7 @@ describe("PIMS Client Adapter & Reverse-Engineered DRF API Integration Suite", (
       expect(incident.title).toBe("DDoS Attack on SIS Database");
       expect(incident.status).toBe("O");
       expect(incident.involves_personal_data).toBe(true);
+      expect(incident.measure_new_security).toBe("Y");
 
       createdIncidentId = incident.id;
       incidentCode = incident.incident_code;
@@ -168,8 +176,9 @@ describe("PIMS Client Adapter & Reverse-Engineered DRF API Integration Suite", (
 
     it("E08: partially updates incident triage fields and nested actions", async () => {
       const updated = await adapter.updateIncident(createdIncidentId, {
-        status: "I",
+        status: "P",
         severity: "C",
+        measure_reported_authorities: "Y",
         actions: [
           {
             action_type: "C",
@@ -183,8 +192,9 @@ describe("PIMS Client Adapter & Reverse-Engineered DRF API Integration Suite", (
         ],
       });
 
-      expect(updated.status).toBe("I");
+      expect(updated.status).toBe("P");
       expect(updated.severity).toBe("C");
+      expect(updated.measure_reported_authorities).toBe("Y");
       expect(updated.actions?.length).toBe(1);
       expect(updated.actions?.[0]?.description).toContain("perimeter firewall");
     });
@@ -220,7 +230,7 @@ describe("PIMS Client Adapter & Reverse-Engineered DRF API Integration Suite", (
     });
 
     it("E05: lists incidents with status filtering", async () => {
-      const list = await adapter.listIncidents({ status: "I" });
+      const list = await adapter.listIncidents({ status: "P" });
       expect(list.count).toBeGreaterThanOrEqual(1);
       expect(list.results.some((i) => i.id === createdIncidentId)).toBe(true);
     });
@@ -342,7 +352,7 @@ describe("PIMS Client Adapter & Reverse-Engineered DRF API Integration Suite", (
         status: "R",
         findings: [
           {
-            classification: "MAJOR",
+            classification: "N",
             description: "Missing access logs for HR database",
             evidence: "Audit sample 102",
             actions: [
@@ -350,7 +360,7 @@ describe("PIMS Client Adapter & Reverse-Engineered DRF API Integration Suite", (
                 action_plan: "Implement centralized syslog forwarder",
                 responsible: "Infrastructure Team",
                 due_date: "2026-12-01",
-                status: "PENDING",
+                status: "P",
                 progress: 25,
               },
             ],

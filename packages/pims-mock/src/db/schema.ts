@@ -107,11 +107,17 @@ export const coreIncident = unsa.table("core_incident", {
   compromised_system: varchar("compromised_system", { length: 255 }),
   affected_url: varchar("affected_url", { length: 500 }),
   evidence_refs: text("evidence_refs"),
-  measure_updated_registry: boolean("measure_updated_registry"),
-  measure_new_security: boolean("measure_new_security"),
-  measure_improved_policies: boolean("measure_improved_policies"),
-  measure_considered_resolved: boolean("measure_considered_resolved"),
-  measure_reported_authorities: boolean("measure_reported_authorities"),
+  measure_updated_registry: varchar("measure_updated_registry", { length: 1 }),
+  measure_new_security: varchar("measure_new_security", { length: 1 }),
+  measure_improved_policies: varchar("measure_improved_policies", {
+    length: 1,
+  }),
+  measure_considered_resolved: varchar("measure_considered_resolved", {
+    length: 1,
+  }),
+  measure_reported_authorities: varchar("measure_reported_authorities", {
+    length: 1,
+  }),
   security_measures_adopted: jsonb("security_measures_adopted").notNull(),
   resolved_date: date("resolved_date"),
   affected_cid: jsonb("affected_cid").notNull(),

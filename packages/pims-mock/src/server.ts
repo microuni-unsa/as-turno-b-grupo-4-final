@@ -22,9 +22,35 @@ import {
   dashboardKpis,
   riskCatalogs,
 } from "@pims/pims-mock/fixtures.ts";
+import {
+  EVENT_TYPE_LABELS,
+  PimsAuditCreateSchema,
+  PimsAuditUpdateSchema,
+  PimsIncidentCreateSchema,
+  PimsIncidentRecipientCreateSchema,
+  PimsIncidentUpdateSchema,
+  PimsRiskEvaluationCreateSchema,
+} from "@pims/types";
 import { and, desc, eq, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
+import type { z } from "zod";
+
+function formatDrfErrors(error: z.ZodError): Record<string, string[]> {
+  const res: Record<string, string[]> = {};
+  for (const issue of error.issues) {
+    const field = issue.path[0] ? String(issue.path[0]) : "detail";
+    if (!res[field]) {
+      res[field] = [];
+    }
+    if (issue.code === "invalid_type" && issue.received === "undefined") {
+      res[field].push("Este campo es requerido.");
+    } else {
+      res[field].push(issue.message || "Valor inválido.");
+    }
+  }
+  return res;
+}
 
 export interface PimsServerOptions {
   port?: number;
@@ -108,21 +134,10 @@ export function buildPimsApp(
         desc(coreIncidentHistory.id),
       );
 
-    const getEventLabel = (et: string): string => {
-      const map: Record<string, string> = {
-        created: "Creado",
-        updated: "Actualizado",
-        notified: "Notificado",
-        closed: "Cerrado",
-        reopened: "Reabierto",
-      };
-      return map[et] ?? et;
-    };
-
     const history = historyRows.map((h) => ({
       id: h.id,
       event_type: h.event_type,
-      event_type_label: getEventLabel(h.event_type),
+      event_type_label: EVENT_TYPE_LABELS[h.event_type] ?? h.event_type,
       changed_at: h.changed_at ? new Date(h.changed_at).toISOString() : "",
       actor: h.actor,
       changed_by: h.changed_by,
@@ -394,20 +409,24 @@ export function buildPimsApp(
   app.post("/api/incidents/", async (c) => {
     const body = await c.req.json().catch(() => ({}));
 
-    // DRF validation: required fields
-    const errors: Record<string, string[]> = {};
-    if (!body.title) errors.title = ["Este campo es requerido."];
-    if (body.involves_personal_data === undefined) {
-      errors.involves_personal_data = ["Este campo es requerido."];
+    const parsed = PimsIncidentCreateSchema.safeParse(body);
+    if (!parsed.success) {
+      return c.json(formatDrfErrors(parsed.error), 400);
     }
-    if (!body.incident_date)
-      errors.incident_date = ["Este campo es requerido."];
-    if (!body.incident_type)
-      errors.incident_type = ["Este campo es requerido."];
-    if (!body.status) errors.status = ["Este campo es requerido."];
 
-    if (Object.keys(errors).length > 0) {
-      return c.json(errors, 400);
+    if (
+      body.detection_date &&
+      body.incident_date &&
+      body.detection_date < body.incident_date
+    ) {
+      return c.json(
+        {
+          detection_date: [
+            "La fecha de detección no puede ser anterior a la fecha del incidente.",
+          ],
+        },
+        400,
+      );
     }
 
     // Auto-generate INC-###
@@ -534,6 +553,10 @@ export function buildPimsApp(
     }
 
     const body = await c.req.json().catch(() => ({}));
+    const parsed = PimsIncidentUpdateSchema.safeParse(body);
+    if (!parsed.success) {
+      return c.json(formatDrfErrors(parsed.error), 400);
+    }
     const now = new Date();
 
     const updateFields: Record<string, unknown> = {
@@ -612,12 +635,10 @@ export function buildPimsApp(
         const act = body.actions[i];
         await db.insert(coreIncidentAction).values({
           incident_id: id,
-          action_type: String(act.action_type || "C"),
-          responsible: String(act.responsible || "admin"),
-          action_date: String(
-            act.action_date || now.toISOString().slice(0, 10),
-          ),
-          description: String(act.description || ""),
+          action_type: String(act.action_type),
+          responsible: String(act.responsible),
+          action_date: String(act.action_date),
+          description: String(act.description),
           evidence: act.evidence ? String(act.evidence) : null,
           position: i + 1,
         });
@@ -680,21 +701,10 @@ export function buildPimsApp(
         desc(coreIncidentHistory.id),
       );
 
-    const getEventLabel = (et: string): string => {
-      const map: Record<string, string> = {
-        created: "Creado",
-        updated: "Actualizado",
-        notified: "Notificado",
-        closed: "Cerrado",
-        reopened: "Reabierto",
-      };
-      return map[et] ?? et;
-    };
-
     return c.json(
       historyRows.map((h) => ({
         ...h,
-        event_type_label: getEventLabel(h.event_type),
+        event_type_label: EVENT_TYPE_LABELS[h.event_type] ?? h.event_type,
         changed_at: h.changed_at.toISOString(),
       })),
     );
@@ -839,8 +849,9 @@ export function buildPimsApp(
   // E15: POST /api/incident-recipients/
   app.post("/api/incident-recipients/", async (c) => {
     const body = await c.req.json().catch(() => ({}));
-    if (!body.email || !body.label) {
-      return c.json({ email: ["Este campo es requerido."] }, 400);
+    const parsed = PimsIncidentRecipientCreateSchema.safeParse(body);
+    if (!parsed.success) {
+      return c.json(formatDrfErrors(parsed.error), 400);
     }
 
     const existingEmail = await db
@@ -955,14 +966,19 @@ export function buildPimsApp(
   // E18: POST /api/audits/
   app.post("/api/audits/", async (c) => {
     const body = await c.req.json().catch(() => ({}));
+    const parsed = PimsAuditCreateSchema.safeParse(body);
+    if (!parsed.success) {
+      return c.json(formatDrfErrors(parsed.error), 400);
+    }
+
     const countRes = await db
       .select({ count: sql<number>`count(*)::int` })
       .from(coreAudit);
     const nextNum = (countRes[0]?.count ?? 0) + 1;
     const year = new Date().getFullYear();
     const auditCode =
-      body.audit_code ||
-      body.code ||
+      parsed.data.audit_code ||
+      parsed.data.code ||
       `AUD-${year}-${String(nextNum).padStart(3, "0")}`;
 
     const now = new Date();
@@ -970,20 +986,16 @@ export function buildPimsApp(
       .insert(coreAudit)
       .values({
         audit_code: auditCode,
-        name: String(body.name || "Auditoría Interna"),
-        audit_type: String(body.audit_type || "I")
-          .charAt(0)
-          .toUpperCase(),
-        status: String(body.status || "P")
-          .charAt(0)
-          .toUpperCase(),
-        start_date: body.start_date ?? null,
-        end_date: body.end_date ?? null,
-        scope: body.scope ?? null,
-        lead_auditor: body.lead_auditor ?? null,
-        audit_team: body.audit_team ?? null,
-        involved_areas: body.involved_areas ?? null,
-        progress: body.progress ?? 0,
+        name: parsed.data.name,
+        audit_type: parsed.data.audit_type,
+        status: parsed.data.status,
+        start_date: parsed.data.start_date ?? null,
+        end_date: parsed.data.end_date ?? null,
+        scope: parsed.data.scope ?? null,
+        lead_auditor: parsed.data.lead_auditor ?? null,
+        audit_team: null,
+        involved_areas: null,
+        progress: 0,
         created_at: now,
         updated_at: now,
         created_by_id: 1,
@@ -1038,22 +1050,26 @@ export function buildPimsApp(
     }
 
     const body = await c.req.json().catch(() => ({}));
-    if (Array.isArray(body.findings)) {
+    const parsed = PimsAuditUpdateSchema.safeParse(body);
+    if (!parsed.success) {
+      return c.json(formatDrfErrors(parsed.error), 400);
+    }
+
+    if (Array.isArray(parsed.data.findings)) {
       if (nestedAuditMode === "replace") {
         await db
           .delete(coreAuditFinding)
           .where(eq(coreAuditFinding.audit_id, id));
       }
-      for (let i = 0; i < body.findings.length; i++) {
-        const f = body.findings[i];
+      for (let i = 0; i < parsed.data.findings.length; i++) {
+        const f = parsed.data.findings[i];
+        if (!f) continue;
         const insertedF = await db
           .insert(coreAuditFinding)
           .values({
             audit_id: id,
-            classification: String(f.classification || "M")
-              .charAt(0)
-              .toUpperCase(),
-            description: String(f.description || ""),
+            classification: f.classification,
+            description: f.description,
             evidence: f.evidence ? String(f.evidence) : null,
             position: i + 1,
           })
@@ -1063,17 +1079,14 @@ export function buildPimsApp(
         if (findingId && Array.isArray(f.actions)) {
           for (let j = 0; j < f.actions.length; j++) {
             const a = f.actions[j];
+            if (!a) continue;
             await db.insert(coreAuditActionPlan).values({
               finding_id: findingId,
               action_plan: String(a.description || a.action_plan || ""),
-              responsible: String(a.responsible || "admin"),
-              due_date: String(
-                a.due_date || new Date().toISOString().slice(0, 10),
-              ),
-              status: String(a.status || "P")
-                .charAt(0)
-                .toUpperCase(),
-              progress: 0,
+              responsible: a.responsible,
+              due_date: a.due_date,
+              status: a.status,
+              progress: a.progress ?? 0,
               position: j + 1,
             });
           }
@@ -1150,6 +1163,15 @@ export function buildPimsApp(
       return c.json({ assets: ["Este campo es requerido."] }, 400);
     }
 
+    const parsed = PimsRiskEvaluationCreateSchema.safeParse(body);
+    if (!parsed.success) {
+      return c.json(formatDrfErrors(parsed.error), 400);
+    }
+
+    if (!body.description) {
+      return c.json({ description: ["Este campo es requerido."] }, 400);
+    }
+
     const periods = await db
       .select()
       .from(coreRiskPeriod)
@@ -1179,26 +1201,21 @@ export function buildPimsApp(
       .insert(coreRiskEvaluation)
       .values({
         risk_code: riskCode,
-        risk_owner: body.risk_owner ? String(body.risk_owner) : "TI",
-        threat: body.threat ? String(body.threat) : "Amenaza",
-        vulnerability: body.vulnerability
-          ? String(body.vulnerability)
-          : "Vulnerabilidad",
-        description: body.description
-          ? String(body.description)
-          : "Evaluación de riesgo",
-        controlled_probability: body.controlled_probability ?? 3,
-        controlled_impact: body.controlled_impact ?? 3,
+        risk_owner: parsed.data.risk_owner ?? "TI",
+        threat: parsed.data.threat ?? null,
+        vulnerability: parsed.data.vulnerability ?? null,
+        description: parsed.data.description ?? "Evaluación de riesgo",
+        controlled_probability: parsed.data.controlled_probability ?? 3,
+        controlled_impact: parsed.data.controlled_impact ?? 3,
         controlled_score: String(
-          (body.controlled_probability ?? 3) * (body.controlled_impact ?? 3),
+          (parsed.data.controlled_probability ?? 3) *
+            (parsed.data.controlled_impact ?? 3),
         ),
         controlled_severity: "M",
-        threat_code: body.threat_code ?? null,
-        vulnerability_code: body.vulnerability_code ?? null,
-        response_strategy: body.response_strategy
-          ? String(body.response_strategy).charAt(0).toUpperCase()
-          : "M",
-        status: body.status ? String(body.status).charAt(0).toUpperCase() : "B",
+        threat_code: parsed.data.threat_code ?? null,
+        vulnerability_code: parsed.data.vulnerability_code ?? null,
+        response_strategy: parsed.data.response_strategy ?? "M",
+        status: parsed.data.status ?? "B",
         period_id: activePeriod.id,
         created_at: now,
         updated_at: now,

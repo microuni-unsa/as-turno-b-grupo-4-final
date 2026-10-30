@@ -75,9 +75,9 @@ export const ALL_SECURITY_MEASURES = [
 
 export const AFFECTED_CID = ["C", "I", "D"] as const;
 
-export const INCIDENT_STATUSES = ["O", "P", "C", "I", "R"] as const;
-export const INCIDENT_SEVERITIES = ["L", "M", "H", "C", "B", "A"] as const;
-export const INCIDENT_IMPACTS = ["L", "M", "H", "V", "C", "B", "A"] as const;
+export const INCIDENT_STATUSES = ["O", "P", "C"] as const;
+export const INCIDENT_SEVERITIES = ["L", "M", "H", "C"] as const;
+export const INCIDENT_IMPACTS = ["L", "M", "H", "V"] as const;
 export const INCIDENT_TYPES = [
   "UA",
   "DL",
@@ -87,41 +87,16 @@ export const INCIDENT_TYPES = [
   "HE",
   "DV",
   "OT",
-  "MAL",
-  "PHISH",
-  "RANSOM",
-  "UNAUTH",
-  "DATA_LEAK",
-  "DOS",
-  "INSIDER",
-  "HUMAN_ERR",
-  "PHY_THEFT",
-  "CONFIG_ERR",
-  "THIRD_PARTY",
 ] as const;
 
-export const ACTION_TYPES = ["C", "A", "R", "P"] as const;
-export const AUDIT_STATUSES = ["P", "R", "C", "I", "PLANNING"] as const;
-export const AUDIT_TYPES = ["I", "E", "C"] as const;
-export const FINDING_CLASSIFICATIONS = [
-  "N",
-  "O",
-  "M",
-  "MAJOR",
-  "MINOR",
-  "OBSERVATION",
-] as const;
-export const ACTION_PLAN_STATUSES = [
-  "O",
-  "P",
-  "C",
-  "D",
-  "PENDING",
-  "IN_PROGRESS",
-  "CLOSED",
-] as const;
-export const RISK_EVAL_STATUSES = ["O", "T", "C", "B", "P", "I", "R"] as const;
+export const ACTION_TYPES = ["C", "A", "R"] as const;
+export const AUDIT_STATUSES = ["P", "R", "C"] as const;
+export const AUDIT_TYPES = ["I", "E"] as const;
+export const FINDING_CLASSIFICATIONS = ["N", "O", "M"] as const;
+export const ACTION_PLAN_STATUSES = ["O", "P", "C"] as const;
+export const RISK_EVAL_STATUSES = ["B", "O", "T", "C"] as const;
 export const ASSET_RELEVANCES = ["BAJO", "MEDIO", "ALTO", "CRITICO"] as const;
+export const FORM_MEASURE_VALUES = ["Y", "N", "U"] as const;
 
 // ============================================================================
 // 2. Base Zod Schemas
@@ -234,7 +209,6 @@ export const PimsIncidentRecipientSchema = z.object({
   label: z.string(),
   is_active: z.boolean(),
   created_at: z.string().optional(),
-  updated_at: z.string().optional(),
 });
 
 export const PimsIncidentRecipientCreateSchema = z.object({
@@ -272,7 +246,7 @@ export const PimsIncidentSchema = AuditModelSchema.extend({
   severity: z.enum(INCIDENT_SEVERITIES).nullable().optional(),
   impact: z.enum(INCIDENT_IMPACTS).nullable().optional(),
   title: z.string(),
-  description: z.string().nullable().optional(),
+  description: z.string().max(1000).nullable().optional(),
   reported_by: z.string().nullable().optional(),
   assigned_to: z.string().nullable().optional(),
   affected_treatment: z.string().nullable().optional(),
@@ -284,11 +258,17 @@ export const PimsIncidentSchema = AuditModelSchema.extend({
   compromised_system: z.string().nullable().optional(),
   affected_url: z.string().nullable().optional(),
   evidence_refs: z.string().nullable().optional(),
-  measure_updated_registry: z.boolean().nullable().optional(),
-  measure_new_security: z.boolean().nullable().optional(),
-  measure_improved_policies: z.boolean().nullable().optional(),
-  measure_considered_resolved: z.boolean().nullable().optional(),
-  measure_reported_authorities: z.boolean().nullable().optional(),
+  measure_updated_registry: z.enum(FORM_MEASURE_VALUES).nullable().optional(),
+  measure_new_security: z.enum(FORM_MEASURE_VALUES).nullable().optional(),
+  measure_improved_policies: z.enum(FORM_MEASURE_VALUES).nullable().optional(),
+  measure_considered_resolved: z
+    .enum(FORM_MEASURE_VALUES)
+    .nullable()
+    .optional(),
+  measure_reported_authorities: z
+    .enum(FORM_MEASURE_VALUES)
+    .nullable()
+    .optional(),
   security_measures_adopted: z.array(z.enum(ALL_SECURITY_MEASURES)),
   resolved_date: z.string().nullable().optional(),
   affected_cid: z.array(z.enum(AFFECTED_CID)),
@@ -327,7 +307,7 @@ export const PimsIncidentCreateSchema = z.object({
   detection_time: z.string().nullable().optional(),
   severity: z.enum(INCIDENT_SEVERITIES).nullable().optional(),
   impact: z.enum(INCIDENT_IMPACTS).nullable().optional(),
-  description: z.string().nullable().optional(),
+  description: z.string().max(1000).nullable().optional(),
   reported_by: z.string().nullable().optional(),
   assigned_to: z.string().nullable().optional(),
   affected_treatment: z.string().nullable().optional(),
@@ -339,11 +319,17 @@ export const PimsIncidentCreateSchema = z.object({
   compromised_system: z.string().nullable().optional(),
   affected_url: z.string().nullable().optional(),
   evidence_refs: z.string().nullable().optional(),
-  measure_updated_registry: z.boolean().nullable().optional(),
-  measure_new_security: z.boolean().nullable().optional(),
-  measure_improved_policies: z.boolean().nullable().optional(),
-  measure_considered_resolved: z.boolean().nullable().optional(),
-  measure_reported_authorities: z.boolean().nullable().optional(),
+  measure_updated_registry: z.enum(FORM_MEASURE_VALUES).nullable().optional(),
+  measure_new_security: z.enum(FORM_MEASURE_VALUES).nullable().optional(),
+  measure_improved_policies: z.enum(FORM_MEASURE_VALUES).nullable().optional(),
+  measure_considered_resolved: z
+    .enum(FORM_MEASURE_VALUES)
+    .nullable()
+    .optional(),
+  measure_reported_authorities: z
+    .enum(FORM_MEASURE_VALUES)
+    .nullable()
+    .optional(),
   security_measures_adopted: z.array(z.enum(ALL_SECURITY_MEASURES)).optional(),
   resolved_date: z.string().nullable().optional(),
   affected_cid: z.array(z.enum(AFFECTED_CID)).optional(),
@@ -439,6 +425,48 @@ export const PimsAuditUpdateSchema = PimsAuditCreateSchema.partial();
 // 5. Risk & Asset Schemas
 // ============================================================================
 
+export const PimsRiskPeriodSchema = z.object({
+  id: z.number(),
+  name: z.string(),
+  start_date: z.string().optional(),
+  end_date: z.string().optional(),
+  status: z.string().optional(),
+  is_active: z.boolean().optional(),
+  is_locked: z.boolean().optional(),
+});
+
+export const PimsThreatSchema = z.object({
+  code: z.string(),
+  label: z.string(),
+  category: z.string(),
+  subtype: z.string().nullable().optional(),
+});
+
+export const PimsVulnerabilitySchema = z.object({
+  code: z.string(),
+  label: z.string(),
+  category: z.string(),
+  subtype: z.string().nullable().optional(),
+});
+
+export const PimsSafeguardSchema = z.object({
+  code: z.string().optional(),
+  name: z.string().optional(),
+  type: z.string().optional(),
+  description: z.string().optional(),
+});
+
+export const PimsRiskRangeSchema = z.object({
+  level: z.string(),
+  min_value: z.number(),
+  max_value: z.number(),
+});
+
+export const PimsActiveMatrixSchema = z.object({
+  dimension: z.number().optional(),
+  risk_ranges: z.array(PimsRiskRangeSchema).optional(),
+});
+
 export const PimsRiskEvaluationSchema = AuditModelSchema.extend({
   id: z.number(),
   code: z.string(),
@@ -476,12 +504,12 @@ export const PimsRiskEvaluationCreateSchema = z.object({
 });
 
 export const PimsRiskCatalogSchema = z.object({
-  periods: z.array(z.record(z.string(), z.unknown())).optional(),
-  current_period: z.record(z.string(), z.unknown()).optional(),
-  threats: z.array(z.record(z.string(), z.unknown())),
-  vulnerabilities: z.array(z.record(z.string(), z.unknown())),
-  safeguards: z.array(z.record(z.string(), z.unknown())).optional(),
-  active_matrix: z.record(z.string(), z.unknown()).optional(),
+  periods: z.array(PimsRiskPeriodSchema).optional(),
+  current_period: PimsRiskPeriodSchema.optional(),
+  threats: z.array(PimsThreatSchema),
+  vulnerabilities: z.array(PimsVulnerabilitySchema),
+  safeguards: z.array(PimsSafeguardSchema).optional(),
+  active_matrix: PimsActiveMatrixSchema.optional(),
 });
 
 export const PimsAssetSchema = AuditModelSchema.extend({
@@ -506,21 +534,70 @@ export const PimsAssetSchema = AuditModelSchema.extend({
 // 6. Dashboard & Annex A Schemas
 // ============================================================================
 
+export const PimsDashboardTabSchema = z.object({
+  key: z.string(),
+  label: z.string(),
+});
+
+export const PimsKpiSchema = z.object({
+  key: z.string(),
+  label: z.string(),
+  domain: z.string(),
+  domain_label: z.string(),
+  description: z.string(),
+  value: z.number().nullable(),
+  unit: z.string(),
+  direction: z.string(),
+  target: z.number(),
+  warning: z.number(),
+  has_target: z.boolean(),
+  status: z.string(),
+  has_data: z.boolean(),
+  reason: z.string(),
+  numerator: z.number().nullable(),
+  denominator: z.number(),
+  caption: z.string(),
+  is_default_target: z.boolean(),
+});
+
+export const PimsDashboardSemaphoreSchema = z.object({
+  key: z.string(),
+  label: z.string(),
+  status: z.string(),
+  kpis_ok: z.number().optional(),
+  kpis_total: z.number().optional(),
+  detail: z.string().optional(),
+});
+
+export const PimsDashboardChartSchema = z.object({
+  key: z.string().optional(),
+  label: z.string().optional(),
+});
+
 export const PimsDashboardResponseSchema = z.object({
   tab: z.string(),
-  tabs: z.array(z.record(z.string(), z.unknown())).optional(),
-  kpis: z.array(z.record(z.string(), z.unknown())),
-  charts: z.array(z.unknown()).optional(),
-  semaphores: z.array(z.unknown()).optional(),
-  risk_period: z.record(z.string(), z.unknown()).optional(),
+  tabs: z.array(PimsDashboardTabSchema).optional(),
+  generated_at: z.string().optional(),
+  kpis: z.array(PimsKpiSchema),
+  charts: z.array(PimsDashboardChartSchema).optional(),
+  semaphores: z.array(PimsDashboardSemaphoreSchema).optional(),
+  risk_period: PimsRiskPeriodSchema.optional(),
 });
 export const DashboardKpisSchema = PimsDashboardResponseSchema;
+
+export const PimsAnnexAItemSchema = z.object({
+  code: z.string(),
+  label: z.string(),
+  count: z.number().optional(),
+});
 
 export const PimsAnnexAMetaResponseSchema = z.object({
   standard: z.object({
     code: z.string(),
     label: z.string().optional(),
+    annex_label: z.string().optional(),
     total_controls: z.number().optional(),
+    is_superseded: z.boolean().optional(),
   }),
   groups: z.array(
     z.object({
@@ -529,8 +606,8 @@ export const PimsAnnexAMetaResponseSchema = z.object({
       count: z.number(),
     }),
   ),
-  roles: z.array(z.record(z.string(), z.unknown())).optional(),
-  sources: z.array(z.record(z.string(), z.unknown())).optional(),
+  roles: z.array(PimsAnnexAItemSchema).optional(),
+  sources: z.array(PimsAnnexAItemSchema).optional(),
 });
 export const AnnexAControlsMetaSchema = PimsAnnexAMetaResponseSchema;
 
@@ -581,8 +658,13 @@ export type PimsRiskEvaluationCreate = z.infer<
   typeof PimsRiskEvaluationCreateSchema
 >;
 export type PimsRiskCatalogResponse = z.infer<typeof PimsRiskCatalogSchema>;
+export type PimsRiskPeriod = z.infer<typeof PimsRiskPeriodSchema>;
+export type PimsThreat = z.infer<typeof PimsThreatSchema>;
+export type PimsVulnerability = z.infer<typeof PimsVulnerabilitySchema>;
 export type PimsAsset = z.infer<typeof PimsAssetSchema>;
 
+export type PimsDashboardTab = z.infer<typeof PimsDashboardTabSchema>;
+export type PimsKpi = z.infer<typeof PimsKpiSchema>;
 export type PimsDashboardResponse = z.infer<typeof PimsDashboardResponseSchema>;
 export type PimsAnnexAMetaResponse = z.infer<
   typeof PimsAnnexAMetaResponseSchema
