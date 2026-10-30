@@ -1,4 +1,4 @@
-import { MistralModelProvider } from "@pims/models";
+import { OpenAIModelProvider } from "@pims/models";
 import {
   CorpusLoader,
   NormativeKnowledgeGraph,
@@ -14,18 +14,18 @@ import { describe, expect, it, vi } from "vitest";
 
 describe("Tri-Modal RAG Subsystem Unit Suite", () => {
   const dummyModelConfig = {
-    provider: "mistral",
-    model: "mistral-large-latest",
-    endpoint: "https://api.mistral.ai",
-    auth_env: "MISTRAL_API_KEY",
+    provider: "openai",
+    model: "gpt-4o",
+    endpoint: "https://api.openai.com/v1",
+    auth_env: "OPENAI_API_KEY",
     timeout_ms: 5000,
     max_retries: 2,
     fallback: "none" as const,
   };
 
-  const dummyProvider = new MistralModelProvider({
+  const dummyProvider = new OpenAIModelProvider({
     reasoningConfig: dummyModelConfig,
-    fastConfig: { ...dummyModelConfig, model: "mistral-small-latest" },
+    fastConfig: { ...dummyModelConfig, model: "gpt-4o-mini" },
     visionConfig: dummyModelConfig,
     embeddingsConfig: dummyModelConfig,
     rerankerConfig: dummyModelConfig,
@@ -34,14 +34,16 @@ describe("Tri-Modal RAG Subsystem Unit Suite", () => {
 
   describe("Corpus Loader & Contextual Prefixing", () => {
     it("loads corpus files and formats contextual prefixes deterministically", async () => {
-      const loader = new CorpusLoader();
+      const loader = new CorpusLoader({
+        source: { type: "local", dirPath: "corpus" },
+      });
       const corpus = await loader.loadAll();
 
       expect(corpus.version).toBeDefined();
       expect(corpus.version).toMatch(/^[a-f0-9]{64}$/);
       expect(corpus.chunks.length).toBeGreaterThan(10);
 
-      // Verify contextual header on every chunk
+      // Verify contextual header on chunks
       for (const chunk of corpus.chunks.slice(0, 10)) {
         expect(chunk.header).toMatch(
           /^\[DOC:[^|]+ \| CLAUSE:[^|]+ \| NORMATIVE:(true|false)\]$/,
@@ -56,7 +58,7 @@ describe("Tri-Modal RAG Subsystem Unit Suite", () => {
   });
 
   describe("Normative Knowledge Graph & Personalized PageRank", () => {
-    it("initializes default nodes and computes Personalized PageRank", () => {
+    it("initializes default nodes and computes Personalized PageRank with Graphology", () => {
       const kg = new NormativeKnowledgeGraph();
 
       expect(kg.getNode("gdpr:art33.1")).toBeDefined();
@@ -79,7 +81,7 @@ describe("Tri-Modal RAG Subsystem Unit Suite", () => {
     });
   });
 
-  describe("SQLite FTS5 BM25 Lexical Index", () => {
+  describe("MiniSearch BM25 Lexical Index", () => {
     it("indexes chunks and performs BM25 lexical ranking", () => {
       const indexer = new RagIndexer({
         modelProvider: dummyProvider,
@@ -98,23 +100,23 @@ describe("Tri-Modal RAG Subsystem Unit Suite", () => {
         },
         {
           chunk_id: "c2",
-          doc_id: "anexo-02",
-          article_or_clause: "anexo-02",
+          doc_id: "iso27701",
+          article_or_clause: "b.3.12",
           lines: "11-20",
-          text: "[DOC:anexo-02 | CLAUSE:anexo-02 | NORMATIVE:true]\nDL = Fuga o pérdida de datos, UA = Acceso no autorizado",
+          text: "[DOC:iso27701 | CLAUSE:b.3.12 | NORMATIVE:true]\nPII breach record element description and consequences of the incident",
           normative: true,
-          header: "[DOC:anexo-02 | CLAUSE:anexo-02 | NORMATIVE:true]",
+          header: "[DOC:iso27701 | CLAUSE:b.3.12 | NORMATIVE:true]",
           token_count: 20,
         },
       ];
 
       indexer.indexCorpus(sampleChunks, "v1");
 
-      const hits = indexer.searchFts5("72 hours undue delay");
+      const hits = indexer.searchBM25("72 hours undue delay");
       expect(hits.length).toBeGreaterThan(0);
       expect(hits[0]?.chunk_id).toBe("c1");
 
-      const hits2 = indexer.searchFts5("Fuga pérdida datos");
+      const hits2 = indexer.searchBM25("breach record consequences");
       expect(hits2.length).toBeGreaterThan(0);
       expect(hits2[0]?.chunk_id).toBe("c2");
     });

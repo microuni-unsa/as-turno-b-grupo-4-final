@@ -1,59 +1,59 @@
 import type { ModelConfig } from "@pims/config";
-import { MistralModelProvider } from "@pims/models";
+import { OpenAIModelProvider } from "@pims/models";
 import { ModelSchemaViolationError, ModelUnavailableError } from "@pims/types";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-describe("MistralModelProvider (§4.3 Unit Suite)", () => {
+describe("OpenAIModelProvider (§4.3 Unit Suite)", () => {
   const dummyModelConfig: ModelConfig = {
-    provider: "mistral",
-    model: "mistral-large-latest",
-    endpoint: "https://api.mistral.ai",
-    auth_env: "MISTRAL_API_KEY",
+    provider: "openai",
+    model: "gpt-4o",
+    endpoint: "https://api.openai.com/v1",
+    auth_env: "OPENAI_API_KEY",
     timeout_ms: 5000,
     max_retries: 2,
     fallback: "none",
   };
 
   const dummyVisionConfig: ModelConfig = {
-    provider: "mistral",
-    model: "pixtral-12b-2409",
-    endpoint: "https://api.mistral.ai",
-    auth_env: "MISTRAL_API_KEY",
+    provider: "openai",
+    model: "gpt-4o",
+    endpoint: "https://api.openai.com/v1",
+    auth_env: "OPENAI_API_KEY",
     timeout_ms: 5000,
     max_retries: 2,
     fallback: "none",
   };
 
   const dummyEmbedConfig: ModelConfig = {
-    provider: "mistral",
-    model: "mistral-embed",
-    endpoint: "https://api.mistral.ai",
-    auth_env: "MISTRAL_API_KEY",
+    provider: "openai",
+    model: "text-embedding-3-small",
+    endpoint: "https://api.openai.com/v1",
+    auth_env: "OPENAI_API_KEY",
     timeout_ms: 5000,
     max_retries: 2,
     fallback: "none",
   };
 
   const dummyRerankConfig: ModelConfig = {
-    provider: "mistral",
-    model: "mistral-small-latest",
-    endpoint: "https://api.mistral.ai",
-    auth_env: "MISTRAL_API_KEY",
+    provider: "openai",
+    model: "gpt-4o-mini",
+    endpoint: "https://api.openai.com/v1",
+    auth_env: "OPENAI_API_KEY",
     timeout_ms: 5000,
     max_retries: 2,
     fallback: "none",
   };
 
-  let provider: MistralModelProvider;
+  let provider: OpenAIModelProvider;
 
   beforeEach(() => {
-    provider = new MistralModelProvider({
+    provider = new OpenAIModelProvider({
       reasoningConfig: dummyModelConfig,
-      fastConfig: { ...dummyModelConfig, model: "mistral-small-latest" },
+      fastConfig: { ...dummyModelConfig, model: "gpt-4o-mini" },
       visionConfig: dummyVisionConfig,
       embeddingsConfig: dummyEmbedConfig,
       rerankerConfig: dummyRerankConfig,
-      apiKey: "dummy-mistral-key",
+      apiKey: "dummy-openai-key",
     });
   });
 
@@ -64,7 +64,7 @@ describe("MistralModelProvider (§4.3 Unit Suite)", () => {
   it("throws ModelUnavailableError if API key is missing or empty", () => {
     expect(
       () =>
-        new MistralModelProvider({
+        new OpenAIModelProvider({
           reasoningConfig: dummyModelConfig,
           fastConfig: dummyModelConfig,
           visionConfig: dummyVisionConfig,
@@ -195,9 +195,7 @@ describe("MistralModelProvider (§4.3 Unit Suite)", () => {
   });
 
   it("rerank orders passages descending by similarity", async () => {
-    // Mock embed calls for query and candidate passages
     vi.spyOn(globalThis, "fetch")
-      // Query embedding
       .mockResolvedValueOnce(
         new Response(
           JSON.stringify({
@@ -206,7 +204,6 @@ describe("MistralModelProvider (§4.3 Unit Suite)", () => {
           { status: 200, headers: { "Content-Type": "application/json" } },
         ),
       )
-      // Passage embeddings: p1 has [0, 1, 0], p2 has [0.9, 0.1, 0]
       .mockResolvedValueOnce(
         new Response(
           JSON.stringify({
@@ -237,7 +234,7 @@ describe("MistralModelProvider (§4.3 Unit Suite)", () => {
 
     const res = await provider.rerank({ query: "target", passages });
     expect(res.ranked).toHaveLength(2);
-    expect(res.ranked[0]?.chunk_id).toBe("p2"); // higher cosine similarity
+    expect(res.ranked[0]?.chunk_id).toBe("p2");
     expect(res.ranked[0]?.rank).toBe(1);
     expect(res.ranked[1]?.chunk_id).toBe("p1");
     expect(res.ranked[1]?.rank).toBe(2);

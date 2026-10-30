@@ -177,5 +177,13 @@ describe("Configuration Manager", () => {
       expect(secrets.SECRET_TOKEN).toBe("decrypted_secret_val");
       vi.restoreAllMocks();
     });
+
+    it("decrypts credentials.enc.json with valid SOPS age keys", () => {
+      if (fs.existsSync("credentials.enc.json")) {
+        const creds = decryptSopsFile("credentials.enc.json");
+        expect(creds.OPENAI_API_KEY).toBeDefined();
+        expect(creds.EVIDENCE_KEY).toBeDefined();
+      }
+    });
   });
 });

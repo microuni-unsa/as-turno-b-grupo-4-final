@@ -1,5 +1,6 @@
 import fs from "node:fs";
-import { MistralModelProvider } from "@pims/models";
+import { decryptSopsFile } from "@pims/config";
+import { OpenAIModelProvider } from "@pims/models";
 import {
   CorpusLoader,
   NormativeKnowledgeGraph,
@@ -65,50 +66,60 @@ const EVAL_QUERIES: EvalSpec[] = [
   },
   {
     qid: "Q05",
-    query: "incident_type DL vs UA distinction",
-    normative_only: false,
-    expected_doc_id: "anexo-02",
-    expected_substrings: [
-      "DL",
-      "Fuga o pérdida de datos",
-      "UA",
-      "Acceso no autorizado",
-    ],
+    query: "Art 33(2) processor notification to controller without undue delay",
+    normative_only: true,
+    expected_doc_id: "gdpr-full",
+    expected_substrings: ["processor", "controller without undue delay"],
   },
   {
     qid: "Q06",
-    query: "Action sequencing C/A/R and R guard",
-    normative_only: false,
-    expected_doc_id: "spec",
-    expected_substrings: ["review_approval_id"],
+    query: "Art 33(3) mandatory notification elements to supervisory authority",
+    normative_only: true,
+    expected_doc_id: "gdpr-full",
+    expected_substrings: [
+      "nature of the personal data breach",
+      "categories and approximate number",
+    ],
   },
   {
     qid: "Q07",
-    query: "Reopen guard",
-    normative_only: false,
-    expected_doc_id: "spec",
-    expected_substrings: ["REOPENED:", "monitor"],
+    query: "Art 33(5) breach documentation and internal register obligation",
+    normative_only: true,
+    expected_doc_id: "gdpr-full",
+    expected_substrings: [
+      "document any personal data breaches",
+      "facts relating",
+    ],
   },
   {
     qid: "Q08",
-    query: "Peru 48h provisional status",
-    normative_only: false,
-    expected_doc_id: "spec",
-    expected_substrings: ["external vendor claim", "confirm first"],
+    query: "Art 34(1) high risk communication to data subject mandate",
+    normative_only: true,
+    expected_doc_id: "gdpr-full",
+    expected_substrings: [
+      "high risk to the rights and freedoms",
+      "communicate the personal data breach",
+    ],
   },
   {
     qid: "Q09",
-    query: "notify→change_incident perm remap",
-    normative_only: false,
-    expected_doc_id: "anexo-05",
-    expected_substrings: ["notify", "change_incident"],
+    query: "B.3.11 incident management planning processes and roles",
+    normative_only: true,
+    expected_doc_id: "iso27701",
+    expected_substrings: [
+      "plan and prepare for managing information security incidents",
+      "processes, roles and responsibilities",
+    ],
   },
   {
     qid: "Q10",
-    query: "Logical-delete restore rule",
-    normative_only: false,
-    expected_doc_id: "spec",
-    expected_substrings: ["UNIQUE", "restore"],
+    query: "Clause 10.2 nonconformity and corrective action steps",
+    normative_only: true,
+    expected_doc_id: "iso27701",
+    expected_substrings: [
+      "react to the nonconformity",
+      "evaluate the need for action",
+    ],
   },
 ];
 
@@ -119,44 +130,58 @@ describe("Automated RAG Evaluation Gate (§7.6 Integration Suite)", () => {
   let indexer: RagIndexer;
 
   beforeAll(async () => {
-    // 1. Resolve Mistral API Key
-    let apiKey = process.env.MISTRAL_API_KEY;
+    // 1. Resolve API Key from env or SOPS credentials
+    let apiKey = process.env.OPENAI_API_KEY || process.env.MISTRAL_API_KEY;
+    if (!apiKey && fs.existsSync("credentials.enc.json")) {
+      try {
+        const creds = decryptSopsFile("credentials.enc.json");
+        apiKey = creds.OPENAI_API_KEY || creds.MISTRAL_API_KEY;
+      } catch {
+        // Fall through to .env
+      }
+    }
     if (!apiKey && fs.existsSync(".env")) {
-      apiKey = fs.readFileSync(".env", "utf-8").trim();
+      const envText = fs.readFileSync(".env", "utf-8");
+      const match = envText.match(/(?:OPENAI_API_KEY|MISTRAL_API_KEY)=(.*)/);
+      apiKey = match?.[1]?.trim() ?? envText.trim();
     }
     if (!apiKey) {
-      throw new Error("MISTRAL_API_KEY required for integration evaluation");
+      throw new Error("API key required for integration evaluation");
     }
 
     // 2. Boot pgvector PostgreSQL Container
     container = await new PostgreSqlContainer("pgvector/pgvector:pg16").start();
     sql = postgres(container.getConnectionUri());
 
-    // 3. Initialize MistralModelProvider
+    // 3. Initialize OpenAIModelProvider (configured with Mistral OpenAI-compatible endpoint)
+    const endpoint = process.env.OPENAI_BASE_URL || "https://api.mistral.ai/v1";
     const modelConfig = {
-      provider: "mistral",
+      provider: "openai",
       model: "mistral-large-latest",
-      endpoint: "https://api.mistral.ai",
-      auth_env: "MISTRAL_API_KEY",
+      endpoint,
+      auth_env: "OPENAI_API_KEY",
       timeout_ms: 15000,
       max_retries: 3,
       fallback: "none" as const,
     };
 
-    const modelProvider = new MistralModelProvider({
+    const modelProvider = new OpenAIModelProvider({
       reasoningConfig: modelConfig,
       fastConfig: { ...modelConfig, model: "mistral-small-latest" },
       visionConfig: { ...modelConfig, model: "pixtral-12b-2409" },
       embeddingsConfig: { ...modelConfig, model: "mistral-embed" },
       rerankerConfig: { ...modelConfig, model: "mistral-small-latest" },
       apiKey,
+      baseURL: endpoint,
     });
 
-    // 4. Ingest Corpus with CorpusLoader
-    const loader = new CorpusLoader();
+    // 4. Ingest Corpus with CorpusLoader from dedicated corpus/ directory
+    const loader = new CorpusLoader({
+      source: { type: "local", dirPath: "corpus" },
+    });
     const corpus = await loader.loadAll();
 
-    // 5. Index into pgvector + BM25 with batchSize 50
+    // 5. Index into pgvector + MiniSearch BM25 with batchSize 50
     indexer = new RagIndexer({
       modelProvider,
       pgClient: sql,

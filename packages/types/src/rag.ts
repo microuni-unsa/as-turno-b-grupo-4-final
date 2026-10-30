@@ -83,3 +83,20 @@ export interface RAGTriadScores {
   groundedness: number;
   answer_relevance: number;
 }
+
+export interface LocalCorpusSource {
+  type: "local";
+  dirPath: string;
+}
+
+export interface S3CorpusSource {
+  type: "s3";
+  bucket: string;
+  prefix?: string;
+  region?: string;
+  endpoint?: string;
+  accessKeyId?: string;
+  secretAccessKey?: string;
+}
+
+export type CorpusSource = LocalCorpusSource | S3CorpusSource;

@@ -1,1 +1,1 @@
-export * from "@pims/models/mistral-provider.ts";
+export * from "@pims/models/openai-provider.ts";
