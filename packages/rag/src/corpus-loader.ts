@@ -23,6 +23,7 @@ export interface CorpusLoaderOptions {
 export class CorpusLoader {
   private readonly projectRoot: string;
   private readonly source: CorpusSource;
+  private readonly seenIds: Set<string> = new Set();
 
   constructor(options: CorpusLoaderOptions = {}) {
     this.projectRoot = options.projectRoot ?? process.cwd();
@@ -49,11 +50,21 @@ export class CorpusLoader {
     rawText: string,
     normative: boolean,
   ): CorpusChunk {
+    let uniqueId = chunkId;
+    if (this.seenIds.has(uniqueId)) {
+      let counter = 2;
+      while (this.seenIds.has(`${chunkId}_${counter}`)) {
+        counter++;
+      }
+      uniqueId = `${chunkId}_${counter}`;
+    }
+    this.seenIds.add(uniqueId);
+
     const cleanText = rawText.trim();
     const header = `[DOC:${docId} | CLAUSE:${articleOrClause} | NORMATIVE:${normative}]`;
     const fullText = `${header}\n${cleanText}`;
     return {
-      chunk_id: chunkId,
+      chunk_id: uniqueId,
       doc_id: docId,
       article_or_clause: articleOrClause,
       lines,
@@ -391,6 +402,7 @@ export class CorpusLoader {
   }
 
   async loadAll(): Promise<LoadedCorpus> {
+    this.seenIds.clear();
     const docHashes: Record<string, string> = {};
     const chunks: CorpusChunk[] = [];
 

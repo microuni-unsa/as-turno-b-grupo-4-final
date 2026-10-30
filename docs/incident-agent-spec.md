@@ -712,44 +712,39 @@ flowchart TD
 
 Required by: B.3.11 (procedures "taking into account the applicable legal requirements" — retrieval grounds every legal claim), B.3.12 NOTE3 (ISO/IEC 27035 series as incident-management reference — included in corpus), 10.2 (root-cause determination needs knowledge access).
 
-### 7.1 Corpus (fixed paths, SHA-256 versioned at ingest)
+### 7.1 Corpus (pluggable local/S3 sources, SHA-256 versioned at ingest)
+
+Corpus ingestion supports pluggable sources: local filesystem paths (`type: "local"`) and S3 buckets (`type: "s3"` via `@aws-sdk/client-s3`) for dynamic corpus extension. PIMS internal schemas, SQL dumps, and Anexo documents are operational assets resolved dynamically at runtime via live `pims-adapter` tools/catalogs (E01–E26) and are excluded from static RAG to ensure real-time accuracy.
+
+The normative compliance corpus consists of:
 
 | `doc_id` | Source path | Normative? | Notes |
 |---|---|---|---|
-| `gdpr-full` | `data/GDPR.txt` | Yes | Sole ground truth for Art 33/34. Article-aware splits (never split mid-article). |
-| `gdpr-softexpert` | `data/gdpr.txt` | No (`reference`) | SoftExpert stage model (e-forms → response flow → root-cause → action plan → audit → indicators). Functional pattern only. |
-| `gdpr-ready-pdf` | `gdpr_is_your_company_ready_f3c3ad95c0-2.pdf` text layer | No (`reference`) | Same content as above, paginated pp. 8–13. Ingested once; dedupe by text hash against `gdpr-softexpert`. |
-| `iso27701` | `ISO_27701-2025_searchable.pdf` (OCR'd from `data/ISO 27701-2025_ocr.pdf` per §2.5; build regenerates it — no /tmp path is referenced at runtime) | Yes, except A-numbers provisional | B.3.11/B.3.12 verbatim; A.3.11/A.3.12 via crosswalk (provisional flag on those chunks). |
-| `pims-schema` | `data/gestitel_base_de_datos.sql` | Yes (`system`) | Schema comments + DDL + seed catalogs ONLY. Zero tenant PII (dump contains none). |
-| `anexo-01` … `anexo-06` | `data/Anexo_*.pdf` text layers | Yes (`system`) | Dictionary, schema, procedures, access policy, deploy guide. Enum/code ground truth. |
-| `class1/2/3` | `data/class1.txt`, `data/class2.txt`, `data/class3.txt` | No (`lecture-note, non-normative`) | Matrix rule, prefill pattern, template discipline. NEVER cited for legal content. |
-| `pims-capture` | `docs/incident-agent-capture/*.json` | Yes (`system`) | Live endpoint shapes. Redacted (no tokens/passwords). |
-| `closed-bundles` | Sealed evidence bundles, `CLOSED` incidents only | No (`precedent`) | Redacted (§11.3). Used for few-shot investigation/drafting patterns; NEVER for legal rules. |
+| `gdpr-full` | `corpus/GDPR.txt` or `data/GDPR.txt` | Yes | Sole ground truth for Art 33/34. Article-aware splits (never split mid-article). |
+| `iso27701` | `corpus/ISO 27701-2025_ocr.pdf` or `data/ISO 27701-2025_ocr.pdf` | Yes | B.3.11/B.3.12 verbatim; Clause 10.2 corrective actions; A.3.11/A.3.12 via crosswalk. |
 
-Ingest: each file hashed (SHA-256); corpus version = `sha256(sorted(file hashes))`. `EMBEDDINGS_MODEL` change REQUIRES full re-ingest (new version). `RAG_CORPUS_STALE` raised when query-time version ≠ ingest version. Closed bundles enter only after §9.6 seal + redaction verification (automated PII-pattern scan must find zero hits, else `BUNDLE_REDACT_FAIL` and exclusion).
+Ingest: each file hashed (SHA-256); corpus version = `sha256(sorted(file hashes))`. `EMBEDDINGS_MODEL` change REQUIRES full re-ingest (new version). `RAG_CORPUS_STALE` raised when query-time version ≠ ingest version.
 
 ### 7.2 Chunking
 
 | Class | Size | Overlap | Split rule |
 |---|---|---|---|
-| Normative (`gdpr-full`, `iso27701`, `anexo-*`) | 512 tokens | 64 | Article/clause-aware: splits only at article, clause, or table-row boundaries; each chunk carries `{article_or_clause, item}` metadata |
-| System (`pims-schema`, `pims-capture`) | 512 tokens | 64 | DDL-statement / JSON-document boundaries; endpoint chunks carry `{method, path}` |
-| Reference/lecture/precedent | 1024 tokens | 128 | Paragraph boundaries; chunks carry `{non_normative:true, kind}` |
+| Normative (`gdpr-full`, `iso27701`) | 512 tokens | 64 | Article/clause-aware: splits only at article or clause boundaries; each chunk carries `{article_or_clause, item}` metadata and a globally unique chunk ID `${docId}:${clause}:L${lineNum}:${subIdx}` |
 
 Tokenizer: the embeddings model's tokenizer; token counts in THIS spec are approximate — the implementation counts exactly and logs chunk stats at ingest (`RAG_INGEST_STATS:{doc_id,chunks,tokens}`).
-Every normative and system chunk is indexed with **Contextual Retrieval Headers**: at ingest, a deterministic prefix `[DOC:<doc_id> | CLAUSE:<article_or_clause> | NORMATIVE:<bool>]` is prepended prior to `embed()` and BM25 tokenization so cross-chunk pronoun or sub-clause references ("paragraph 1 of this Article") never lose scope.
+Every normative chunk is indexed with **Contextual Retrieval Headers**: at ingest, a deterministic prefix `[DOC:<doc_id> | CLAUSE:<article_or_clause> | NORMATIVE:<bool>]` is prepended prior to `embed()` and BM25 tokenization so cross-chunk pronoun or sub-clause references ("paragraph 1 of this Article") never lose scope.
 
 ### 7.3 Index and serving
 
-`rag-service` holds a **Tri-Modal Hybrid Index**: (1) dense vector index (embeddings), (2) SQLite FTS5 BM25 lexical index (same chunks), (3) **Bipartite Normative Knowledge Graph** (nodes: ISO clauses, Annex A/B controls, GDPR articles/recitals, PIMS `core_incident` and related `core_*` columns, E22 threat/vulnerability families; edges: `requires`, `maps_to_field`, `mitigates`, `crosswalks_to`), and (4) metadata store (`doc_id, chunk_id, lines, normative, article_or_clause, sha256`). Single-writer ingest (ingest lock, `RAG_INGEST_LOCKED` on contention → queue, max 1 queued, else reject). Queries are read-only and lock-free. Index snapshot per corpus version; rollback = point queries at previous snapshot (`RAG_ROLLBACK:<version>` logged).
+`rag-service` holds a **Tri-Modal Hybrid Index**: (1) dense vector index (embeddings in pgvector), (2) MiniSearch BM25 lexical index (same chunks), (3) **Bipartite Normative Knowledge Graph with Dense Bi-Encoder Anchor Grounding** (nodes: ISO clauses, Annex A/B controls, GDPR articles/recitals; pre-embedded node definitions matched via dense vector similarity; edges: `requires`, `maps_to_field`, `mitigates`, `crosswalks_to`), and (4) metadata store (`doc_id, chunk_id, lines, normative, article_or_clause, sha256`). Single-writer ingest (ingest lock, `RAG_INGEST_LOCKED` on contention → queue, max 1 queued, else reject). Queries are read-only and lock-free. Index snapshot per corpus version; rollback = point queries at previous snapshot (`RAG_ROLLBACK:<version>` logged).
 
 ### 7.4 Retrieval
 
-Pipeline (fixed): (1) **Agentic Self-RAG Query Decomposition + HyDE Expansion** (`FAST_MODEL` decomposes compound legal/technical questions, generates a hypothetical normative clause/schema snippet, and extracts entity graph anchors), (2) **3-Way Reciprocal Rank Fusion (RRF)** over Dense Vector + BM25 + Multi-Hop Personalized PageRank (PPR) over the Knowledge Graph neighbourhood → `top_k` (`RAG_TOP_K`, §13), (3) cross-encoder rerank (`RERANKER_MODEL`) → top `RAG_RERANK_K` (§13), (4) **CRAG (Corrective RAG) Self-Grading** (`supported | ambiguous | unsupported`; unsupported passages are stripped immediately, and if only ambiguous passages remain, one automated query-rewrite loop executes within budget) with cite threshold `min_score` (`RAG_MIN_SCORE`, §13, scores normalized 0..1). Any passage below threshold is dropped; if ALL drop → `RAG_NO_EVIDENCE` (see §6.5 waiver rule: legal content MUST NOT proceed; operational fields need reviewer-signed waiver). `normative_only=true` restricts to `normative:true` chunks (REQUIRED for notice drafting and exemption evaluation). Retrieval latency budget `RAG_TIMEOUT_MS` (§13); timeout → `MODEL_UNAVAILABLE:rag` → park per §4.3 (no ungrounded fallback).
+Pipeline (fixed): (1) **Agentic Self-RAG Query Decomposition + Dense Bi-Encoder Grounding** (`FAST_MODEL` decomposes compound legal/technical questions, generates a hypothetical normative clause/schema snippet; pre-embedded Knowledge Graph nodes matched via dense vector cosine similarity extract entity anchors), (2) **3-Way Reciprocal Rank Fusion (RRF)** over Dense Vector + BM25 + Multi-Hop Personalized PageRank (PPR) over the Knowledge Graph neighbourhood → `top_k` (`RAG_TOP_K`, §13), (3) cross-encoder rerank (`RERANKER_MODEL`) → top `RAG_RERANK_K` (§13), (4) **CRAG (Corrective RAG) Self-Grading** (`supported | ambiguous | unsupported`; unsupported passages are stripped immediately, and if only ambiguous passages remain, one automated query-rewrite loop executes within budget) with cite threshold `min_score` (`RAG_MIN_SCORE`, §13, scores normalized 0..1). Any passage below threshold is dropped; if ALL drop → `RAG_NO_EVIDENCE` (see §6.5 waiver rule: legal content MUST NOT proceed; operational fields need reviewer-signed waiver). `normative_only=true` restricts to `normative:true` chunks (REQUIRED for notice drafting and exemption evaluation). Retrieval latency budget `RAG_TIMEOUT_MS` (§13); timeout → `MODEL_UNAVAILABLE:rag` → park per §4.3 (no ungrounded fallback).
 
 ### 7.5 Citations
 
-Format: `doc_id:chunk_id:lines` (e.g. `gdpr-full:art33:2179-2199`, `iso27701:b3.12:3407-3440`, `anexo-02:incident:883-887`). Rendered in drafts (§10.1–10.2 `citations[]`), stored in `evidence_refs` (append-only tokens per §9.1 marker rule, ≤1000 chars total — overflow spills to an `evidence-index.txt` attachment with pointer token left in-field), and stored in the bundle manifest (§10.3). Citation validity check (reviewer): chunk exists in current corpus version + score ≥ threshold + normative flag matches use (legal claim with `lecture-note` citation → `CITATION_INVALID` → reject). Fabricated citation (chunk id not in index) → `CITATION_FABRICATED`: fail the draft, page operator, flag the model route for review (do NOT auto-retry with same route).
+Format: `doc_id:chunk_id:lines` (e.g. `gdpr-full:art33:2179-2199`, `iso27701:b3.12:3407-3440`). Rendered in drafts (§10.1–10.2 `citations[]`), stored in `evidence_refs` (append-only tokens per §9.1 marker rule, ≤1000 chars total — overflow spills to an `evidence-index.txt` attachment with pointer token left in-field), and stored in the bundle manifest (§10.3). Citation validity check (reviewer): chunk exists in current corpus version + score ≥ threshold + normative flag matches use. Fabricated citation (chunk id not in index) → `CITATION_FABRICATED`: fail the draft, page operator, flag the model route for review (do NOT auto-retry with same route).
 
 ### 7.6 Eval gate (10 fixed queries — build fails on any miss)
 
@@ -761,14 +756,12 @@ Harness: runs each query through `rag_query` with `normative_only` as listed; PA
 | Q02 | Art 34(2) subject content subset | true | `gdpr-full` Art 34(2): "points (b), (c) and (d) of Article 33(3)" + "clear and plain language"; explicitly NOT (a) |
 | Q03 | Art 34(3)(a) encryption exemption | true | `gdpr-full` Art 34(3)(a): "render the personal data unintelligible … such as encryption" |
 | Q04 | B.3.12 breach record elements | true | `iso27701` B.3.12: description, time period, consequences, reporter, reported-to, resolution steps + person in charge + data recovered, unavailability/loss/disclosure/alteration fact, PII description if known, notification steps |
-| Q05 | `incident_type` DL vs UA distinction | false | `anexo-02` p.25: `DL` Fuga o pérdida de datos vs `UA` Acceso no autorizado |
-| Q06 | Action sequencing C/A/R and R guard | false | This spec §6.2 (ingested as `spec` doc): `C*→A+→R`, ≥1 `A` before `R`, `R` requires `review_approval_id` |
-| Q07 | Reopen guard | false | This spec §6.2: `C→P` requires `REOPENED:<evidence_id>` + monitor role |
-| Q08 | Peru 48h provisional status | false | This spec §2.6: "unverified, external vendor claim … confirm first"; MUST NOT be asserted as law |
-| Q09 | notify→change_incident perm remap | false | `anexo-05` §4.4: "notify (notificar incidente) → change_incident" |
-| Q10 | Logical-delete restore rule | false | `anexo-02` conv. 3 + this spec §3.2: UNIQUE stays occupied → restore, never re-insert |
-
-The spec itself is ingested as `doc_id=spec` (non-normative for law, normative for procedure) so Q06–Q09 ground procedural answers.
+| Q05 | Art 33(2) processor notification to controller without undue delay | true | `gdpr-full` Art 33(2): "processor" + "controller without undue delay" |
+| Q06 | Art 33(3) mandatory notification elements to supervisory authority | true | `gdpr-full` Art 33(3): "nature of the personal data breach" + "categories and approximate number" |
+| Q07 | Art 33(5) breach documentation and internal register obligation | true | `gdpr-full` Art 33(5): "document any personal data breaches" + "facts relating" |
+| Q08 | Art 34(1) high risk communication to data subject mandate | true | `gdpr-full` Art 34(1): "high risk to the rights and freedoms" + "communicate the personal data breach" |
+| Q09 | B.3.11 incident management planning processes and roles | true | `iso27701` B.3.11: "plan and prepare for managing information security incidents" + "processes, roles and responsibilities" |
+| Q10 | Clause 10.2 nonconformity and corrective action steps | true | `iso27701` Clause 10.2: "react to the nonconformity" + "evaluate the need for action" |
 
 ## 8. Voice subsystem
 

@@ -8,12 +8,14 @@
 ## 2. Secrets, Tooling & Configuration
 - **Secrets Management**: Secrets are managed via `sops`. No plaintext API keys, passwords, or tokens in git or plain config files.
 - **Tooling & Nix Policy**: NEVER assume Nix is available dynamically at runtime. If system packages or CLI tools are needed, declare them explicitly in `flake.nix`. All JavaScript/TypeScript dependencies must be managed via `bun` in `package.json`.
-- **LLM Provider**: Configurable model provider. Mistral API key is available for cost-effective execution on free tier. Keep token usage strictly bounded and cheap.
+- **LLM Provider**: Configurable model provider abstraction implemented via `OpenAIModelProvider` (OpenAI SDK / OpenAI-compatible cloud endpoint, e.g. Mistral API via OpenAI client compatibility). SOPS credentials manage API keys deterministically. Keep token usage strictly bounded and cheap.
 
 ## 3. Architecture & Code Quality
 - **Monorepo Structure**: The repository is organized as a Bun workspace monorepo under `packages/`:
   - `@pims/types`: Strict Zod schemas, inferred TypeScript types, and central error taxonomy.
   - `@pims/config`: Centralized configuration manager with `sops` decryption.
+  - `@pims/models`: Configurable `ModelProvider` abstraction (`OpenAIModelProvider`).
+  - `@pims/rag`: Ingestion, Tri-Modal Hybrid Index (Vector + MiniSearch BM25 + Knowledge Graph), and CRAG retrieval pipeline.
   - `@pims/pims-mock`: Reverse-engineered PIMS test API server using Hono and Drizzle ORM.
   - `@pims/pims-adapter`: Production PIMS HTTP client adapter (endpoints E01–E26).
 - **Path Imports**: Follow `biome.json` strictly: relative imports (`./` or `../`) are forbidden. Always use `@pims/*` package imports.
@@ -23,3 +25,7 @@
   - No machine-dependent path fallbacks (e.g., hardcoded absolute paths, `fs.existsSync(p1) ? p1 : p2`). Paths must resolve deterministically relative to workspace/project root or fail fast.
   - No speculative fallback cascades (e.g., catching errors and falling back through multiple speculative auth methods). If an expected token or credentials fail, fail fast with spec-defined named errors.
 - **No Repeated Cross-File Literals**: Centralize constants, enums, error codes, and configuration parameters in `@pims/types` or designated config modules.
+
+## 4. Specification & Agent Documentation Synchronization
+- **Spec Modification Policy**: The project specifications (`docs/incident-agent-spec.md` and phase documentation) can be modified with explicit user consent.
+- **Automatic Synchronization**: `AGENTS.md` and the specification files must always be kept up to date automatically whenever architectural decisions, contract shapes, or engineering constraints change.

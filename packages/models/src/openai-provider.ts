@@ -1,4 +1,5 @@
 import type { ModelConfig } from "@pims/config";
+import { DEFAULT_OPENAI_BASE_URL } from "@pims/types/constants.ts";
 import {
   CitationInvalidError,
   ModelSchemaViolationError,
@@ -53,10 +54,18 @@ export class OpenAIModelProvider implements ModelProvider {
     this.cohereApiKey = options.cohereApiKey;
   }
 
+  private resolveEndpoint(config: ModelConfig): string {
+    if (config.endpoint && config.endpoint.trim() !== "") {
+      return config.endpoint.replace(/\/+$/, "");
+    }
+    if (this.defaultBaseURL && this.defaultBaseURL.trim() !== "") {
+      return this.defaultBaseURL.replace(/\/+$/, "");
+    }
+    return DEFAULT_OPENAI_BASE_URL;
+  }
+
   private getClient(config: ModelConfig): OpenAI {
-    const rawEndpoint =
-      config.endpoint || this.defaultBaseURL || "https://api.openai.com/v1";
-    const baseURL = rawEndpoint.replace(/\/+$/, "");
+    const baseURL = this.resolveEndpoint(config);
     return new OpenAI({
       apiKey: this.apiKey,
       baseURL,
@@ -293,8 +302,17 @@ export class OpenAIModelProvider implements ModelProvider {
       return { ranked: [] };
     }
 
-    if (config.provider.toLowerCase() === "cohere" && this.cohereApiKey) {
-      const endpoint = config.endpoint || "https://api.cohere.com";
+    if (config.provider.toLowerCase() === "cohere") {
+      if (!this.cohereApiKey || this.cohereApiKey.trim() === "") {
+        throw new ModelUnavailableError(
+          route,
+          "Cohere API key is missing but provider is configured as cohere",
+        );
+      }
+      const endpoint =
+        config.endpoint && config.endpoint.trim() !== ""
+          ? config.endpoint
+          : "https://api.cohere.com";
       const url = `${endpoint.replace(/\/+$/, "")}/v2/rerank`;
       const body = {
         model: config.model || "rerank-v3.5",
@@ -352,7 +370,7 @@ export class OpenAIModelProvider implements ModelProvider {
       }
     }
 
-    // Embedding-based cosine + term similarity fallback
+    // Bi-encoder vector similarity + lexical scoring via embed()
     const queryEmbRes = await this.embed({ texts: [args.query] });
     const queryVector = queryEmbRes.vectors[0];
     if (!queryVector) {

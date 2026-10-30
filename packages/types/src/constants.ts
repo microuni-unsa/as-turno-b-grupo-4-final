@@ -21,3 +21,13 @@ export const EVENT_TYPE_LABELS: Record<string, string> = {
   closed: "Cerrado",
   reopened: "Reabierto",
 };
+
+// RAG Subsystem Constants (§7 & §13)
+export const DEFAULT_OPENAI_BASE_URL = "https://api.openai.com/v1";
+export const DEFAULT_MISTRAL_BASE_URL = "https://api.mistral.ai/v1";
+export const DEFAULT_EMBEDDING_DIM = 1024;
+export const DEFAULT_RAG_TOP_K = 8;
+export const DEFAULT_RAG_RERANK_K = 4;
+export const DEFAULT_RAG_MIN_SCORE = 0.35;
+export const DEFAULT_RAG_TIMEOUT_MS = 5000;
+export const DEFAULT_ANCHOR_SIMILARITY_THRESHOLD = 0.55;

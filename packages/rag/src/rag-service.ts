@@ -2,6 +2,12 @@ import type { AgentConfig } from "@pims/config";
 import type { RagIndexer } from "@pims/rag/indexer.ts";
 import type { NormativeKnowledgeGraph } from "@pims/rag/knowledge-graph.ts";
 import {
+  DEFAULT_RAG_MIN_SCORE,
+  DEFAULT_RAG_RERANK_K,
+  DEFAULT_RAG_TIMEOUT_MS,
+  DEFAULT_RAG_TOP_K,
+} from "@pims/types/constants.ts";
+import {
   CitationFabricatedError,
   CitationInvalidError,
   ModelUnavailableError,
@@ -39,25 +45,25 @@ export class RAGService {
     this.modelProvider = options.modelProvider;
     this.indexer = options.indexer;
     this.knowledgeGraph = options.knowledgeGraph;
-    this.topK = options.config?.RAG_TOP_K ?? 8;
-    this.rerankK = options.config?.RAG_RERANK_K ?? 4;
-    this.minScore = options.config?.RAG_MIN_SCORE ?? 0.35;
-    this.timeoutMs = options.config?.RAG_TIMEOUT_MS ?? 3000;
+    this.topK = options.config?.RAG_TOP_K ?? DEFAULT_RAG_TOP_K;
+    this.rerankK = options.config?.RAG_RERANK_K ?? DEFAULT_RAG_RERANK_K;
+    this.minScore = options.config?.RAG_MIN_SCORE ?? DEFAULT_RAG_MIN_SCORE;
+    this.timeoutMs = options.config?.RAG_TIMEOUT_MS ?? DEFAULT_RAG_TIMEOUT_MS;
   }
 
   async decomposeAndHyde(query: string): Promise<QueryDecomposition> {
     try {
       const systemPrompt = `You are an expert legal/technical query analyst for GDPR, ISO/IEC 27701, and PIMS incident management.
-Given a query, provide:
-1. "sub_queries": Array of 1-3 targeted sub-queries breaking down compound elements.
-2. "hyde_clause": A hypothetical normative or technical clause snippet answering the question.
-3. "graph_anchors": Key domain entity anchors (e.g. "gdpr:art33.1", "iso:b.3.12", "cat:dl", "cat:ua", "spec:car_sequence").
-Return strict JSON matching the schema.`;
+Given a query, return strict JSON with:
+1. "sub_queries": Array of 1-3 targeted short sub-queries breaking down compound elements.
+2. "hyde_clause": A concise 1-2 sentence hypothetical normative clause snippet (under 50 words).
+3. "graph_anchors": Key domain entity anchors (e.g. "gdpr:art33.1", "gdpr:art33.5", "iso:b.3.12", "iso:10.2").
+Keep the response concise and strictly valid JSON.`;
 
       const res = await this.modelProvider.chat_json({
         system: systemPrompt,
         messages: [{ role: "user", content: `Query: ${query}` }],
-        max_tokens: 350,
+        max_tokens: 1500,
         temperature: 0.0,
       });
 
@@ -83,13 +89,14 @@ Return strict JSON matching the schema.`;
         hyde_clause: hydeClause,
         graph_anchors: combinedAnchors,
       };
-    } catch {
-      // Deterministic fallback decomposition without external failure
-      return {
-        sub_queries: [query],
-        hyde_clause: query,
-        graph_anchors: this.knowledgeGraph.findAnchorsInQuery(query),
-      };
+    } catch (err: unknown) {
+      if (err instanceof ModelUnavailableError) {
+        throw err;
+      }
+      throw new ModelUnavailableError(
+        "rag",
+        `Query decomposition failed: ${err instanceof Error ? err.message : String(err)}`,
+      );
     }
   }
 
@@ -225,8 +232,34 @@ Return strict JSON matching the schema.`;
     }
 
     // 2. Parallel Tri-Modal Search
-    // Modal 2: SQLite BM25 search with query, sub-queries, and anchor labels
-    const anchorLabels = decomposed.graph_anchors
+    // Modal 1: Query Vector Embedding & pgvector Dense Search
+    const embRes = await this.modelProvider.embed({ texts: [userQuery] });
+    const qVec = embRes.vectors[0];
+    if (!qVec) {
+      throw new ModelUnavailableError(
+        "rag",
+        "Failed to compute query vector for dense retrieval",
+      );
+    }
+
+    const pgvectorHits = await this.indexer.searchPgvector(qVec, 30);
+    const denseRankings = pgvectorHits.map((h) => h.chunk_id);
+
+    // Modal 3: Knowledge Graph Dense Bi-Encoder Anchors + Personalized PageRank (PPR)
+    const biEncoderAnchors = this.knowledgeGraph.findAnchorsByVector(qVec);
+    const allAnchors = Array.from(
+      new Set([...decomposed.graph_anchors, ...biEncoderAnchors]),
+    );
+
+    const pprScores =
+      this.knowledgeGraph.computePersonalizedPageRank(allAnchors);
+    const chunkPprMap = this.knowledgeGraph.getChunkScoresFromPPR(pprScores);
+    const pprRankings = Array.from(chunkPprMap.entries())
+      .sort((a, b) => b[1] - a[1])
+      .map(([cid]) => cid);
+
+    // Modal 2: MiniSearch BM25 search with query, sub-queries, and anchor labels
+    const anchorLabels = allAnchors
       .map((a) => this.knowledgeGraph.getNode(a)?.label ?? "")
       .filter(Boolean)
       .join(" ");
@@ -235,29 +268,6 @@ Return strict JSON matching the schema.`;
       40,
     );
     const bm25Rankings = bm25Hits.map((h) => h.chunk_id);
-
-    // Modal 3: Knowledge Graph Personalized PageRank (PPR)
-    const pprScores = this.knowledgeGraph.computePersonalizedPageRank(
-      decomposed.graph_anchors,
-    );
-    const chunkPprMap = this.knowledgeGraph.getChunkScoresFromPPR(pprScores);
-    const pprRankings = Array.from(chunkPprMap.entries())
-      .sort((a, b) => b[1] - a[1])
-      .map(([cid]) => cid);
-
-    // Modal 1: pgvector Dense search (or embedding query)
-    let denseRankings: string[] = [];
-    try {
-      const embRes = await this.modelProvider.embed({ texts: [userQuery] });
-      const qVec = embRes.vectors[0];
-      if (qVec) {
-        const pgvectorHits = await this.indexer.searchPgvector(qVec, 30);
-        denseRankings = pgvectorHits.map((h) => h.chunk_id);
-      }
-    } catch {
-      // Fallback: use top BM25 and PPR rankings if pgvector client not attached
-      denseRankings = bm25Rankings.slice(0, 15);
-    }
 
     // 3. 3-Way Reciprocal Rank Fusion (RRF)
     const rrfMap = this.calculateRRF(denseRankings, bm25Rankings, pprRankings);

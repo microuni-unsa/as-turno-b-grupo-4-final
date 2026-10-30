@@ -179,11 +179,10 @@ describe("Configuration Manager", () => {
     });
 
     it("decrypts credentials.enc.json with valid SOPS age keys", () => {
-      if (fs.existsSync("credentials.enc.json")) {
-        const creds = decryptSopsFile("credentials.enc.json");
-        expect(creds.OPENAI_API_KEY).toBeDefined();
-        expect(creds.EVIDENCE_KEY).toBeDefined();
-      }
+      expect(fs.existsSync("credentials.enc.json")).toBe(true);
+      const creds = decryptSopsFile("credentials.enc.json");
+      expect(creds.OPENAI_API_KEY).toBeDefined();
+      expect(creds.EVIDENCE_KEY).toBeDefined();
     });
   });
 });

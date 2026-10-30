@@ -79,6 +79,26 @@ describe("Tri-Modal RAG Subsystem Unit Suite", () => {
         true,
       );
     });
+
+    it("performs dense bi-encoder anchor resolution using pre-embedded vectors", async () => {
+      const kg = new NormativeKnowledgeGraph();
+      const nodeCount = 5;
+      const fakeVectors = Array.from({ length: nodeCount }, (_, i) => [
+        i === 0 ? 1 : 0,
+        i === 1 ? 1 : 0,
+        0,
+      ]);
+
+      vi.spyOn(dummyProvider, "embed").mockResolvedValueOnce({
+        vectors: fakeVectors,
+      });
+
+      await kg.indexNodeEmbeddings(dummyProvider);
+
+      // Query vector matching first node [1, 0, 0]
+      const matchingAnchors = kg.findAnchorsByVector([1, 0, 0], 0.5, 3);
+      expect(matchingAnchors.length).toBeGreaterThan(0);
+    });
   });
 
   describe("MiniSearch BM25 Lexical Index", () => {
@@ -179,6 +199,21 @@ describe("Tri-Modal RAG Subsystem Unit Suite", () => {
         modelProvider: dummyProvider,
       });
       const kg = new NormativeKnowledgeGraph();
+
+      // Mock chat_json for query decomposition
+      vi.spyOn(dummyProvider, "chat_json").mockResolvedValueOnce({
+        content: {
+          sub_queries: ["unrelated question"],
+          hyde_clause: "unrelated hypothetical clause",
+          graph_anchors: [],
+        },
+        citations_requested: false,
+      });
+
+      // Mock embed for query embedding
+      vi.spyOn(dummyProvider, "embed").mockResolvedValueOnce({
+        vectors: [[0.1, 0.2, 0.3]],
+      });
 
       // Mock reranker returning low score < 0.35
       vi.spyOn(dummyProvider, "rerank").mockResolvedValueOnce({

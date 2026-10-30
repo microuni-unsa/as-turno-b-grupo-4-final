@@ -1,3 +1,5 @@
+import { DEFAULT_ANCHOR_SIMILARITY_THRESHOLD } from "@pims/types/constants.ts";
+import type { ModelProvider } from "@pims/types/models.ts";
 import type {
   KGEdgeRelation,
   KnowledgeGraphData,
@@ -9,6 +11,7 @@ import Graph from "graphology";
 export class NormativeKnowledgeGraph {
   private readonly graph: Graph;
   private readonly nodeToChunkIds: Map<string, string[]> = new Map();
+  private readonly nodeEmbeddings: Map<string, number[]> = new Map();
 
   constructor(initialData?: KnowledgeGraphData) {
     this.graph = new Graph({ multi: false, type: "undirected" });
@@ -384,7 +387,86 @@ export class NormativeKnowledgeGraph {
     return chunkScores;
   }
 
-  findAnchorsInQuery(query: string): string[] {
+  /**
+   * Pre-embed all Knowledge Graph nodes for dense bi-encoder anchor resolution.
+   */
+  async indexNodeEmbeddings(modelProvider: ModelProvider): Promise<void> {
+    const nodeIds = this.graph.nodes();
+    const nodes = nodeIds
+      .map((id) => this.getNode(id))
+      .filter((n): n is KnowledgeGraphNode => Boolean(n));
+
+    if (nodes.length === 0) return;
+
+    const texts = nodes.map((n) =>
+      `${n.label}. ${n.description ?? ""} ${n.id}`.trim(),
+    );
+
+    const res = await modelProvider.embed({ texts });
+    for (let i = 0; i < nodes.length; i++) {
+      const node = nodes[i];
+      const vec = res.vectors[i];
+      if (node && vec) {
+        this.nodeEmbeddings.set(node.id, vec);
+      }
+    }
+  }
+
+  /**
+   * Dense Bi-Encoder anchor matching: computes cosine similarity between
+   * query embedding vector and pre-embedded Knowledge Graph nodes.
+   */
+  findAnchorsByVector(
+    queryVector: number[],
+    minSimilarity = DEFAULT_ANCHOR_SIMILARITY_THRESHOLD,
+    topK = 5,
+  ): string[] {
+    if (this.nodeEmbeddings.size === 0) {
+      return [];
+    }
+
+    const scored: Array<{ id: string; similarity: number }> = [];
+
+    for (const [nodeId, nodeVec] of this.nodeEmbeddings.entries()) {
+      let dot = 0;
+      let normQ = 0;
+      let normN = 0;
+      const len = Math.min(queryVector.length, nodeVec.length);
+      for (let i = 0; i < len; i++) {
+        const q = queryVector[i] ?? 0;
+        const n = nodeVec[i] ?? 0;
+        dot += q * n;
+        normQ += q * q;
+        normN += n * n;
+      }
+      const denom = Math.sqrt(normQ) * Math.sqrt(normN);
+      const similarity = denom > 0 ? dot / denom : 0;
+
+      if (similarity >= minSimilarity) {
+        scored.push({ id: nodeId, similarity });
+      }
+    }
+
+    scored.sort((a, b) => b.similarity - a.similarity);
+    return scored.slice(0, topK).map((item) => item.id);
+  }
+
+  findAnchorsInQuery(
+    query: string,
+    options?: {
+      queryVector?: number[];
+      minSimilarity?: number;
+      topK?: number;
+    },
+  ): string[] {
+    if (options?.queryVector && this.nodeEmbeddings.size > 0) {
+      return this.findAnchorsByVector(
+        options.queryVector,
+        options.minSimilarity,
+        options.topK,
+      );
+    }
+
     const anchors: string[] = [];
     const lower = query.toLowerCase();
 
