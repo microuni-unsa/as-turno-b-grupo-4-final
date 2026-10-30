@@ -1,9 +1,3 @@
-/**
- * Centralized Operational Constants & Defaults
- *
- * Implements Rule: No repeated cross-file literals.
- */
-
 export const DEFAULT_PIMS_BASE_URL = "https://unsa.27k.pe";
 export const DEFAULT_PIMS_SCHEMA = "unsa";
 export const DEFAULT_PIMS_TIMEOUT_MS = 15000;
@@ -22,7 +16,6 @@ export const EVENT_TYPE_LABELS: Record<string, string> = {
   reopened: "Reabierto",
 };
 
-// RAG Subsystem Constants (§7 & §13)
 export const DEFAULT_OPENAI_BASE_URL = "https://api.openai.com/v1";
 export const DEFAULT_EMBEDDING_DIM = 1024;
 export const DEFAULT_RAG_TOP_K = 8;

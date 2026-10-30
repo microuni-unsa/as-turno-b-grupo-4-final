@@ -81,16 +81,13 @@ export class RagIndexer {
         this.indexedChunks.set(chunk.chunk_id, chunk);
       }
 
-      // 1. Populate MiniSearch BM25 Lexical Index
       this.miniSearch.removeAll();
       this.miniSearch.addAll(chunks);
 
-      // 2. Pre-embed Knowledge Graph nodes if knowledge graph attached
       if (this.knowledgeGraph) {
         await this.knowledgeGraph.indexNodeEmbeddings(this.modelProvider);
       }
 
-      // 3. Insert embeddings into pgvector (concurrent batch embedding)
       if (this.pgClient) {
         await this.initPgvector();
         await this.pgClient`DELETE FROM rag_corpus_chunks;`;

@@ -76,7 +76,6 @@ export class NormativeKnowledgeGraph {
 
   private initDefaultGraph(): void {
     const defaultNodes: KnowledgeGraphNode[] = [
-      // GDPR Articles
       {
         id: "gdpr:art33.1",
         kind: "article",
@@ -132,8 +131,6 @@ export class NormativeKnowledgeGraph {
         kind: "article",
         label: "GDPR Art 34(4) supervisory authority override",
       },
-
-      // ISO 27701 Clauses and Controls
       {
         id: "iso:b.3.11",
         kind: "clause",
@@ -216,8 +213,6 @@ export class NormativeKnowledgeGraph {
         kind: "clause",
         label: "ISO 27701 10.2 nonconformity and corrective action (steps a-e)",
       },
-
-      // Catalogs & Enums
       { id: "cat:dl", kind: "catalog", label: "DL: Fuga o pérdida de datos" },
       { id: "cat:ua", kind: "catalog", label: "UA: Acceso no autorizado" },
       { id: "cat:action_c", kind: "catalog", label: "C: Contención" },
@@ -270,7 +265,6 @@ export class NormativeKnowledgeGraph {
       });
     }
 
-    // Default Node to Chunk mappings for core compliance anchors
     this.mapNodeToChunk("gdpr:art33.1", "art33");
     this.mapNodeToChunk("gdpr:art33.2", "art33");
     this.mapNodeToChunk("gdpr:art33.3", "art33");
@@ -388,9 +382,6 @@ export class NormativeKnowledgeGraph {
     return chunkScores;
   }
 
-  /**
-   * Pre-embed all Knowledge Graph nodes for dense bi-encoder anchor resolution.
-   */
   async indexNodeEmbeddings(modelProvider: ModelProvider): Promise<void> {
     const nodeIds = this.graph.nodes();
     const nodes = nodeIds
@@ -413,10 +404,6 @@ export class NormativeKnowledgeGraph {
     }
   }
 
-  /**
-   * Dense Bi-Encoder anchor matching: computes cosine similarity between
-   * query embedding vector and pre-embedded Knowledge Graph nodes.
-   */
   findAnchorsByVector(
     queryVector: number[],
     minSimilarity = DEFAULT_ANCHOR_SIMILARITY_THRESHOLD,
@@ -454,11 +441,6 @@ export class NormativeKnowledgeGraph {
     return scored.slice(0, topK).map((item) => item.id);
   }
 
-  /**
-   * Dense Bi-Encoder query anchor resolution: embeds the query using ModelProvider
-   * and computes cosine similarity against pre-embedded Knowledge Graph nodes.
-   * Completely non-heuristic.
-   */
   async findAnchorsInQuery(
     query: string,
     modelProvider: ModelProvider,

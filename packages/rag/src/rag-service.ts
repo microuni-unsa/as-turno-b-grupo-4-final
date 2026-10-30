@@ -130,7 +130,6 @@ Keep the response concise and strictly valid JSON.`;
       };
     }
 
-    // Filter passages meeting minScore
     const eligible = passages.filter((p) => p.score >= this.minScore);
     if (eligible.length === 0) {
       return {
@@ -140,7 +139,6 @@ Keep the response concise and strictly valid JSON.`;
       };
     }
 
-    // If top passages score very high (>= 0.65), grade is supported
     const topScore = eligible[0]?.score ?? 0;
     if (topScore >= 0.65) {
       return {
@@ -150,7 +148,6 @@ Keep the response concise and strictly valid JSON.`;
       };
     }
 
-    // Moderate scores (between minScore and 0.65) are ambiguous
     return {
       grade: "ambiguous",
       reason: `Moderate passage confidence (top score ${topScore})`,
@@ -203,7 +200,6 @@ Keep the response concise and strictly valid JSON.`;
     const startTime = Date.now();
     const normativeOnly = Boolean(options.normative_only);
 
-    // Verify corpus version if specified
     const activeVersion = this.indexer.getVersion();
     if (
       options.expected_version &&
@@ -214,10 +210,8 @@ Keep the response concise and strictly valid JSON.`;
       );
     }
 
-    // 1. Agentic Query Decomposition & HyDE Expansion
     const decomposed = await this.decomposeAndHyde(userQuery);
 
-    // Check timeout
     if (Date.now() - startTime > this.timeoutMs) {
       throw new ModelUnavailableError(
         "rag",
@@ -225,8 +219,6 @@ Keep the response concise and strictly valid JSON.`;
       );
     }
 
-    // 2. Parallel Tri-Modal Search
-    // Modal 1: Query Vector Embedding & pgvector Dense Search
     const embRes = await this.modelProvider.embed({ texts: [userQuery] });
     const qVec = embRes.vectors[0];
     if (!qVec) {
@@ -239,7 +231,6 @@ Keep the response concise and strictly valid JSON.`;
     const pgvectorHits = await this.indexer.searchPgvector(qVec, 30);
     const denseRankings = pgvectorHits.map((h) => h.chunk_id);
 
-    // Modal 3: Knowledge Graph Dense Bi-Encoder Anchors + Personalized PageRank (PPR)
     const biEncoderAnchors = this.knowledgeGraph.findAnchorsByVector(qVec);
     const allAnchors = Array.from(
       new Set([...decomposed.graph_anchors, ...biEncoderAnchors]),
@@ -252,7 +243,6 @@ Keep the response concise and strictly valid JSON.`;
       .sort((a, b) => b[1] - a[1])
       .map(([cid]) => cid);
 
-    // Modal 2: MiniSearch BM25 search with query, sub-queries, and anchor labels
     const anchorLabels = allAnchors
       .map((a) => this.knowledgeGraph.getNode(a)?.label ?? "")
       .filter(Boolean)
@@ -263,14 +253,12 @@ Keep the response concise and strictly valid JSON.`;
     );
     const bm25Rankings = bm25Hits.map((h) => h.chunk_id);
 
-    // 3. 3-Way Reciprocal Rank Fusion (RRF)
     const rrfMap = this.calculateRRF(denseRankings, bm25Rankings, pprRankings);
     const fusedCandidateIds = Array.from(rrfMap.entries())
       .sort((a, b) => b[1] - a[1])
       .map(([id]) => id)
       .slice(0, this.topK);
 
-    // Hydrate candidate passages
     const candidatePassages: Passage[] = [];
     for (const cid of fusedCandidateIds) {
       const chunk = this.indexer.getChunk(cid);
@@ -289,13 +277,11 @@ Keep the response concise and strictly valid JSON.`;
       }
     }
 
-    // 4. Cross-encoder / LLM Reranking
     const rerankRes = await this.modelProvider.rerank({
       query: userQuery,
       passages: candidatePassages,
     });
 
-    // Blend reranker relevance with Knowledge Graph PPR activation score
     const blendedRanked = rerankRes.ranked.map((p) => {
       const pprVal = chunkPprMap.get(p.chunk_id) ?? 0;
       const combinedScore = Number(
@@ -310,10 +296,8 @@ Keep the response concise and strictly valid JSON.`;
 
     const topPassages = blendedRanked.slice(0, this.rerankK);
 
-    // 5. Corrective RAG (CRAG) Self-Grading
     let cragResult = await this.cragGrade(userQuery, topPassages);
 
-    // If ambiguous and rewrite is available, attempt one query rewrite loop
     if (cragResult.grade === "ambiguous" && cragResult.rewritten_query) {
       const rewriteBm25 = this.indexer.searchFts5(
         cragResult.rewritten_query,
@@ -348,7 +332,6 @@ Keep the response concise and strictly valid JSON.`;
       );
     }
 
-    // 6. Generate citations
     const citations: string[] = [];
     for (const p of cragResult.passed_passages) {
       const cite = this.formatCitation(p);

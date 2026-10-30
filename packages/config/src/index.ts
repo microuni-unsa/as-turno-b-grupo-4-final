@@ -237,7 +237,6 @@ export function loadConfig(
 ): AgentConfig {
   const env = customEnv ?? process.env;
 
-  // Strict constant enforcement for LOG_PII
   if (
     env.LOG_PII !== undefined &&
     (env.LOG_PII === "true" || (env.LOG_PII as unknown) === true)
@@ -248,7 +247,6 @@ export function loadConfig(
     );
   }
 
-  // Required keys
   const pimsBaseUrl = env.PIMS_BASE_URL ?? DEFAULT_PIMS_BASE_URL;
   try {
     new URL(pimsBaseUrl);
@@ -287,7 +285,6 @@ export function loadConfig(
     );
   }
 
-  // Models
   if (!env.REASONING_MODEL) {
     throw new ConfigError(
       "REASONING_MODEL is required",
@@ -345,7 +342,6 @@ export function loadConfig(
     );
   }
 
-  // Subject Notice Policy
   const subjectNoticePolicy = env.SUBJECT_NOTICE_POLICY ?? "high_risk_only";
   if (subjectNoticePolicy !== "high_risk_only") {
     throw new ConfigError(
@@ -354,7 +350,6 @@ export function loadConfig(
     );
   }
 
-  // Attachment max mb
   const attachmentMaxMb = env.ATTACHMENT_MAX_MB
     ? Number.parseInt(env.ATTACHMENT_MAX_MB, 10)
     : MAX_ATTACHMENT_SIZE_MB;
@@ -371,7 +366,6 @@ export function loadConfig(
     );
   }
 
-  // Evidence hash
   const evidenceHash = env.EVIDENCE_HASH ?? "sha256";
   if (evidenceHash !== "sha256") {
     throw new ConfigError(

@@ -1,9 +1,5 @@
 import { z } from "zod";
 
-// ============================================================================
-// 1. Catalogs & Constants (Spec §3.5 & SPA bundle Y2e, W2e, X2e)
-// ============================================================================
-
 export const AFFECTED_DATA_TYPES_ES = [
   "identificativos",
   "contacto",
@@ -98,10 +94,6 @@ export const RISK_EVAL_STATUSES = ["B", "O", "T", "C"] as const;
 export const ASSET_RELEVANCES = ["BAJO", "MEDIO", "ALTO", "CRITICO"] as const;
 export const FORM_MEASURE_VALUES = ["Y", "N", "U"] as const;
 
-// ============================================================================
-// 2. Base Zod Schemas
-// ============================================================================
-
 export const AuditModelSchema = z.object({
   created_at: z.string(),
   created_by: z.number().nullable().optional(),
@@ -154,10 +146,6 @@ export const TokenRefreshRequestSchema = z.object({
 export const TokenRefreshResponseSchema = z.object({
   access: z.string().min(1),
 });
-
-// ============================================================================
-// 3. Incident Schemas
-// ============================================================================
 
 export const PimsIncidentActionSchema = z.object({
   id: z.number().optional(),
@@ -347,10 +335,6 @@ export const PimsIncidentCreateSchema = z.object({
 
 export const PimsIncidentUpdateSchema = PimsIncidentCreateSchema.partial();
 
-// ============================================================================
-// 4. Audit Schemas
-// ============================================================================
-
 export const PimsAuditActionPlanSchema = z.object({
   id: z.number().optional(),
   finding: z.number().optional(),
@@ -420,10 +404,6 @@ export const PimsAuditCreateSchema = z.object({
 });
 
 export const PimsAuditUpdateSchema = PimsAuditCreateSchema.partial();
-
-// ============================================================================
-// 5. Risk & Asset Schemas
-// ============================================================================
 
 export const PimsRiskPeriodSchema = z.object({
   id: z.number(),
@@ -530,10 +510,6 @@ export const PimsAssetSchema = AuditModelSchema.extend({
   relevance: z.enum(ASSET_RELEVANCES),
 });
 
-// ============================================================================
-// 6. Dashboard & Annex A Schemas
-// ============================================================================
-
 export const PimsDashboardTabSchema = z.object({
   key: z.string(),
   label: z.string(),
@@ -611,10 +587,6 @@ export const PimsAnnexAMetaResponseSchema = z.object({
 });
 export const AnnexAControlsMetaSchema = PimsAnnexAMetaResponseSchema;
 
-// ============================================================================
-// 7. Generic Paginated Result Helper
-// ============================================================================
-
 export function paginatedResultSchema<T extends z.ZodTypeAny>(itemSchema: T) {
   return z.object({
     count: z.number(),
@@ -624,7 +596,6 @@ export function paginatedResultSchema<T extends z.ZodTypeAny>(itemSchema: T) {
   });
 }
 
-// Inferred TypeScript Types
 export type AuditModel = z.infer<typeof AuditModelSchema>;
 export type UserSummary = z.infer<typeof UserSummarySchema>;
 export type UserProfile = z.infer<typeof UserProfileSchema>;

@@ -76,7 +76,6 @@ export function buildPimsApp(
 
   app.use("*", cors());
 
-  // Helper to query full incident with all 57 keys
   const getFullIncident = async (incidentId: number) => {
     const incidents = await db
       .select()
@@ -230,7 +229,6 @@ export function buildPimsApp(
     };
   };
 
-  // Auth & Schema Middleware
   app.use(async (c, next) => {
     const simError = c.req.header("X-Simulate-Error");
     if (simError === "403_LICENSE") {
@@ -261,7 +259,6 @@ export function buildPimsApp(
     return next();
   });
 
-  // E01: POST /business/login/
   app.post("/business/login/", async (c) => {
     const body = await c.req.json().catch(() => ({}));
     if (!body.username || !body.password) {
@@ -307,7 +304,6 @@ export function buildPimsApp(
     });
   });
 
-  // E02: POST /business/token/refresh/
   app.post("/business/token/refresh/", async (c) => {
     const body = await c.req.json().catch(() => ({}));
     if (!body.refresh) {
@@ -318,7 +314,6 @@ export function buildPimsApp(
     });
   });
 
-  // E03: GET /business/info/
   app.get("/business/info/", async (c) => {
     const clients = await db
       .select()
@@ -331,7 +326,6 @@ export function buildPimsApp(
     });
   });
 
-  // E04: GET /business/profile/
   app.get("/business/profile/", async (c) => {
     const users = await db
       .select()
@@ -358,7 +352,6 @@ export function buildPimsApp(
     });
   });
 
-  // E05: GET /api/incidents/
   app.get("/api/incidents/", async (c) => {
     const search = c.req.query("search");
     const status = c.req.query("status");
@@ -405,7 +398,6 @@ export function buildPimsApp(
     });
   });
 
-  // E06: POST /api/incidents/
   app.post("/api/incidents/", async (c) => {
     const body = await c.req.json().catch(() => ({}));
 
@@ -429,7 +421,6 @@ export function buildPimsApp(
       );
     }
 
-    // Auto-generate INC-###
     const countRes = await db
       .select({ count: sql<number>`count(*)::int` })
       .from(coreIncident);
@@ -501,7 +492,6 @@ export function buildPimsApp(
       return c.json({ detail: "Error creando incidente" }, 500);
     }
 
-    // Insert initial history
     await db.insert(coreIncidentHistory).values({
       incident_id: newInc.id,
       event_type: "created",
@@ -512,7 +502,6 @@ export function buildPimsApp(
       recipients_snapshot: [],
     });
 
-    // Insert actions if any
     if (Array.isArray(body.actions)) {
       for (let i = 0; i < body.actions.length; i++) {
         const act = body.actions[i];
@@ -534,7 +523,6 @@ export function buildPimsApp(
     return c.json(full, 201);
   });
 
-  // E07: GET /api/incidents/:id/
   app.get("/api/incidents/:id/", async (c) => {
     const id = Number.parseInt(c.req.param("id"), 10);
     const full = await getFullIncident(id);
@@ -544,7 +532,6 @@ export function buildPimsApp(
     return c.json(full);
   });
 
-  // E08: PATCH /api/incidents/:id/
   app.patch("/api/incidents/:id/", async (c) => {
     const id = Number.parseInt(c.req.param("id"), 10);
     const existing = await getFullIncident(id);
@@ -624,7 +611,6 @@ export function buildPimsApp(
       .set(updateFields)
       .where(eq(coreIncident.id, id));
 
-    // Nested array actions mutation
     if (Array.isArray(body.actions)) {
       if (nestedActionMode === "replace") {
         await db
@@ -645,7 +631,6 @@ export function buildPimsApp(
       }
     }
 
-    // Insert history
     await db.insert(coreIncidentHistory).values({
       incident_id: id,
       event_type: "updated",
@@ -660,7 +645,6 @@ export function buildPimsApp(
     return c.json(full, 200);
   });
 
-  // E09: DELETE /api/incidents/:id/
   app.delete("/api/incidents/:id/", async (c) => {
     const id = Number.parseInt(c.req.param("id"), 10);
     const existing = await getFullIncident(id);
@@ -674,7 +658,6 @@ export function buildPimsApp(
     return c.body(null, 204);
   });
 
-  // E10: GET /api/incidents/:id/history/
   app.get("/api/incidents/:id/history/", async (c) => {
     const id = Number.parseInt(c.req.param("id"), 10);
     const historyRows = await db
@@ -710,7 +693,6 @@ export function buildPimsApp(
     );
   });
 
-  // E11: GET /api/incidents/:id/attachments/
   app.get("/api/incidents/:id/attachments/", async (c) => {
     const id = Number.parseInt(c.req.param("id"), 10);
     const attachments = await db
@@ -747,7 +729,6 @@ export function buildPimsApp(
     );
   });
 
-  // E12: POST /api/incidents/:id/attachments/
   app.post("/api/incidents/:id/attachments/", async (c) => {
     const id = Number.parseInt(c.req.param("id"), 10);
     const existing = await getFullIncident(id);
@@ -787,7 +768,6 @@ export function buildPimsApp(
     );
   });
 
-  // E13: POST /api/incidents/:id/notify/
   app.post("/api/incidents/:id/notify/", async (c) => {
     const id = Number.parseInt(c.req.param("id"), 10);
     const existing = await getFullIncident(id);
@@ -810,7 +790,6 @@ export function buildPimsApp(
       );
     }
 
-    // Record notification in history
     await db.insert(coreIncidentHistory).values({
       incident_id: id,
       event_type: "notified",
@@ -825,7 +804,6 @@ export function buildPimsApp(
     return c.json(full, 200);
   });
 
-  // E14: GET /api/incident-recipients/
   app.get("/api/incident-recipients/", async (c) => {
     const recipients = await db
       .select()
@@ -846,7 +824,6 @@ export function buildPimsApp(
     });
   });
 
-  // E15: POST /api/incident-recipients/
   app.post("/api/incident-recipients/", async (c) => {
     const body = await c.req.json().catch(() => ({}));
     const parsed = PimsIncidentRecipientCreateSchema.safeParse(body);
@@ -893,7 +870,6 @@ export function buildPimsApp(
     );
   });
 
-  // E16: DELETE /api/incident-recipients/:id/
   app.delete("/api/incident-recipients/:id/", async (c) => {
     const id = Number.parseInt(c.req.param("id"), 10);
     const existing = await db
@@ -912,7 +888,6 @@ export function buildPimsApp(
     return c.body(null, 204);
   });
 
-  // E17: GET /api/audits/
   app.get("/api/audits/", async (c) => {
     const audits = await db
       .select()
@@ -963,7 +938,6 @@ export function buildPimsApp(
     });
   });
 
-  // E18: POST /api/audits/
   app.post("/api/audits/", async (c) => {
     const body = await c.req.json().catch(() => ({}));
     const parsed = PimsAuditCreateSchema.safeParse(body);
@@ -1033,7 +1007,6 @@ export function buildPimsApp(
     );
   });
 
-  // E19: PATCH /api/audits/:id/
   app.patch("/api/audits/:id/", async (c) => {
     const rawId = c.req.param("id");
     const id = Number.parseInt(rawId, 10);
@@ -1126,7 +1099,6 @@ export function buildPimsApp(
     });
   });
 
-  // E20: GET /api/risk-evaluations/
   app.get("/api/risk-evaluations/", async (c) => {
     const risks = await db
       .select()
@@ -1156,7 +1128,6 @@ export function buildPimsApp(
     });
   });
 
-  // E21: POST /api/risk-evaluations/
   app.post("/api/risk-evaluations/", async (c) => {
     const body = await c.req.json().catch(() => ({}));
     if (!Array.isArray(body.assets) || body.assets.length === 0) {
@@ -1263,12 +1234,10 @@ export function buildPimsApp(
     );
   });
 
-  // E22: GET /api/risk-evaluations/catalogs/
   app.get("/api/risk-evaluations/catalogs/", (c) => {
     return c.json(riskCatalogs);
   });
 
-  // E23: GET /api/risk-evaluations/eligible-assets/
   app.get("/api/risk-evaluations/eligible-assets/", async (c) => {
     const assets = await db
       .select()
@@ -1289,7 +1258,6 @@ export function buildPimsApp(
     });
   });
 
-  // E24: GET /api/assets/
   app.get("/api/assets/", async (c) => {
     const assets = await db
       .select()
@@ -1327,12 +1295,10 @@ export function buildPimsApp(
     });
   });
 
-  // E25: GET /api/dashboard/
   app.get("/api/dashboard/", (c) => {
     return c.json(dashboardKpis);
   });
 
-  // E26: GET /api/annex-a-controls/meta/
   app.get("/api/annex-a-controls/meta/", (c) => {
     return c.json(annexMeta);
   });

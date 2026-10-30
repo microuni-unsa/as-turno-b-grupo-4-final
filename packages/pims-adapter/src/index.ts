@@ -107,8 +107,6 @@ export class PimsAdapter {
     }
   }
 
-  // --- Endpoints E01-E04 Auth ---
-
   async login(
     username?: string,
     password?: string,
@@ -201,8 +199,6 @@ export class PimsAdapter {
     return parsed.data;
   }
 
-  // --- Endpoints E05-E13 Incidents ---
-
   async listIncidents(params?: {
     search?: string;
     status?: string;
@@ -234,7 +230,6 @@ export class PimsAdapter {
 
     let results = parsed.data.results;
 
-    // Spec §3.1 E05: If severity or incident_type filter was ignored by backend, filter client-side and log warning
     if (params?.severity) {
       const ignored = results.some((i) => i.severity !== params.severity);
       if (ignored) {
@@ -403,8 +398,6 @@ export class PimsAdapter {
     return parsed.data;
   }
 
-  // --- Endpoints E14-E16 Incident Recipients ---
-
   async listRecipients(): Promise<PaginatedResult<PimsIncidentRecipient>> {
     const raw = await this.request<unknown>(
       "GET",
@@ -450,8 +443,6 @@ export class PimsAdapter {
       operation: "delete_recipient",
     });
   }
-
-  // --- Endpoints E17-E19 Audits ---
 
   async listAudits(params?: {
     status?: string;
@@ -502,8 +493,6 @@ export class PimsAdapter {
     }
     return parsed.data;
   }
-
-  // --- Endpoints E20-E24 Risks & Assets ---
 
   async listRiskEvaluations(): Promise<PaginatedResult<PimsRiskEvaluation>> {
     const raw = await this.request<unknown>("GET", "/api/risk-evaluations/", {
@@ -589,8 +578,6 @@ export class PimsAdapter {
     return parsed.data;
   }
 
-  // --- Endpoints E25-E26 Dashboard & Annex A ---
-
   async getDashboardKpis(tab = "summary"): Promise<PimsDashboardResponse> {
     const raw = await this.request<unknown>(
       "GET",
@@ -626,8 +613,6 @@ export class PimsAdapter {
     }
     return parsed.data;
   }
-
-  // --- Startup Probes ---
 
   async probeNestedArrayMutationStrategy(): Promise<"replace" | "merge"> {
     const throwaway = await this.createIncident({
@@ -764,8 +749,6 @@ export class PimsAdapter {
     }
   }
 
-  // --- HTTP Request Core ---
-
   private async request<T>(
     method: "GET" | "POST" | "PATCH" | "DELETE",
     endpoint: string,
@@ -839,7 +822,6 @@ export class PimsAdapter {
       );
     }
 
-    // Handle 401 unauthorized: check bad_authorization_header bug vs normal token expiry
     if (response.status === 401 && !options.isPublic) {
       const rawBody = await response.text().catch(() => "");
       let parsedBody: Record<string, unknown> = {};
@@ -874,7 +856,6 @@ export class PimsAdapter {
       );
     }
 
-    // Handle 429 rate limit
     if (response.status === 429) {
       if (attempt <= 3) {
         const backoff =
@@ -890,7 +871,6 @@ export class PimsAdapter {
       throw new PimsThrottledError("PIMS rate limit exceeded (HTTP 429)");
     }
 
-    // Handle 5xx server failure
     if (response.status >= 500) {
       const rawError = await response.text().catch(() => "");
       console.error(`PIMS HTTP ${response.status} at ${endpoint}:`, rawError);
@@ -910,12 +890,10 @@ export class PimsAdapter {
       );
     }
 
-    // Handle 204 No Content
     if (response.status === 204) {
       return undefined as unknown as T;
     }
 
-    // Parse Response
     let data: unknown;
     const rawText = await response.text();
     try {
@@ -931,7 +909,6 @@ export class PimsAdapter {
       return data as T;
     }
 
-    // Handle HTTP 400 validation and errors
     if (response.status === 400) {
       const errObj = data as Record<string, unknown>;
       if (
@@ -940,7 +917,6 @@ export class PimsAdapter {
       ) {
         throw new NotifyNoRecipientsError(errObj.detail);
       }
-      // DRF field errors: {"field": ["msg"]}
       const keys = Object.keys(errObj);
       if (keys.length > 0 && Array.isArray(errObj[keys[0] as string])) {
         const firstField = keys[0] as string;
@@ -957,7 +933,6 @@ export class PimsAdapter {
       );
     }
 
-    // Handle HTTP 403 Forbidden
     if (response.status === 403) {
       const errObj = data as Record<string, unknown>;
       if (
@@ -973,7 +948,6 @@ export class PimsAdapter {
       );
     }
 
-    // Handle HTTP 404 Not Found
     if (response.status === 404) {
       const match = endpoint.match(/\/api\/([^/]+)\/(?:(\d+)\/)?/);
       const model = match?.[1] ?? "resource";
@@ -981,7 +955,6 @@ export class PimsAdapter {
       throw new PimsNotFoundError(model, id);
     }
 
-    // Handle HTTP 409 Conflict
     if (response.status === 409) {
       throw new PimsConflictCodeError("Resource conflict code");
     }
@@ -1022,12 +995,10 @@ export class PimsAdapter {
         await this.refreshToken();
         return true;
       } catch {
-        // Refresh token failed, clear and proceed to primary re-login once
         this.refreshTokenVal = null;
       }
     }
 
-    // Single primary authentication attempt
     if (this.username && this.password) {
       await this.login(this.username, this.password);
       return true;

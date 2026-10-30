@@ -1,10 +1,3 @@
-/**
- * PIMS Error Taxonomy
- *
- * Implements named error hierarchy per §3.6 of Agente de Incidentes specification.
- * Every failure branch in PIMS operations maps deterministically to an explicit named error.
- */
-
 import type { JsonObject } from "@pims/types/models.ts";
 
 export type PimsErrorDetails = JsonObject | undefined;
@@ -22,9 +15,6 @@ export class PimsBaseError extends Error {
   }
 }
 
-/**
- * Configuration loading and decryption errors.
- */
 export class ConfigError extends PimsBaseError {
   constructor(
     message: string,
@@ -35,10 +25,6 @@ export class ConfigError extends PimsBaseError {
   }
 }
 
-/**
- * Validation failure (HTTP 400 with field errors).
- * Code: PIMS_VALIDATION:<field>
- */
 export class PimsValidationError extends PimsBaseError {
   readonly field: string;
   readonly fields?: Record<string, string[]>;
@@ -57,10 +43,6 @@ export class PimsValidationError extends PimsBaseError {
   }
 }
 
-/**
- * Authentication failure (HTTP 401 with missing/invalid/expired token or schema mismatch).
- * Code: PIMS_AUTH_FAILED
- */
 export class PimsAuthFailedError extends PimsBaseError {
   constructor(
     message = "PIMS authentication failed",
@@ -70,10 +52,6 @@ export class PimsAuthFailedError extends PimsBaseError {
   }
 }
 
-/**
- * Client-side malformed authorization header or request format bug.
- * Code: PIMS_CLIENT_BUG
- */
 export class PimsClientBugError extends PimsBaseError {
   constructor(
     message = "PIMS client bug / malformed authorization header",
@@ -83,10 +61,6 @@ export class PimsClientBugError extends PimsBaseError {
   }
 }
 
-/**
- * License or platform gate blocked (HTTP 403 LICENSE_EXPIRED / SERVICE_SUSPENDED / DOCUMENT_LIMIT_REACHED).
- * Code: PIMS_GATE_BLOCKED:<code>
- */
 export class PimsGateBlockedError extends PimsBaseError {
   readonly gateCode: string;
 
@@ -97,10 +71,6 @@ export class PimsGateBlockedError extends PimsBaseError {
   }
 }
 
-/**
- * Missing module permission for endpoint (HTTP 403).
- * Code: PIMS_PERMISSION_DENIED:<endpoint>
- */
 export class PimsPermissionDeniedError extends PimsBaseError {
   readonly endpoint: string;
 
@@ -111,10 +81,6 @@ export class PimsPermissionDeniedError extends PimsBaseError {
   }
 }
 
-/**
- * Resource not found or tenant boundary isolation (HTTP 404).
- * Code: PIMS_NOT_FOUND:<model>:<id>
- */
 export class PimsNotFoundError extends PimsBaseError {
   readonly model: string;
   readonly entityId: string | number;
@@ -132,10 +98,6 @@ export class PimsNotFoundError extends PimsBaseError {
   }
 }
 
-/**
- * Conflict on system code sequence or unique key (HTTP 409).
- * Code: PIMS_CONFLICT_CODE
- */
 export class PimsConflictCodeError extends PimsBaseError {
   constructor(
     message = "PIMS conflict on code sequence or unique constraint",
@@ -145,10 +107,6 @@ export class PimsConflictCodeError extends PimsBaseError {
   }
 }
 
-/**
- * Request throttled by rate limit (HTTP 429).
- * Code: PIMS_THROTTLED
- */
 export class PimsThrottledError extends PimsBaseError {
   constructor(
     message = "PIMS request throttled (HTTP 429)",
@@ -158,10 +116,6 @@ export class PimsThrottledError extends PimsBaseError {
   }
 }
 
-/**
- * Server failure (HTTP 5xx) after exhausting retries.
- * Code: PIMS_UNAVAILABLE
- */
 export class PimsUnavailableError extends PimsBaseError {
   constructor(
     message = "PIMS service unavailable (HTTP 5xx)",
@@ -171,10 +125,6 @@ export class PimsUnavailableError extends PimsBaseError {
   }
 }
 
-/**
- * List resource returned empty results when non-empty was expected.
- * Code: PIMS_EMPTY_LIST:<resource>
- */
 export class PimsEmptyListError extends PimsBaseError {
   readonly resource: string;
 
@@ -185,10 +135,6 @@ export class PimsEmptyListError extends PimsBaseError {
   }
 }
 
-/**
- * Attachment file missing or 404 on download URL.
- * Code: PIMS_ATTACHMENT_MISSING:<id>
- */
 export class PimsAttachmentMissingError extends PimsBaseError {
   readonly attachmentId: string | number;
 
@@ -203,10 +149,6 @@ export class PimsAttachmentMissingError extends PimsBaseError {
   }
 }
 
-/**
- * E13 notification attempted with zero active recipients configured.
- * Code: NOTIFY_NO_RECIPIENTS
- */
 export class NotifyNoRecipientsError extends PimsBaseError {
   constructor(
     message = "No active recipients configured for notification",
@@ -216,10 +158,6 @@ export class NotifyNoRecipientsError extends PimsBaseError {
   }
 }
 
-/**
- * Attempted write into a closed or inactive risk period.
- * Code: RISK_PERIOD_CLOSED
- */
 export class RiskPeriodClosedError extends PimsBaseError {
   constructor(
     message = "Risk period is closed or inactive (read-only)",
@@ -229,10 +167,6 @@ export class RiskPeriodClosedError extends PimsBaseError {
   }
 }
 
-/**
- * Annex A control selected in treatment is not marked applicable in Statement of Applicability (SoA).
- * Code: CONTROL_NOT_APPLICABLE
- */
 export class ControlNotApplicableError extends PimsBaseError {
   constructor(
     message = "Annex A control is not applicable in SoA",
@@ -242,10 +176,6 @@ export class ControlNotApplicableError extends PimsBaseError {
   }
 }
 
-/**
- * PIMS error response body shape could not be parsed as standard DRF.
- * Code: PIMS_ERROR_SHAPE_UNKNOWN
- */
 export class PimsErrorShapeUnknownError extends PimsBaseError {
   readonly rawBody?: string;
 
@@ -263,10 +193,6 @@ export class PimsErrorShapeUnknownError extends PimsBaseError {
   }
 }
 
-/**
- * Unknown code received from PIMS catalog or enum.
- * Code: PIMS_UNKNOWN_CODE:<field>:<code>
- */
 export class PimsUnknownCodeError extends PimsBaseError {
   readonly field: string;
   readonly unknownCode: string;
@@ -285,10 +211,6 @@ export class PimsUnknownCodeError extends PimsBaseError {
   }
 }
 
-/**
- * Model provider route unavailable (HTTP 5xx, quota exhaustion, circuit open, timeout).
- * Code: MODEL_UNAVAILABLE:<route>:<reason>
- */
 export class ModelUnavailableError extends PimsBaseError {
   readonly route: string;
   readonly reason: string;
@@ -304,10 +226,6 @@ export class ModelUnavailableError extends PimsBaseError {
   }
 }
 
-/**
- * Model output failed schema validation.
- * Code: MODEL_SCHEMA_VIOLATION:<route>
- */
 export class ModelSchemaViolationError extends PimsBaseError {
   readonly route: string;
 
@@ -317,10 +235,6 @@ export class ModelSchemaViolationError extends PimsBaseError {
   }
 }
 
-/**
- * All candidate retrieval passages dropped below RAG_MIN_SCORE threshold.
- * Code: RAG_NO_EVIDENCE
- */
 export class RagNoEvidenceError extends PimsBaseError {
   constructor(
     message = "No normative or grounding evidence found meeting minimum score threshold",
@@ -330,10 +244,6 @@ export class RagNoEvidenceError extends PimsBaseError {
   }
 }
 
-/**
- * RAG query-time corpus SHA-256 version does not match ingest version.
- * Code: RAG_CORPUS_STALE
- */
 export class RagCorpusStaleError extends PimsBaseError {
   constructor(
     message = "RAG corpus is stale; ingest SHA-256 does not match active version",
@@ -343,10 +253,6 @@ export class RagCorpusStaleError extends PimsBaseError {
   }
 }
 
-/**
- * Concurrent single-writer RAG ingestion attempted when another ingest is active.
- * Code: RAG_INGEST_LOCKED
- */
 export class RagIngestLockedError extends PimsBaseError {
   constructor(
     message = "RAG ingestion lock held by another process",
@@ -356,10 +262,6 @@ export class RagIngestLockedError extends PimsBaseError {
   }
 }
 
-/**
- * Automated RAG evaluation gate failed for a query.
- * Code: RAG_EVAL_FAILED:<qid>
- */
 export class RagEvalFailedError extends PimsBaseError {
   readonly qid: string;
 
@@ -369,10 +271,6 @@ export class RagEvalFailedError extends PimsBaseError {
   }
 }
 
-/**
- * Citation does not meet normative standards or threshold.
- * Code: CITATION_INVALID:<detail>
- */
 export class CitationInvalidError extends PimsBaseError {
   readonly detail: string;
 
@@ -383,10 +281,6 @@ export class CitationInvalidError extends PimsBaseError {
   }
 }
 
-/**
- * Chunk ID referenced in citation does not exist in corpus index.
- * Code: CITATION_FABRICATED:<chunk_id>
- */
 export class CitationFabricatedError extends PimsBaseError {
   readonly chunkId: string;
 
@@ -398,10 +292,6 @@ export class CitationFabricatedError extends PimsBaseError {
   }
 }
 
-/**
- * Knowledge graph or RAG index state error (e.g. unindexed node embeddings).
- * Code: RAG_INDEX_ERROR
- */
 export class RagIndexError extends PimsBaseError {
   constructor(message: string, details?: PimsErrorDetails) {
     super(message, "RAG_INDEX_ERROR", details);

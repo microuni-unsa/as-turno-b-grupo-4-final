@@ -324,7 +324,6 @@ export class CorpusLoader {
       chunks.push(...subChunks);
     }
 
-    // General ISO sliding windows
     for (let i = 0; i < totalLines; i += 60) {
       const start = i + 1;
       const end = Math.min(totalLines, i + 60);
@@ -478,7 +477,6 @@ export class CorpusLoader {
       chunks.push(...docChunks);
     }
 
-    // Composite version hash: deterministic sha256(sorted(file hashes))
     const sortedHashes = Object.keys(docHashes)
       .sort()
       .map((k) => `${k}:${docHashes[k]}`)

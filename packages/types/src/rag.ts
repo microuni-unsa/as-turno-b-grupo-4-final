@@ -1,10 +1,6 @@
 import { RankedPassageSchema } from "@pims/types/models.ts";
 import { z } from "zod";
 
-// ============================================================================
-// 1. Corpus Chunk & Ingestion Schemas
-// ============================================================================
-
 export const CorpusChunkSchema = z.object({
   chunk_id: z.string(),
   doc_id: z.string(),
@@ -39,10 +35,6 @@ export const CorpusSourceSchema = z.discriminatedUnion("type", [
   S3CorpusSourceSchema,
 ]);
 export type CorpusSource = z.infer<typeof CorpusSourceSchema>;
-
-// ============================================================================
-// 2. Knowledge Graph Schemas
-// ============================================================================
 
 export const KGNodeKindSchema = z.enum([
   "clause",
@@ -83,10 +75,6 @@ export const KnowledgeGraphDataSchema = z.object({
   edges: z.array(KnowledgeGraphEdgeSchema),
 });
 export type KnowledgeGraphData = z.infer<typeof KnowledgeGraphDataSchema>;
-
-// ============================================================================
-// 3. Retrieval, HyDE, CRAG Schemas
-// ============================================================================
 
 export const QueryDecompositionSchema = z.object({
   sub_queries: z.array(z.string()),

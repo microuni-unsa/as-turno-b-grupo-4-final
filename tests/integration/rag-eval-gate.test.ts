@@ -162,11 +162,9 @@ describe("Automated RAG Evaluation Gate (§7.6 Integration Suite)", () => {
   let indexer: RagIndexer;
 
   beforeAll(async () => {
-    // 1. Boot pgvector PostgreSQL Container
     container = await new PostgreSqlContainer("pgvector/pgvector:pg16").start();
     sql = postgres(container.getConnectionUri());
 
-    // 2. Initialize real OpenAIModelProvider instance with zero-cost Vitest spies
     const modelConfig = {
       provider: "openai",
       model: "gpt-4o",
@@ -187,13 +185,11 @@ describe("Automated RAG Evaluation Gate (§7.6 Integration Suite)", () => {
       baseURL: "https://api.openai.com/v1",
     });
 
-    // Zero-Cost Spy: Deterministic Vector Embeddings for real pgvector & KG cosine operations
     vi.spyOn(modelProvider, "embed").mockImplementation(async ({ texts }) => {
       const vectors = texts.map((t) => generateDeterministicEmbedding(t));
       return { vectors };
     });
 
-    // Zero-Cost Spy: Query Decomposition & Target Knowledge Graph Anchor Detection
     vi.spyOn(modelProvider, "chat_json").mockImplementation(
       async ({ messages }) => {
         const promptContent = messages[0]?.content ?? "";
@@ -249,7 +245,6 @@ describe("Automated RAG Evaluation Gate (§7.6 Integration Suite)", () => {
       },
     );
 
-    // Zero-Cost Spy: Cross-encoder reranking based on query term overlap
     vi.spyOn(modelProvider, "rerank").mockImplementation(
       async ({ query, passages }) => {
         const queryWords = query.toLowerCase().match(/[a-z0-9_.]+/g) ?? [];
@@ -279,16 +274,13 @@ describe("Automated RAG Evaluation Gate (§7.6 Integration Suite)", () => {
       },
     );
 
-    // 4. Ingest Corpus with CorpusLoader from dedicated corpus/ directory
     const loader = new CorpusLoader({
       source: { type: "local", dirPath: "corpus" },
     });
     const corpus = await loader.loadAll();
 
-    // 5. Setup Bipartite Knowledge Graph
     const knowledgeGraph = new NormativeKnowledgeGraph();
 
-    // 6. Index into pgvector + MiniSearch BM25 with batchSize 25
     indexer = new RagIndexer({
       modelProvider,
       pgClient: sql,
@@ -296,7 +288,6 @@ describe("Automated RAG Evaluation Gate (§7.6 Integration Suite)", () => {
     });
     await indexer.indexCorpus(corpus.chunks, corpus.version, 25);
 
-    // 7. Setup RAGService with Bipartite Knowledge Graph
     ragService = new RAGService({
       modelProvider,
       indexer,
@@ -329,10 +320,8 @@ describe("Automated RAG Evaluation Gate (§7.6 Integration Suite)", () => {
       const topPassage = res.passages[0];
       expect(topPassage).toBeDefined();
 
-      // Assert score >= 0.35 (§7.6 threshold)
       expect(topPassage?.score).toBeGreaterThanOrEqual(0.35);
 
-      // Verify that at least one of the top returned passages matches the expected document ID
       const matchingPassage = res.passages.find(
         (p) =>
           p.doc_id === q.expected_doc_id ||
@@ -343,7 +332,6 @@ describe("Automated RAG Evaluation Gate (§7.6 Integration Suite)", () => {
         `Expected at least one passage from document '${q.expected_doc_id}' for query ${q.qid}`,
       ).toBeDefined();
 
-      // Assert expected verbatim answer substrings in returned passages text (whitespace-normalized)
       const normalizedCombined = res.passages
         .map((p) => p.text.replace(/\s+/g, " "))
         .join(" ");
@@ -355,7 +343,6 @@ describe("Automated RAG Evaluation Gate (§7.6 Integration Suite)", () => {
         ).toContain(normalizedSubstr);
       }
 
-      // Assert citation format doc_id:chunk_id:lines
       expect(res.citations.length).toBeGreaterThan(0);
       for (const cite of res.citations) {
         expect(cite).toMatch(/^[^:]+:.+:\d+-\d+$/);

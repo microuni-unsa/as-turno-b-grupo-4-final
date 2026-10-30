@@ -25,7 +25,6 @@ describe("PIMS Client Adapter & Reverse-Engineered DRF API Integration Suite", (
   let adapter: PimsAdapter;
 
   beforeAll(async () => {
-    // 1. Resolve SQL initialization scripts strictly without fallback paths
     const projectRoot = process.cwd();
     const dumpPath = path.resolve(
       projectRoot,
@@ -39,7 +38,6 @@ describe("PIMS Client Adapter & Reverse-Engineered DRF API Integration Suite", (
       );
     }
 
-    // 2. Boot PostgreSQL container mounting autorun init scripts
     container = await new PostgreSqlContainer("postgres:16-alpine")
       .withBindMounts([
         {
@@ -55,15 +53,12 @@ describe("PIMS Client Adapter & Reverse-Engineered DRF API Integration Suite", (
       ])
       .start();
 
-    // 3. Connect Drizzle ORM client
     dbClient = createMockDatabase(container.getConnectionUri());
 
-    // 4. Launch reverse-engineered DRF test API server with Hono & Drizzle
     serverInstance = await createPimsTestServer(dbClient, {
       nestedActionMode: "replace",
     });
 
-    // 5. Initialize production PIMS adapter client
     adapter = new PimsAdapter({
       baseUrl: serverInstance.url,
       schema: "unsa",
@@ -238,12 +233,10 @@ describe("PIMS Client Adapter & Reverse-Engineered DRF API Integration Suite", (
     it("E09: logically deletes incident (setting is_deleted=true)", async () => {
       await adapter.deleteIncident(createdIncidentId);
 
-      // Verify E07 now raises PIMS_NOT_FOUND
       await expect(adapter.getIncident(createdIncidentId)).rejects.toThrowError(
         PimsNotFoundError,
       );
 
-      // Verify excluded from E05 list
       const list = await adapter.listIncidents();
       expect(list.results.some((i) => i.id === createdIncidentId)).toBe(false);
     });
@@ -265,7 +258,6 @@ describe("PIMS Client Adapter & Reverse-Engineered DRF API Integration Suite", (
     });
 
     it("E13: fails with NOTIFY_NO_RECIPIENTS when zero active recipients are configured", async () => {
-      // First ensure any active recipients are deleted
       const recipients = await adapter.listRecipients();
       for (const r of recipients.results) {
         await adapter.deleteRecipient(r.id);
@@ -444,7 +436,6 @@ describe("PIMS Client Adapter & Reverse-Engineered DRF API Integration Suite", (
     it("maps 400 field validation error to PimsValidationError", async () => {
       await expect(
         adapter.createIncident({
-          // missing title and incident_date
           involves_personal_data: true,
         } as unknown as {
           title: string;

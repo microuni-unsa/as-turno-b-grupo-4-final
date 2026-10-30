@@ -386,7 +386,6 @@ export class OpenAIModelProvider implements ModelProvider {
       }
     }
 
-    // Bi-encoder vector similarity + lexical scoring via embed()
     const queryEmbRes = await this.embed({ texts: [args.query] });
     const queryVector = queryEmbRes.vectors[0];
     if (!queryVector) {

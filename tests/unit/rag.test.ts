@@ -44,7 +44,6 @@ describe("Tri-Modal RAG Subsystem Unit Suite", () => {
       expect(corpus.version).toMatch(/^[a-f0-9]{64}$/);
       expect(corpus.chunks.length).toBeGreaterThan(10);
 
-      // Verify contextual header on chunks
       for (const chunk of corpus.chunks.slice(0, 10)) {
         expect(chunk.header).toMatch(
           /^\[DOC:[^|]+ \| CLAUSE:[^|]+ \| NORMATIVE:(true|false)\]$/,
@@ -52,7 +51,6 @@ describe("Tri-Modal RAG Subsystem Unit Suite", () => {
         expect(chunk.text.startsWith(chunk.header)).toBe(true);
       }
 
-      // Check key normative documents are present
       expect(corpus.docHashes["gdpr-full"]).toBeDefined();
       expect(corpus.docHashes.iso27701).toBeDefined();
     });
@@ -66,7 +64,6 @@ describe("Tri-Modal RAG Subsystem Unit Suite", () => {
       expect(kg.getNode("iso:b.3.12")).toBeDefined();
       expect(kg.getNode("cat:dl")).toBeDefined();
 
-      // Explicit fail-fast check: unindexed embeddings must throw RagIndexError
       expect(() => kg.findAnchorsByVector([1, 0, 0])).toThrow(RagIndexError);
 
       const anchors = ["gdpr:art33.1"];
@@ -95,11 +92,9 @@ describe("Tri-Modal RAG Subsystem Unit Suite", () => {
 
       await kg.indexNodeEmbeddings(dummyProvider);
 
-      // Query vector matching first node [1, 0, 0]
       const matchingAnchors = kg.findAnchorsByVector([1, 0, 0], 0.5, 3);
       expect(matchingAnchors.length).toBeGreaterThan(0);
 
-      // Query resolution via findAnchorsInQuery
       vi.spyOn(dummyProvider, "embed").mockResolvedValueOnce({
         vectors: [[1, 0, 0]],
       });
@@ -194,12 +189,10 @@ describe("Tri-Modal RAG Subsystem Unit Suite", () => {
       expect(cite).toBe("gdpr-full:art33:2171-2175");
       expect(() => ragService.validateCitation(cite, true)).not.toThrow();
 
-      // Fabricated chunk id
       expect(() =>
         ragService.validateCitation("gdpr-full:non_existent:1-10", true),
-      ).toThrowError(CitationFabricatedError);
+      ).toThrow(CitationFabricatedError);
 
-      // Malformed format
       expect(() =>
         ragService.validateCitation("invalid-format", true),
       ).toThrowError(CitationInvalidError);
@@ -211,13 +204,11 @@ describe("Tri-Modal RAG Subsystem Unit Suite", () => {
       });
       const kg = new NormativeKnowledgeGraph();
 
-      // Mock embed for node embeddings pre-computation
       vi.spyOn(dummyProvider, "embed").mockResolvedValueOnce({
         vectors: Array.from({ length: 60 }, () => [0.1, 0.2, 0.3]),
       });
       await kg.indexNodeEmbeddings(dummyProvider);
 
-      // Mock chat_json for query decomposition
       vi.spyOn(dummyProvider, "chat_json").mockResolvedValueOnce({
         content: {
           sub_queries: ["unrelated question"],
@@ -227,12 +218,10 @@ describe("Tri-Modal RAG Subsystem Unit Suite", () => {
         citations_requested: false,
       });
 
-      // Mock embed for query embedding
       vi.spyOn(dummyProvider, "embed").mockResolvedValueOnce({
         vectors: [[0.1, 0.2, 0.3]],
       });
 
-      // Mock reranker returning low score < 0.35
       vi.spyOn(dummyProvider, "rerank").mockResolvedValueOnce({
         ranked: [
           {

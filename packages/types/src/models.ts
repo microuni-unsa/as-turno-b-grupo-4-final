@@ -1,9 +1,5 @@
 import { z } from "zod";
 
-// ============================================================================
-// 0. Strict JSON Value Schemas
-// ============================================================================
-
 export type JsonValue =
   | string
   | number
@@ -25,10 +21,6 @@ export const JsonValueSchema: z.ZodType<JsonValue> = z.lazy(() =>
 
 export const JsonObjectSchema = z.record(z.string(), JsonValueSchema);
 export type JsonObject = z.infer<typeof JsonObjectSchema>;
-
-// ============================================================================
-// 1. Message & Tool Definitions
-// ============================================================================
 
 export const MessageRoleSchema = z.enum([
   "system",
@@ -53,10 +45,6 @@ export const ToolSchemaDef = z.object({
 });
 export type ToolSchema = z.infer<typeof ToolSchemaDef>;
 
-// ============================================================================
-// 2. Chat JSON Contracts
-// ============================================================================
-
 export const ChatJsonArgsSchema = z.object({
   system: z.string(),
   messages: z.array(MessageSchema),
@@ -75,10 +63,6 @@ export const ChatJsonResponseSchema = z.object({
   conformal_score: z.number().optional(),
 });
 export type ChatJsonResponse = z.infer<typeof ChatJsonResponseSchema>;
-
-// ============================================================================
-// 3. Vision JSON Contracts
-// ============================================================================
 
 export const VisionJsonArgsSchema = z.object({
   system: z.string(),
@@ -100,10 +84,6 @@ export const VisionJsonResponseSchema = z.object({
 });
 export type VisionJsonResponse = z.infer<typeof VisionJsonResponseSchema>;
 
-// ============================================================================
-// 4. Embedding Contracts
-// ============================================================================
-
 export const EmbedArgsSchema = z.object({
   texts: z.array(z.string()),
 });
@@ -113,10 +93,6 @@ export const EmbedResponseSchema = z.object({
   vectors: z.array(z.array(z.number())),
 });
 export type EmbedResponse = z.infer<typeof EmbedResponseSchema>;
-
-// ============================================================================
-// 5. Passage & Rerank Contracts
-// ============================================================================
 
 export const PassageSchema = z.object({
   chunk_id: z.string(),
@@ -145,10 +121,6 @@ export const RerankResponseSchema = z.object({
   ranked: z.array(RankedPassageSchema),
 });
 export type RerankResponse = z.infer<typeof RerankResponseSchema>;
-
-// ============================================================================
-// 6. ModelProvider Interface
-// ============================================================================
 
 export interface ModelProvider {
   chat_json(args: ChatJsonArgs): Promise<ChatJsonResponse>;
