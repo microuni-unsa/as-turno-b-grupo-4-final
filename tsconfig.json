@@ -1,0 +1,24 @@
+{
+  "compilerOptions": {
+    "lib": ["ESNext", "DOM"],
+    "target": "ESNext",
+    "module": "esnext",
+    "moduleDetection": "force",
+    "noEmit": true,
+    "types": ["node", "bun"],
+
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "paths": {
+      "@/*": ["./src/*"]
+    },
+    "verbatimModuleSyntax": true,
+
+    "strict": true,
+    "skipLibCheck": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true
+  },
+  "include": ["src", "tests", "vitest.config.ts"]
+}

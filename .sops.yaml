@@ -1,0 +1,7 @@
+creation_rules:
+  - path_regex: .*\.(enc|sops)\.json$
+    age: >-
+      age1xk55pvdly05kxl5sxgt4vmczalyw4vmzyrehg5ttqcjz8acvvg5s6nyval,age179xlc7hrhzlzjatrfjr5a5puldkxqzar7k36409w2dxhh9rxr42q2745tl
+  - path_regex: .*\.(enc|sops)\.env$
+    age: >-
+      age1xk55pvdly05kxl5sxgt4vmczalyw4vmzyrehg5ttqcjz8acvvg5s6nyval,age179xlc7hrhzlzjatrfjr5a5puldkxqzar7k36409w2dxhh9rxr42q2745tl
