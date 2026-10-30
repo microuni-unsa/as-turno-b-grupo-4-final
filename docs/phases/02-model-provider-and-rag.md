@@ -29,6 +29,7 @@ Implement the configurable `ModelProvider` abstraction utilizing OpenAI-compatib
 - **Automated RAG Evaluation Gate (`tests/integration/rag-eval-gate.test.ts`)**:
   - Automated execution of all 10 normative queries defined in §7.6 (Q01 through Q10).
   - Asserting minimum threshold score ≥0.35 and presence of required verbatim citations.
+  - Zero-cost test architecture using Vitest `vi.spyOn()` function replacements on the concrete `OpenAIModelProvider` instance backed by real pgvector testcontainers.
 
 ## Deliverables
 - `packages/models/src/openai-provider.ts`: Configurable cloud model adapter conforming to `ModelProvider`.

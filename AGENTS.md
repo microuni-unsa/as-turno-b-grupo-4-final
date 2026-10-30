@@ -3,6 +3,7 @@
 ## 1. Testing and Mocking Rules
 - **Enforce Vitest Primitives**: Always use standard `vi.mock()` and `vi.spyOn()` from Vitest when mocking module boundaries, network calls, or clock timers in unit tests.
 - **No Mock Provider Implementations**: Never, under any circumstance, implement custom mock provider classes (e.g., do NOT create `MockModelProvider`, `FakePimsAdapter`, or handwritten dummy provider stubs). All provider abstractions must point to actual implementations or have their calls intercepted cleanly via `vi.mock` / `vi.spyOn`.
+- **Zero-Cost Model Testing**: Tests must never call live LLM/embeddings APIs over the network. Always intercept `ModelProvider` methods (`embed`, `chat_json`, `rerank`) using Vitest `vi.spyOn()` on the concrete `OpenAIModelProvider` instance to eliminate token costs while running authentic pgvector and retrieval pipelines.
 - **Integration Tests with Real Data Store**: For PIMS integration tests, we run our reverse-engineered PIMS API server (built with Hono and Drizzle ORM) backed by a real PostgreSQL data store in testcontainers. The schema and initial data are mounted into `/docker-entrypoint-initdb.d/` (`01-gestitel.sql` and `02-seed.sql`) and run natively on container boot.
 
 ## 2. Secrets, Tooling & Configuration

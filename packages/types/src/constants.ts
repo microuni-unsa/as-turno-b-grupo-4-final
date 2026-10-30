@@ -24,7 +24,6 @@ export const EVENT_TYPE_LABELS: Record<string, string> = {
 
 // RAG Subsystem Constants (§7 & §13)
 export const DEFAULT_OPENAI_BASE_URL = "https://api.openai.com/v1";
-export const DEFAULT_MISTRAL_BASE_URL = "https://api.mistral.ai/v1";
 export const DEFAULT_EMBEDDING_DIM = 1024;
 export const DEFAULT_RAG_TOP_K = 8;
 export const DEFAULT_RAG_RERANK_K = 4;

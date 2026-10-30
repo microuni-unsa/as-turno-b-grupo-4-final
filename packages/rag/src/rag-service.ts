@@ -74,20 +74,14 @@ Keep the response concise and strictly valid JSON.`;
           : [query];
       const hydeClause =
         typeof parsed.hyde_clause === "string" ? parsed.hyde_clause : query;
-      const detectedAnchors = this.knowledgeGraph.findAnchorsInQuery(query);
-      const combinedAnchors = Array.from(
-        new Set([
-          ...(Array.isArray(parsed.graph_anchors)
-            ? (parsed.graph_anchors as string[])
-            : []),
-          ...detectedAnchors,
-        ]),
-      );
+      const graphAnchors = Array.isArray(parsed.graph_anchors)
+        ? (parsed.graph_anchors as string[])
+        : [];
 
       return {
         sub_queries: subQueries,
         hyde_clause: hydeClause,
-        graph_anchors: combinedAnchors,
+        graph_anchors: graphAnchors,
       };
     } catch (err: unknown) {
       if (err instanceof ModelUnavailableError) {

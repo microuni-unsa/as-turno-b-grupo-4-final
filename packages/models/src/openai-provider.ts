@@ -5,17 +5,19 @@ import {
   ModelSchemaViolationError,
   ModelUnavailableError,
 } from "@pims/types/errors.ts";
-import type {
-  ChatJsonArgs,
-  ChatJsonResponse,
-  EmbedArgs,
-  EmbedResponse,
-  ModelProvider,
-  RankedPassage,
-  RerankArgs,
-  RerankResponse,
-  VisionJsonArgs,
-  VisionJsonResponse,
+import {
+  type ChatJsonArgs,
+  type ChatJsonResponse,
+  type EmbedArgs,
+  type EmbedResponse,
+  type JsonObject,
+  JsonObjectSchema,
+  type ModelProvider,
+  type RankedPassage,
+  type RerankArgs,
+  type RerankResponse,
+  type VisionJsonArgs,
+  type VisionJsonResponse,
 } from "@pims/types/models.ts";
 import OpenAI from "openai";
 
@@ -157,10 +159,24 @@ export class OpenAIModelProvider implements ModelProvider {
           continue;
         }
 
-        let parsed: Record<string, unknown>;
+        let parsed: JsonObject;
         try {
-          parsed = JSON.parse(rawContent) as Record<string, unknown>;
+          const rawParsed = JSON.parse(rawContent);
+          const validation = JsonObjectSchema.safeParse(rawParsed);
+          if (!validation.success) {
+            if (attempts >= 2) {
+              throw new ModelSchemaViolationError(
+                route,
+                `Model JSON output schema invalid: ${validation.error.message}`,
+              );
+            }
+            continue;
+          }
+          parsed = validation.data;
         } catch (err: unknown) {
+          if (err instanceof ModelSchemaViolationError) {
+            throw err;
+          }
           if (attempts >= 2) {
             throw new ModelSchemaViolationError(
               route,

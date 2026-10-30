@@ -5,18 +5,9 @@
  * Every failure branch in PIMS operations maps deterministically to an explicit named error.
  */
 
-export type PimsErrorDetails =
-  | Record<
-      string,
-      | string
-      | number
-      | boolean
-      | null
-      | string[]
-      | Record<string, string[]>
-      | Record<string, unknown>
-    >
-  | undefined;
+import type { JsonObject } from "@pims/types/models.ts";
+
+export type PimsErrorDetails = JsonObject | undefined;
 
 export class PimsBaseError extends Error {
   readonly code: string;
@@ -404,5 +395,15 @@ export class CitationFabricatedError extends PimsBaseError {
       message ?? `Citation references non-existent chunk ID: ${chunkId}`;
     super(msg, `CITATION_FABRICATED:${chunkId}`, details);
     this.chunkId = chunkId;
+  }
+}
+
+/**
+ * Knowledge graph or RAG index state error (e.g. unindexed node embeddings).
+ * Code: RAG_INDEX_ERROR
+ */
+export class RagIndexError extends PimsBaseError {
+  constructor(message: string, details?: PimsErrorDetails) {
+    super(message, "RAG_INDEX_ERROR", details);
   }
 }

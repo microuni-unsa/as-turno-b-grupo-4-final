@@ -1,6 +1,32 @@
 import { z } from "zod";
 
 // ============================================================================
+// 0. Strict JSON Value Schemas
+// ============================================================================
+
+export type JsonValue =
+  | string
+  | number
+  | boolean
+  | null
+  | { [key: string]: JsonValue }
+  | JsonValue[];
+
+export const JsonValueSchema: z.ZodType<JsonValue> = z.lazy(() =>
+  z.union([
+    z.string(),
+    z.number(),
+    z.boolean(),
+    z.null(),
+    z.record(z.string(), JsonValueSchema),
+    z.array(JsonValueSchema),
+  ]),
+);
+
+export const JsonObjectSchema = z.record(z.string(), JsonValueSchema);
+export type JsonObject = z.infer<typeof JsonObjectSchema>;
+
+// ============================================================================
 // 1. Message & Tool Definitions
 // ============================================================================
 
@@ -15,15 +41,15 @@ export type MessageRole = z.infer<typeof MessageRoleSchema>;
 export const MessageSchema = z.object({
   role: MessageRoleSchema,
   content: z.string(),
-  tool_call: z.record(z.string(), z.unknown()).optional(),
-  tool_result: z.record(z.string(), z.unknown()).optional(),
+  tool_call: JsonObjectSchema.optional(),
+  tool_result: JsonObjectSchema.optional(),
 });
 export type Message = z.infer<typeof MessageSchema>;
 
 export const ToolSchemaDef = z.object({
   name: z.string(),
   description: z.string(),
-  parameters: z.record(z.string(), z.unknown()),
+  parameters: JsonObjectSchema,
 });
 export type ToolSchema = z.infer<typeof ToolSchemaDef>;
 
@@ -35,14 +61,14 @@ export const ChatJsonArgsSchema = z.object({
   system: z.string(),
   messages: z.array(MessageSchema),
   tools: z.array(ToolSchemaDef).optional(),
-  json_schema: z.record(z.string(), z.unknown()).optional(),
+  json_schema: JsonObjectSchema.optional(),
   max_tokens: z.number().int().positive(),
   temperature: z.number().min(0).max(2),
 });
 export type ChatJsonArgs = z.infer<typeof ChatJsonArgsSchema>;
 
 export const ChatJsonResponseSchema = z.object({
-  content: z.record(z.string(), z.unknown()),
+  content: JsonObjectSchema,
   citations_requested: z.boolean(),
   logprobs: z.array(z.number()).optional(),
   semantic_entropy: z.number().optional(),
@@ -58,7 +84,7 @@ export const VisionJsonArgsSchema = z.object({
   system: z.string(),
   image_or_pdf_ref: z.string(),
   prompt: z.string(),
-  json_schema: z.record(z.string(), z.unknown()),
+  json_schema: JsonObjectSchema,
   max_tokens: z.number().int().positive(),
   temperature: z.number().min(0).max(2),
 });

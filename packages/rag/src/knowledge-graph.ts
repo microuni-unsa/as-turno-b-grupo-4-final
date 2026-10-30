@@ -1,4 +1,5 @@
 import { DEFAULT_ANCHOR_SIMILARITY_THRESHOLD } from "@pims/types/constants.ts";
+import { ModelUnavailableError, RagIndexError } from "@pims/types/errors.ts";
 import type { ModelProvider } from "@pims/types/models.ts";
 import type {
   KGEdgeRelation,
@@ -422,7 +423,9 @@ export class NormativeKnowledgeGraph {
     topK = 5,
   ): string[] {
     if (this.nodeEmbeddings.size === 0) {
-      return [];
+      throw new RagIndexError(
+        "Knowledge graph node embeddings have not been indexed. Call indexNodeEmbeddings() first.",
+      );
     }
 
     const scored: Array<{ id: string; similarity: number }> = [];
@@ -451,148 +454,38 @@ export class NormativeKnowledgeGraph {
     return scored.slice(0, topK).map((item) => item.id);
   }
 
-  findAnchorsInQuery(
+  /**
+   * Dense Bi-Encoder query anchor resolution: embeds the query using ModelProvider
+   * and computes cosine similarity against pre-embedded Knowledge Graph nodes.
+   * Completely non-heuristic.
+   */
+  async findAnchorsInQuery(
     query: string,
+    modelProvider: ModelProvider,
     options?: {
-      queryVector?: number[];
       minSimilarity?: number;
       topK?: number;
     },
-  ): string[] {
-    if (options?.queryVector && this.nodeEmbeddings.size > 0) {
-      return this.findAnchorsByVector(
-        options.queryVector,
-        options.minSimilarity,
-        options.topK,
+  ): Promise<string[]> {
+    if (this.nodeEmbeddings.size === 0) {
+      throw new RagIndexError(
+        "Knowledge graph node embeddings have not been indexed. Call indexNodeEmbeddings() first.",
       );
     }
 
-    const anchors: string[] = [];
-    const lower = query.toLowerCase();
-
-    if (
-      lower.includes("33(1)") ||
-      lower.includes("72") ||
-      lower.includes("authority deadline") ||
-      lower.includes("delay")
-    ) {
-      anchors.push("gdpr:art33.1");
-    }
-    if (
-      lower.includes("33(2)") ||
-      lower.includes("processor notification") ||
-      lower.includes("undue delay")
-    ) {
-      anchors.push("gdpr:art33.2");
-    }
-    if (
-      lower.includes("33(3)") ||
-      lower.includes("content elements") ||
-      lower.includes("nature of the personal data breach")
-    ) {
-      anchors.push("gdpr:art33.3");
-    }
-    if (
-      lower.includes("33(5)") ||
-      lower.includes("breach documentation") ||
-      lower.includes("internal register")
-    ) {
-      anchors.push("gdpr:art33.5");
-    }
-    if (
-      lower.includes("34(1)") ||
-      lower.includes("high-risk") ||
-      lower.includes("subject communication")
-    ) {
-      anchors.push("gdpr:art34.1");
-    }
-    if (
-      lower.includes("34(2)") ||
-      lower.includes("clear and plain") ||
-      lower.includes("subject content")
-    ) {
-      anchors.push("gdpr:art34.2");
-    }
-    if (
-      lower.includes("34(3)(a)") ||
-      lower.includes("encryption") ||
-      lower.includes("unintelligible")
-    ) {
-      anchors.push("gdpr:art34.3a");
-    }
-    if (lower.includes("34(3)(b)") || lower.includes("subsequent measures")) {
-      anchors.push("gdpr:art34.3b");
-    }
-    if (
-      lower.includes("b.3.11") ||
-      lower.includes("planning and preparation") ||
-      lower.includes("incident management planning")
-    ) {
-      anchors.push("iso:b.3.11", "iso:6.13.1.1");
-    }
-    if (
-      lower.includes("b.3.12") ||
-      lower.includes("breach record") ||
-      lower.includes("consequences of the incident") ||
-      lower.includes("response to information security incidents")
-    ) {
-      anchors.push("iso:b.3.12", "iso:6.13.1.5");
-    }
-    if (
-      lower.includes("a.3.11") ||
-      lower.includes("6.13.1.4") ||
-      lower.includes("assessment and decision on information security events")
-    ) {
-      anchors.push("iso:a.3.11", "iso:6.13.1.4");
-    }
-    if (lower.includes("a.3.12") || lower.includes("6.13.1.5")) {
-      anchors.push("iso:a.3.12", "iso:6.13.1.5");
-    }
-    if (
-      lower.includes("6.13.1.7") ||
-      lower.includes("collection of evidence")
-    ) {
-      anchors.push("iso:6.13.1.7");
-    }
-    if (
-      lower.includes("6.1.3") ||
-      lower.includes("privacy risk treatment") ||
-      lower.includes("statement of applicability")
-    ) {
-      anchors.push("iso:6.1.3");
-    }
-    if (lower.includes("9.2") || lower.includes("internal audit")) {
-      anchors.push("iso:9.2");
-    }
-    if (lower.includes("9.3") || lower.includes("management review")) {
-      anchors.push("iso:9.3.2");
-    }
-    if (
-      lower.includes("10.2") ||
-      lower.includes("nonconformity and corrective action") ||
-      lower.includes("corrective action")
-    ) {
-      anchors.push("iso:10.2");
-    }
-    if (lower.includes("6.13") || lower.includes("incident management")) {
-      anchors.push("iso:6.13");
-    }
-    if (
-      lower.includes("5.4") ||
-      lower.includes("security event") ||
-      lower.includes("event management")
-    ) {
-      anchors.push("iso:5.4");
-    }
-    if (
-      lower.includes("dl") ||
-      lower.includes("ua") ||
-      lower.includes("fuga") ||
-      lower.includes("acceso no autorizado")
-    ) {
-      anchors.push("cat:dl", "cat:ua");
+    const res = await modelProvider.embed({ texts: [query] });
+    const qVec = res.vectors[0];
+    if (!qVec) {
+      throw new ModelUnavailableError(
+        "rag",
+        "Failed to compute query vector for anchor resolution",
+      );
     }
 
-    return anchors;
+    return this.findAnchorsByVector(
+      qVec,
+      options?.minSimilarity,
+      options?.topK,
+    );
   }
 }

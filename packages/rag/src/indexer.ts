@@ -93,11 +93,7 @@ export class RagIndexer {
       // 3. Insert embeddings into pgvector (concurrent batch embedding)
       if (this.pgClient) {
         await this.initPgvector();
-        try {
-          await this.pgClient`DELETE FROM rag_corpus_chunks;`;
-        } catch {
-          // Table clean state ensured
-        }
+        await this.pgClient`DELETE FROM rag_corpus_chunks;`;
 
         const batches: Array<CorpusChunk[]> = [];
         const effectiveBatchSize = Math.min(batchSize, 25);

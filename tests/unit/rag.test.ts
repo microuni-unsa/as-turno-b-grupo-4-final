@@ -8,6 +8,7 @@ import {
 import {
   CitationFabricatedError,
   CitationInvalidError,
+  RagIndexError,
   RagNoEvidenceError,
 } from "@pims/types";
 import { describe, expect, it, vi } from "vitest";
@@ -65,11 +66,10 @@ describe("Tri-Modal RAG Subsystem Unit Suite", () => {
       expect(kg.getNode("iso:b.3.12")).toBeDefined();
       expect(kg.getNode("cat:dl")).toBeDefined();
 
-      const anchors = kg.findAnchorsInQuery(
-        "Art 33(1) authority deadline 72 hours",
-      );
-      expect(anchors).toContain("gdpr:art33.1");
+      // Explicit fail-fast check: unindexed embeddings must throw RagIndexError
+      expect(() => kg.findAnchorsByVector([1, 0, 0])).toThrow(RagIndexError);
 
+      const anchors = ["gdpr:art33.1"];
       const ppr = kg.computePersonalizedPageRank(anchors);
       expect(ppr.size).toBeGreaterThan(0);
       expect(ppr.get("gdpr:art33.1")).toBeGreaterThan(0);
@@ -98,6 +98,17 @@ describe("Tri-Modal RAG Subsystem Unit Suite", () => {
       // Query vector matching first node [1, 0, 0]
       const matchingAnchors = kg.findAnchorsByVector([1, 0, 0], 0.5, 3);
       expect(matchingAnchors.length).toBeGreaterThan(0);
+
+      // Query resolution via findAnchorsInQuery
+      vi.spyOn(dummyProvider, "embed").mockResolvedValueOnce({
+        vectors: [[1, 0, 0]],
+      });
+      const resolved = await kg.findAnchorsInQuery(
+        "Art 33(1) authority deadline 72 hours",
+        dummyProvider,
+        { minSimilarity: 0.5, topK: 3 },
+      );
+      expect(resolved.length).toBeGreaterThan(0);
     });
   });
 
@@ -199,6 +210,12 @@ describe("Tri-Modal RAG Subsystem Unit Suite", () => {
         modelProvider: dummyProvider,
       });
       const kg = new NormativeKnowledgeGraph();
+
+      // Mock embed for node embeddings pre-computation
+      vi.spyOn(dummyProvider, "embed").mockResolvedValueOnce({
+        vectors: Array.from({ length: 60 }, () => [0.1, 0.2, 0.3]),
+      });
+      await kg.indexNodeEmbeddings(dummyProvider);
 
       // Mock chat_json for query decomposition
       vi.spyOn(dummyProvider, "chat_json").mockResolvedValueOnce({
