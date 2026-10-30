@@ -1,0 +1,12 @@
+{
+  "name": "@pims/models",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "dependencies": {
+    "@pims/config": "workspace:*",
+    "@pims/types": "workspace:*",
+    "zod": "^3.24.2"
+  }
+}

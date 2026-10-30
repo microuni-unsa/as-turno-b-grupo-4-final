@@ -293,3 +293,116 @@ export class PimsUnknownCodeError extends PimsBaseError {
     this.unknownCode = code;
   }
 }
+
+/**
+ * Model provider route unavailable (HTTP 5xx, quota exhaustion, circuit open, timeout).
+ * Code: MODEL_UNAVAILABLE:<route>:<reason>
+ */
+export class ModelUnavailableError extends PimsBaseError {
+  readonly route: string;
+  readonly reason: string;
+
+  constructor(route: string, reason: string, details?: PimsErrorDetails) {
+    super(
+      `Model provider route '${route}' is unavailable: ${reason}`,
+      `MODEL_UNAVAILABLE:${route}:${reason}`,
+      details,
+    );
+    this.route = route;
+    this.reason = reason;
+  }
+}
+
+/**
+ * Model output failed schema validation.
+ * Code: MODEL_SCHEMA_VIOLATION:<route>
+ */
+export class ModelSchemaViolationError extends PimsBaseError {
+  readonly route: string;
+
+  constructor(route: string, message: string, details?: PimsErrorDetails) {
+    super(message, `MODEL_SCHEMA_VIOLATION:${route}`, details);
+    this.route = route;
+  }
+}
+
+/**
+ * All candidate retrieval passages dropped below RAG_MIN_SCORE threshold.
+ * Code: RAG_NO_EVIDENCE
+ */
+export class RagNoEvidenceError extends PimsBaseError {
+  constructor(
+    message = "No normative or grounding evidence found meeting minimum score threshold",
+    details?: PimsErrorDetails,
+  ) {
+    super(message, "RAG_NO_EVIDENCE", details);
+  }
+}
+
+/**
+ * RAG query-time corpus SHA-256 version does not match ingest version.
+ * Code: RAG_CORPUS_STALE
+ */
+export class RagCorpusStaleError extends PimsBaseError {
+  constructor(
+    message = "RAG corpus is stale; ingest SHA-256 does not match active version",
+    details?: PimsErrorDetails,
+  ) {
+    super(message, "RAG_CORPUS_STALE", details);
+  }
+}
+
+/**
+ * Concurrent single-writer RAG ingestion attempted when another ingest is active.
+ * Code: RAG_INGEST_LOCKED
+ */
+export class RagIngestLockedError extends PimsBaseError {
+  constructor(
+    message = "RAG ingestion lock held by another process",
+    details?: PimsErrorDetails,
+  ) {
+    super(message, "RAG_INGEST_LOCKED", details);
+  }
+}
+
+/**
+ * Automated RAG evaluation gate failed for a query.
+ * Code: RAG_EVAL_FAILED:<qid>
+ */
+export class RagEvalFailedError extends PimsBaseError {
+  readonly qid: string;
+
+  constructor(qid: string, message: string, details?: PimsErrorDetails) {
+    super(message, `RAG_EVAL_FAILED:${qid}`, details);
+    this.qid = qid;
+  }
+}
+
+/**
+ * Citation does not meet normative standards or threshold.
+ * Code: CITATION_INVALID:<detail>
+ */
+export class CitationInvalidError extends PimsBaseError {
+  readonly detail: string;
+
+  constructor(detail: string, message?: string, details?: PimsErrorDetails) {
+    const msg = message ?? `Citation is invalid: ${detail}`;
+    super(msg, `CITATION_INVALID:${detail}`, details);
+    this.detail = detail;
+  }
+}
+
+/**
+ * Chunk ID referenced in citation does not exist in corpus index.
+ * Code: CITATION_FABRICATED:<chunk_id>
+ */
+export class CitationFabricatedError extends PimsBaseError {
+  readonly chunkId: string;
+
+  constructor(chunkId: string, message?: string, details?: PimsErrorDetails) {
+    const msg =
+      message ?? `Citation references non-existent chunk ID: ${chunkId}`;
+    super(msg, `CITATION_FABRICATED:${chunkId}`, details);
+    this.chunkId = chunkId;
+  }
+}

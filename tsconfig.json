@@ -17,7 +17,11 @@
       "@pims/pims-mock": ["./packages/pims-mock/src/index.ts"],
       "@pims/pims-mock/*": ["./packages/pims-mock/src/*"],
       "@pims/pims-adapter": ["./packages/pims-adapter/src/index.ts"],
-      "@pims/pims-adapter/*": ["./packages/pims-adapter/src/*"]
+      "@pims/pims-adapter/*": ["./packages/pims-adapter/src/*"],
+      "@pims/models": ["./packages/models/src/index.ts"],
+      "@pims/models/*": ["./packages/models/src/*"],
+      "@pims/rag": ["./packages/rag/src/index.ts"],
+      "@pims/rag/*": ["./packages/rag/src/*"]
     },
     "verbatimModuleSyntax": true,
 
