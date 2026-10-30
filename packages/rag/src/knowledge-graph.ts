@@ -2,6 +2,7 @@ import { DEFAULT_ANCHOR_SIMILARITY_THRESHOLD } from "@pims/types/constants.ts";
 import { ModelUnavailableError, RagIndexError } from "@pims/types/errors.ts";
 import type { ModelProvider } from "@pims/types/models.ts";
 import type {
+  CorpusChunk,
   KGEdgeRelation,
   KnowledgeGraphData,
   KnowledgeGraphEdge,
@@ -57,6 +58,10 @@ export class NormativeKnowledgeGraph {
     this.nodeToChunkIds.set(nodeId, list);
   }
 
+  getNodeIds(): string[] {
+    return this.graph.nodes();
+  }
+
   getNode(nodeId: string): KnowledgeGraphNode | undefined {
     if (!this.graph.hasNode(nodeId)) {
       return undefined;
@@ -72,6 +77,22 @@ export class NormativeKnowledgeGraph {
       label: attrs.label,
       description: attrs.description,
     };
+  }
+
+  private cosine(a: number[], b: number[]): number {
+    let dot = 0;
+    let normA = 0;
+    let normB = 0;
+    const len = Math.min(a.length, b.length);
+    for (let i = 0; i < len; i++) {
+      const x = a[i] ?? 0;
+      const y = b[i] ?? 0;
+      dot += x * y;
+      normA += x * x;
+      normB += y * y;
+    }
+    const denom = Math.sqrt(normA) * Math.sqrt(normB);
+    return denom > 0 ? dot / denom : 0;
   }
 
   private initDefaultGraph(): void {
@@ -264,40 +285,54 @@ export class NormativeKnowledgeGraph {
         weight: e.w,
       });
     }
+  }
 
-    this.mapNodeToChunk("gdpr:art33.1", "art33");
-    this.mapNodeToChunk("gdpr:art33.2", "art33");
-    this.mapNodeToChunk("gdpr:art33.3", "art33");
-    this.mapNodeToChunk("gdpr:art33.4", "art33");
-    this.mapNodeToChunk("gdpr:art33.5", "art33");
-    this.mapNodeToChunk("gdpr:art34.1", "art34");
-    this.mapNodeToChunk("gdpr:art34.2", "art34");
-    this.mapNodeToChunk("gdpr:art34.3a", "art34");
-    this.mapNodeToChunk("gdpr:art34.3b", "art34");
-    this.mapNodeToChunk("gdpr:art34.3c", "art34");
-    this.mapNodeToChunk("gdpr:art34.4", "art34");
-    this.mapNodeToChunk("iso:b.3.11", "b.3.11");
-    this.mapNodeToChunk("iso:b.3.11", "b.3.11:part1");
-    this.mapNodeToChunk("iso:b.3.11", "b.3.11:part2");
-    this.mapNodeToChunk("iso:b.3.12", "b.3.12");
-    this.mapNodeToChunk("iso:b.3.12", "b.3.12:part1");
-    this.mapNodeToChunk("iso:b.3.12", "b.3.12:part2");
-    this.mapNodeToChunk("iso:b.3.12", "b.3.12:part3");
-    this.mapNodeToChunk("iso:a.3.11", "a.3.11");
-    this.mapNodeToChunk("iso:a.3.11", "6.13.1.4");
-    this.mapNodeToChunk("iso:a.3.12", "a.3.12");
-    this.mapNodeToChunk("iso:a.3.12", "6.13.1.5");
-    this.mapNodeToChunk("iso:6.13.1.1", "6.13.1.1");
-    this.mapNodeToChunk("iso:6.13.1.4", "6.13.1.4");
-    this.mapNodeToChunk("iso:6.13.1.5", "6.13.1.5");
-    this.mapNodeToChunk("iso:6.13.1.7", "6.13.1.7");
-    this.mapNodeToChunk("iso:6.13", "6.13");
-    this.mapNodeToChunk("iso:6.1.3", "6.1.3");
-    this.mapNodeToChunk("iso:5.3", "5.3");
-    this.mapNodeToChunk("iso:5.4", "5.3");
-    this.mapNodeToChunk("iso:9.2", "9.2");
-    this.mapNodeToChunk("iso:9.3.2", "9.3.2");
-    this.mapNodeToChunk("iso:10.2", "10.2");
+  async linkChunks(
+    chunks: CorpusChunk[],
+    modelProvider: ModelProvider,
+    options?: { minSimilarity?: number; topK?: number },
+  ): Promise<void> {
+    this.nodeToChunkIds.clear();
+    if (this.nodeEmbeddings.size === 0) {
+      throw new RagIndexError(
+        "Knowledge graph node embeddings have not been indexed. Call indexNodeEmbeddings() first.",
+      );
+    }
+    const minSimilarity =
+      options?.minSimilarity ?? DEFAULT_ANCHOR_SIMILARITY_THRESHOLD;
+    const topK = options?.topK ?? 3;
+    if (chunks.length === 0) {
+      return;
+    }
+    const nodeIds = this.getNodeIds();
+    const batchSize = 25;
+    for (let i = 0; i < chunks.length; i += batchSize) {
+      const batch = chunks.slice(i, i + batchSize);
+      const res = await modelProvider.embed({
+        texts: batch.map((c) => c.text),
+      });
+      for (const [j, chunk] of batch.entries()) {
+        const chunkVec = res.vectors[j];
+        if (chunkVec === undefined) {
+          continue;
+        }
+        const scored: Array<{ id: string; similarity: number }> = [];
+        for (const nodeId of nodeIds) {
+          const nodeVec = this.nodeEmbeddings.get(nodeId);
+          if (nodeVec === undefined) {
+            continue;
+          }
+          const similarity = this.cosine(chunkVec, nodeVec);
+          if (similarity >= minSimilarity) {
+            scored.push({ id: nodeId, similarity });
+          }
+        }
+        scored.sort((a, b) => b.similarity - a.similarity);
+        for (const item of scored.slice(0, topK)) {
+          this.mapNodeToChunk(item.id, chunk.chunk_id);
+        }
+      }
+    }
   }
 
   computePersonalizedPageRank(
@@ -383,7 +418,7 @@ export class NormativeKnowledgeGraph {
   }
 
   async indexNodeEmbeddings(modelProvider: ModelProvider): Promise<void> {
-    const nodeIds = this.graph.nodes();
+    const nodeIds = this.getNodeIds();
     const nodes = nodeIds
       .map((id) => this.getNode(id))
       .filter((n): n is KnowledgeGraphNode => Boolean(n));
@@ -418,20 +453,7 @@ export class NormativeKnowledgeGraph {
     const scored: Array<{ id: string; similarity: number }> = [];
 
     for (const [nodeId, nodeVec] of this.nodeEmbeddings.entries()) {
-      let dot = 0;
-      let normQ = 0;
-      let normN = 0;
-      const len = Math.min(queryVector.length, nodeVec.length);
-      for (let i = 0; i < len; i++) {
-        const q = queryVector[i] ?? 0;
-        const n = nodeVec[i] ?? 0;
-        dot += q * n;
-        normQ += q * q;
-        normN += n * n;
-      }
-      const denom = Math.sqrt(normQ) * Math.sqrt(normN);
-      const similarity = denom > 0 ? dot / denom : 0;
-
+      const similarity = this.cosine(queryVector, nodeVec);
       if (similarity >= minSimilarity) {
         scored.push({ id: nodeId, similarity });
       }

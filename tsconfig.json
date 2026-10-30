@@ -21,7 +21,8 @@
       "@pims/models": ["./packages/models/src/index.ts"],
       "@pims/models/*": ["./packages/models/src/*"],
       "@pims/rag": ["./packages/rag/src/index.ts"],
-      "@pims/rag/*": ["./packages/rag/src/*"]
+      "@pims/rag/*": ["./packages/rag/src/*"],
+      "@tests/*": ["./tests/*"]
     },
     "verbatimModuleSyntax": true,
 

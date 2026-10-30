@@ -10,40 +10,12 @@ import {
   PostgreSqlContainer,
   type StartedPostgreSqlContainer,
 } from "@testcontainers/postgresql";
+import {
+  buildGdprTextAxes,
+  generateSpanAwareEmbedding,
+} from "@tests/helpers/span-geometry.ts";
 import postgres from "postgres";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-
-function generateDeterministicEmbedding(text: string, dim = 1024): number[] {
-  const vec = new Float64Array(dim);
-  const clean = text.toLowerCase();
-  const words = clean.match(/[a-z0-9_.]+/g) ?? [];
-  for (const w of words) {
-    let h = 2166136261;
-    for (let i = 0; i < w.length; i++) {
-      h ^= w.charCodeAt(i);
-      h = Math.imul(h, 16777619);
-    }
-    const idx = Math.abs(h) % dim;
-    const sign = (h & 1) === 0 ? 1 : -1;
-    const prev = vec[idx] ?? 0;
-    vec[idx] = prev + sign * (1.0 + (w.length > 3 ? 0.5 : 0.0));
-  }
-
-  let norm = 0;
-  for (let i = 0; i < dim; i++) {
-    norm += (vec[i] ?? 0) * (vec[i] ?? 0);
-  }
-  norm = Math.sqrt(norm);
-  if (norm === 0) {
-    vec[0] = 1.0;
-    norm = 1.0;
-  }
-  const result: number[] = new Array(dim);
-  for (let i = 0; i < dim; i++) {
-    result[i] = Number(((vec[i] ?? 0) / norm).toFixed(6));
-  }
-  return result;
-}
 
 interface EvalSpec {
   qid: string;
@@ -186,7 +158,7 @@ describe("Automated RAG Evaluation Gate (§7.6 Integration Suite)", () => {
     });
 
     vi.spyOn(modelProvider, "embed").mockImplementation(async ({ texts }) => {
-      const vectors = texts.map((t) => generateDeterministicEmbedding(t));
+      const vectors = texts.map((t) => generateSpanAwareEmbedding(t));
       return { vectors };
     });
 
@@ -278,6 +250,7 @@ describe("Automated RAG Evaluation Gate (§7.6 Integration Suite)", () => {
       source: { type: "local", dirPath: "corpus" },
     });
     const corpus = await loader.loadAll();
+    buildGdprTextAxes(corpus.chunks);
 
     const knowledgeGraph = new NormativeKnowledgeGraph();
 
@@ -293,7 +266,7 @@ describe("Automated RAG Evaluation Gate (§7.6 Integration Suite)", () => {
       indexer,
       knowledgeGraph,
       config: {
-        RAG_TOP_K: 16,
+        RAG_TOP_K: 24,
         RAG_RERANK_K: 6,
         RAG_MIN_SCORE: 0.35,
         RAG_TIMEOUT_MS: 30000,

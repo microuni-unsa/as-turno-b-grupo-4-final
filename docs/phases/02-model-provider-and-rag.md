@@ -12,9 +12,11 @@ Implement the configurable `ModelProvider` abstraction utilizing OpenAI-compatib
   - Strict testing rule: test model orchestration and error handling using Vitest `vi.mock()` / `vi.spyOn()` on the HTTP transport, never by instantiating mock provider classes.
 - **Corpus Ingestion & Pluggable Sources (`packages/rag/src/corpus-loader.ts`)**:
   - Pluggable ingestion sources: `LocalCorpusSource` (local directory) and `S3CorpusSource` (AWS S3 bucket via `@aws-sdk/client-s3`).
-  - Normative compliance corpus: `GDPR.txt` (`gdpr-full`, normative) and `ISO 27701-2025_ocr.pdf` (`iso27701`, normative). Note: PIMS database schemas and Anexos are operational data queried dynamically live via PIMS client adapter tools (E01–E26) and are excluded from static RAG.
-  - Deterministic chunking: normative sources split on article/clause boundaries (512 tokens / 64 overlap); contextual headers prepended: `[DOC:<id> | CLAUSE:<clause> | NORMATIVE:<bool>]`.
-  - Globally unique chunk IDs generated to prevent collision in indexers: `${docId}:${clause}:L${lineNum}:${subIdx}`.
+  - Extensible section-loader registry (`SectionLoader` strategy + `SectionLoaderRegistry`, extension-keyed): markdown heading sections via mdast AST (remark), plain-text paragraph groups, PDF per-page sections via unpdf; shared token-cap chunker with sequential IDs.
+  - Normative compliance corpus: `gdpr-full.txt` (`gdpr-full`, normative) and `iso27701.md` (`iso27701`, normative curated markdown containing project-relevant clauses 4.2, 5.3, 6.1.2, 6.1.3, 6.13, 6.13.1.1–6.13.1.7, 8.2, 9.2, 9.3.2, 10.2, A.3.11, A.3.12, B.3.11, B.3.12).
+  - Embedding-threshold Knowledge Graph linking: node→chunk edges from cosine similarity ≥ 0.55 (top-3 per chunk); no static chunk maps.
+  - Deterministic chunking: sections capped to maxTokens with chunkOverlap-line windows; contextual headers prepended: `[DOC:<id> | CLAUSE:<label> | NORMATIVE:<bool>]`; doc_id from slugified filename stem only.
+  - Globally unique chunk IDs generated to prevent collision in indexers.
   - SHA-256 corpus hashing: version = `sha256(sorted(file hashes))`.
 - **Tri-Modal Hybrid Retrieval Engine (`packages/rag/src/rag-service.ts`)**:
   - Modal 1: Dense Vector Index (pgvector embeddings vectors).
@@ -30,6 +32,7 @@ Implement the configurable `ModelProvider` abstraction utilizing OpenAI-compatib
   - Automated execution of all 10 normative queries defined in §7.6 (Q01 through Q10).
   - Asserting minimum threshold score ≥0.35 and presence of required verbatim citations.
   - Zero-cost test architecture using Vitest `vi.spyOn()` function replacements on the concrete `OpenAIModelProvider` instance backed by real pgvector testcontainers.
+  - Harness embedding geometry (`tests/helpers/span-geometry.ts`, authorized deviation 2026-10-30): deterministic hash vectors plus explicit normative-span axes (GDPR Art 33/34 line ranges from the fixture, ISO heading markers, node-ID suffixes) so `linkChunks`/PPR engage as with real embeddings; pure-hash vectors peak at cosine ~0.15 and would leave 0/210 chunks linked.
 
 ## Deliverables
 - `packages/models/src/openai-provider.ts`: Configurable cloud model adapter conforming to `ModelProvider`.

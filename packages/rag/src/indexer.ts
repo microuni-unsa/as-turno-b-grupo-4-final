@@ -86,6 +86,7 @@ export class RagIndexer {
 
       if (this.knowledgeGraph) {
         await this.knowledgeGraph.indexNodeEmbeddings(this.modelProvider);
+        await this.knowledgeGraph.linkChunks(chunks, this.modelProvider);
       }
 
       if (this.pgClient) {

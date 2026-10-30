@@ -13,6 +13,22 @@ export const CorpusChunkSchema = z.object({
 });
 export type CorpusChunk = z.infer<typeof CorpusChunkSchema>;
 
+export const DocumentMetadataSchema = z.object({
+  doc_id: z.string().optional(),
+  title: z.string().optional(),
+  normative: z.boolean().optional(),
+  version: z.string().optional(),
+  tags: z.array(z.string()).optional(),
+});
+export type DocumentMetadata = z.infer<typeof DocumentMetadataSchema>;
+
+export const ChunkingOptionsSchema = z.object({
+  maxTokens: z.number().int().positive().optional(),
+  chunkOverlap: z.number().int().nonnegative().optional(),
+  defaultNormative: z.boolean().optional(),
+});
+export type ChunkingOptions = z.infer<typeof ChunkingOptionsSchema>;
+
 export const LocalCorpusSourceSchema = z.object({
   type: z.literal("local"),
   dirPath: z.string(),

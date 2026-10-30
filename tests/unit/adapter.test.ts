@@ -41,7 +41,6 @@ describe("PIMS Adapter Unit & Resilience Suite", () => {
         }
 
         if (attempts === 1) {
-          // Simulate 500 error
           return new Response("Internal Server Error", { status: 500 });
         }
         return new Response(

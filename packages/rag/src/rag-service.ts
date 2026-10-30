@@ -30,6 +30,7 @@ export interface RAGServiceOptions {
   indexer: RagIndexer;
   knowledgeGraph: NormativeKnowledgeGraph;
   config?: Partial<AgentConfig>;
+  decompositionPrompt?: string;
 }
 
 export class RAGService {
@@ -40,6 +41,7 @@ export class RAGService {
   private readonly rerankK: number;
   private readonly minScore: number;
   private readonly timeoutMs: number;
+  private readonly decompositionPrompt?: string;
 
   constructor(options: RAGServiceOptions) {
     this.modelProvider = options.modelProvider;
@@ -49,11 +51,14 @@ export class RAGService {
     this.rerankK = options.config?.RAG_RERANK_K ?? DEFAULT_RAG_RERANK_K;
     this.minScore = options.config?.RAG_MIN_SCORE ?? DEFAULT_RAG_MIN_SCORE;
     this.timeoutMs = options.config?.RAG_TIMEOUT_MS ?? DEFAULT_RAG_TIMEOUT_MS;
+    this.decompositionPrompt = options.decompositionPrompt;
   }
 
   async decomposeAndHyde(query: string): Promise<QueryDecomposition> {
     try {
-      const systemPrompt = `You are an expert legal/technical query analyst for GDPR, ISO/IEC 27701, and PIMS incident management.
+      const systemPrompt =
+        this.decompositionPrompt ??
+        `You are an expert regulatory, legal, and technical query analyst.
 Given a query, return strict JSON with:
 1. "sub_queries": Array of 1-3 targeted short sub-queries breaking down compound elements.
 2. "hyde_clause": A concise 1-2 sentence hypothetical normative clause snippet (under 50 words).

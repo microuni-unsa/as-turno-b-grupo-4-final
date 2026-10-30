@@ -430,15 +430,15 @@ Course privacy context (`class1.txt:442-482`) prefers on-prem ("pecera de vidrio
 interface ModelProvider {
   chat_json(args: {
     system: string; messages: Message[]; tools?: ToolSchema[];
-    json_schema?: object;  // response MUST validate; else MODEL_SCHEMA_VIOLATION
-    max_tokens: number; temperature: number; // temperature fixed per role, §5.1
+    json_schema?: object;
+    max_tokens: number; temperature: number; 
   }): Promise<{
     content: object; citations_requested: boolean;
     logprobs?: number[]; semantic_entropy?: number; conformal_score?: number;
   }>;
   vision_json(args: {
     system: string; image_or_pdf_ref: string; prompt: string;
-    json_schema: object; max_tokens: number; temperature: number; // TEMP_CLASSIFIER (§13)
+    json_schema: object; max_tokens: number; temperature: number;
   }): Promise<{
     extracted_text_redacted: string; iocs: string[]; pii_detected: string[];
     encryption_proof_verified: boolean; tamper_score: number; layout_hashes: string[];
@@ -720,8 +720,8 @@ The normative compliance corpus consists of:
 
 | `doc_id` | Source path | Normative? | Notes |
 |---|---|---|---|
-| `gdpr-full` | `corpus/GDPR.txt` or `data/GDPR.txt` | Yes | Sole ground truth for Art 33/34. Article-aware splits (never split mid-article). |
-| `iso27701` | `corpus/ISO 27701-2025_ocr.pdf` or `data/ISO 27701-2025_ocr.pdf` | Yes | B.3.11/B.3.12 verbatim; Clause 10.2 corrective actions; A.3.11/A.3.12 via crosswalk. |
+| `gdpr-full` | `corpus/gdpr-full.txt` | Yes | Sole ground truth for Art 33/34. Paragraph windows; splits may fall mid-article. |
+| `iso27701` | `corpus/iso27701.md` | Yes | B.3.11/B.3.12 verbatim; Clause 10.2 corrective actions; A.3.11/A.3.12 via crosswalk. Heading sections via mdast AST. |
 
 Ingest: each file hashed (SHA-256); corpus version = `sha256(sorted(file hashes))`. `EMBEDDINGS_MODEL` change REQUIRES full re-ingest (new version). `RAG_CORPUS_STALE` raised when query-time version ≠ ingest version.
 
@@ -729,7 +729,7 @@ Ingest: each file hashed (SHA-256); corpus version = `sha256(sorted(file hashes)
 
 | Class | Size | Overlap | Split rule |
 |---|---|---|---|
-| Normative (`gdpr-full`, `iso27701`) | 512 tokens | 64 | Article/clause-aware: splits only at article or clause boundaries; each chunk carries `{article_or_clause, item}` metadata and a globally unique chunk ID `${docId}:${clause}:L${lineNum}:${subIdx}` |
+| Normative (`gdpr-full`, `iso27701`) | 512 tokens | 64 | Format-native sections (markdown headings via mdast AST, PDF pages via unpdf, TXT paragraph groups) capped to maxTokens with chunkOverlap-line windows; sequential chunk IDs `${docId}:NNNN` |
 
 Tokenizer: the embeddings model's tokenizer; token counts in THIS spec are approximate — the implementation counts exactly and logs chunk stats at ingest (`RAG_INGEST_STATS:{doc_id,chunks,tokens}`).
 Every normative chunk is indexed with **Contextual Retrieval Headers**: at ingest, a deterministic prefix `[DOC:<doc_id> | CLAUSE:<article_or_clause> | NORMATIVE:<bool>]` is prepended prior to `embed()` and BM25 tokenization so cross-chunk pronoun or sub-clause references ("paragraph 1 of this Article") never lose scope.
@@ -744,7 +744,7 @@ Pipeline (fixed): (1) **Agentic Self-RAG Query Decomposition + Dense Bi-Encoder 
 
 ### 7.5 Citations
 
-Format: `doc_id:chunk_id:lines` (e.g. `gdpr-full:art33:2179-2199`, `iso27701:b3.12:3407-3440`). Rendered in drafts (§10.1–10.2 `citations[]`), stored in `evidence_refs` (append-only tokens per §9.1 marker rule, ≤1000 chars total — overflow spills to an `evidence-index.txt` attachment with pointer token left in-field), and stored in the bundle manifest (§10.3). Citation validity check (reviewer): chunk exists in current corpus version + score ≥ threshold + normative flag matches use. Fabricated citation (chunk id not in index) → `CITATION_FABRICATED`: fail the draft, page operator, flag the model route for review (do NOT auto-retry with same route).
+Format: `doc_id:chunk_id:lines` (e.g. `gdpr-full:gdpr-full:0007:2169-2193`, `iso27701:iso27701:0003:104-116`; sequence/line numbers illustrative of format, not pinned). Rendered in drafts (§10.1–10.2 `citations[]`), stored in `evidence_refs` (append-only tokens per §9.1 marker rule, ≤1000 chars total — overflow spills to an `evidence-index.txt` attachment with pointer token left in-field), and stored in the bundle manifest (§10.3). Citation validity check (reviewer): chunk exists in current corpus version + score ≥ threshold + normative flag matches use. Fabricated citation (chunk id not in index) → `CITATION_FABRICATED`: fail the draft, page operator, flag the model route for review (do NOT auto-retry with same route).
 
 ### 7.6 Eval gate (10 fixed queries — build fails on any miss)
 
