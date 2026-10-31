@@ -5,7 +5,7 @@
   "main": "./src/index.ts",
   "types": "./src/index.ts",
   "dependencies": {
-    "@aws-sdk/client-s3": "^3.1160.0",
+    "@aws-sdk/client-s3": "^3.1161.0",
     "@pims/config": "workspace:*",
     "@pims/models": "workspace:*",
     "@pims/types": "workspace:*",
@@ -13,9 +13,9 @@
     "mdast": "^3.0.0",
     "minisearch": "^7.2.0",
     "pgvector": "^0.3.0",
-    "postgres": "^3.4.5",
+    "postgres": "^4.0.0",
     "remark": "^15.0.1",
-    "unpdf": "^2.0.1",
+    "unpdf": "^2.1.0",
     "zod": "^3.24.2"
   },
   "devDependencies": {

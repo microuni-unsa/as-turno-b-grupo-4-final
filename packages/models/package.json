@@ -7,7 +7,7 @@
   "dependencies": {
     "@pims/config": "workspace:*",
     "@pims/types": "workspace:*",
-    "openai": "^7.45.1",
+    "openai": "^7.47.0",
     "zod": "^3.24.2"
   }
 }

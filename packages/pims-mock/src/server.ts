@@ -1346,6 +1346,25 @@ export async function createPimsTestServer(
   const app = buildPimsApp(dbClient, options);
   const port = options?.port ?? 0;
 
+  if (typeof Bun !== "undefined" && typeof Bun.serve === "function") {
+    const server = Bun.serve({
+      fetch: app.fetch,
+      port,
+    });
+    const boundPort = server.port;
+    if (typeof boundPort !== "number") {
+      throw new Error("PIMS test server failed to bind to a valid TCP port");
+    }
+    const serverUrl = `http://localhost:${boundPort}`;
+    return {
+      port: boundPort,
+      url: serverUrl,
+      stop: async () => {
+        server.stop(true);
+      },
+    };
+  }
+
   return new Promise((resolve) => {
     const server = serve(
       {
