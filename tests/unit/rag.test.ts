@@ -435,9 +435,9 @@ Notify the designated Incident Commander within 30 minutes.
         ragService.validateCitation("gdpr-full:non_existent:1-10", true),
       ).toThrow(CitationFabricatedError);
 
-      expect(() =>
-        ragService.validateCitation("invalid-format", true),
-      ).toThrow(CitationInvalidError);
+      expect(() => ragService.validateCitation("invalid-format", true)).toThrow(
+        CitationInvalidError,
+      );
     });
 
     it("raises RagNoEvidenceError when candidate scores fall below threshold", async () => {

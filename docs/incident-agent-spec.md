@@ -414,7 +414,7 @@ flowchart LR
 | `rag-service` | Corpus ingest with SHA-256 versioning, contextual chunk headers, Tri-Modal GraphRAG (Dense + BM25 + Normative Knowledge Graph), HyDE query expansion, CRAG self-grading, rerank, citation formatting, and the 10-query eval gate. | Trusted for retrieval; UNTRUSTED for content — every passage carries `doc_id:chunk:lines` and a non-normative flag where applicable; legal content without citation is rejected (§6.5). |
 | `voice-gateway` | Streaming STT/TTS provider calls, VAD barge-in, paralinguistic stress/urgency prosody scoring, language handling (`es-PE` primary, `en` fallback), dual-pass NER+regex PII redaction before synthesis, audio-ref retention. | Untrusted input (audio). Transcript confidence <`VOICE_MIN_CONFIDENCE` → `VOICE_LOW_CONFIDENCE`. Raw audio MUST NOT enter prompts or logs. |
 | `notice-composer` | Builds Art 33/34 packs from validated incident fields + RAG citations; runs the exemption decision tables and constitutional rubric pre-checks; produces drafts ONLY (never sends). | Trusted builder; output is inert until `compliance_reviewer` approves. |
-| `evidence-store` | Local encrypted SQLite WAL + blob staging: attachment bytes pre-upload, multimodal forensic scan reports, SHA-256 hashes, PII tags, bundle manifests, draft packs, leases, dedupe index, queued signals. | Trusted staging; MUST encrypt at rest (AES-256-GCM, key via env) and purge per retention (§13). |
+| `evidence-store` | PostgreSQL with Drizzle ORM + blob staging: attachment bytes pre-upload, multimodal forensic scan reports, SHA-256 hashes, PII tags, bundle manifests, draft packs, leases, dedupe index, queued signals. | Trusted staging; MUST encrypt at rest (AES-256-GCM, key via env) and purge per retention (§13). |
 | `indicator-emitter` | Emits metric events per §10.6 on every state change; feeds Agente de Indicadores and 9.3.2(d) inputs. | Fire-and-forget with local spool; emission failure → `INDICATOR_SPOOL_FULL` (spool 10k events, then oldest dropped with counter — the single allowed lossy path, counters preserved). |
 | `operator-console` | Read-mostly UI: queue, incident timeline, drafts pending veto, audit trail view, kill-switch, grant/revoke recipient activation, capture re-run buttons. | Authenticated operators only (§11.1). Console actions are synchronous calls into `orchestrator`; console MUST NOT call PIMS directly. |
 
@@ -478,7 +478,7 @@ The Bun + TypeScript implementation follows this exact layout (zero unmapped fil
  - `src/rag/rag-service.ts` — Contextual chunker, MiniSearch BM25 + pgvector vector index + normative knowledge graph, HyDE + 3-way RRF + CRAG grader + §7.6 eval runner.
 - `src/voice/voice-gateway.ts` — WebSocket audio streamer, VAD barge-in, prosody urgency extractor, dual-pass NER+regex redactor, STT/TTS client.
 - `src/composer/notice-composer.ts` — Art 33/34 pack builder, canonical content hasher, 4-judge constitutional rubric evaluator.
-- `src/evidence/evidence-store.ts` — AES-256-GCM encrypted SQLite WAL (`timers`, `leases`, `dedupe_index`, `draft_packs`, `risk_queue`, `indicator_spool`, `tool_ledger`, `audio_refs`) + content-addressed blob store.
+- `src/evidence/evidence-store.ts` — AES-256-GCM encrypted PostgreSQL + Drizzle ORM store (`timers`, `leases`, `dedupe_index`, `draft_packs`, `risk_queue`, `indicator_spool`, `tool_ledger`, `audio_refs`) + content-addressed blob store.
 - `src/indicators/indicator-emitter.ts` — §10.6 event calculator (MTTD/MTTR/SLA) + HMAC webhook sender.
 
 ## 5. Agent roles, skills, tools

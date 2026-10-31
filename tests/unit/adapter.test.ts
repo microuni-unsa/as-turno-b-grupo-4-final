@@ -94,8 +94,7 @@ describe("PIMS Adapter Unit & Resilience Suite", () => {
     });
 
     const listPromise = adapter.listIncidents();
-    const expectation =
-      expect(listPromise).rejects.toThrow(PimsThrottledError);
+    const expectation = expect(listPromise).rejects.toThrow(PimsThrottledError);
 
     await vi.runAllTimersAsync();
     await expectation;
@@ -114,9 +113,7 @@ describe("PIMS Adapter Unit & Resilience Suite", () => {
         );
       });
 
-    await expect(adapter.getIncident(1)).rejects.toThrow(
-      PimsClientBugError,
-    );
+    await expect(adapter.getIncident(1)).rejects.toThrow(PimsClientBugError);
     expect(fetchSpy).toHaveBeenCalledTimes(1);
   });
 
@@ -131,9 +128,7 @@ describe("PIMS Adapter Unit & Resilience Suite", () => {
       );
     });
 
-    await expect(adapter.getIncident(1)).rejects.toThrow(
-      PimsGateBlockedError,
-    );
+    await expect(adapter.getIncident(1)).rejects.toThrow(PimsGateBlockedError);
   });
 
   it("client-side filters when backend ignores filter and logs PIMS_FILTER_IGNORED", async () => {

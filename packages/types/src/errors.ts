@@ -297,3 +297,227 @@ export class RagIndexError extends PimsBaseError {
     super(message, "RAG_INDEX_ERROR", details);
   }
 }
+
+export class ArtifactIncompleteError extends PimsBaseError {
+  readonly artifact: string;
+  readonly field: string;
+
+  constructor(artifact: string, field: string, details?: PimsErrorDetails) {
+    super(
+      `Artifact '${artifact}' is incomplete; missing required field: ${field}`,
+      `ARTIFACT_INCOMPLETE:${artifact}:${field}`,
+      details,
+    );
+    this.artifact = artifact;
+    this.field = field;
+  }
+}
+
+export class AttachmentRejectedError extends PimsBaseError {
+  readonly reason: string;
+
+  constructor(reason: string, details?: PimsErrorDetails) {
+    super(
+      `Attachment rejected: ${reason}`,
+      `ATTACHMENT_REJECTED:${reason}`,
+      details,
+    );
+    this.reason = reason;
+  }
+}
+
+export class AttachmentHashMismatchError extends PimsBaseError {
+  constructor(
+    message = "Attachment SHA-256 pre-upload and post-upload verification mismatch",
+    details?: PimsErrorDetails,
+  ) {
+    super(message, "ATTACHMENT_HASH_MISMATCH", details);
+  }
+}
+
+export class BundlePimsMismatchError extends PimsBaseError {
+  readonly fileName: string;
+
+  constructor(fileName: string, details?: PimsErrorDetails) {
+    super(
+      `Bundle manifest does not match PIMS attachments for file: ${fileName}`,
+      `BUNDLE_PIMS_MISMATCH:${fileName}`,
+      details,
+    );
+    this.fileName = fileName;
+  }
+}
+
+export class BundleAlreadySealedError extends PimsBaseError {
+  constructor(
+    message = "Evidence bundle is already sealed and cannot be modified",
+    details?: PimsErrorDetails,
+  ) {
+    super(message, "BUNDLE_ALREADY_SEALED", details);
+  }
+}
+
+export class ReviewApprovalInvalidError extends PimsBaseError {
+  constructor(
+    message = "Review approval ID is invalid or content hash mismatch",
+    details?: PimsErrorDetails,
+  ) {
+    super(message, "REVIEW_APPROVAL_INVALID", details);
+  }
+}
+
+export class ReviewRejectedError extends PimsBaseError {
+  readonly judge: string;
+  readonly item: string;
+  readonly fix: string;
+
+  constructor(
+    judge: string,
+    item: string,
+    fix: string,
+    details?: PimsErrorDetails,
+  ) {
+    super(
+      `Review rejected by ${judge} on ${item}: ${fix}`,
+      `REVIEW_REJECTED:${judge}:${item}:${fix}`,
+      details,
+    );
+    this.judge = judge;
+    this.item = item;
+    this.fix = fix;
+  }
+}
+
+export class ExportVersionUnknownError extends PimsBaseError {
+  readonly version: string;
+
+  constructor(version: string, details?: PimsErrorDetails) {
+    super(
+      `Audit export version '${version}' is unknown`,
+      `EXPORT_VERSION_UNKNOWN:${version}`,
+      details,
+    );
+    this.version = version;
+  }
+}
+
+export class LinkDanglingError extends PimsBaseError {
+  readonly linkType: string;
+  readonly targetId: string;
+
+  constructor(linkType: string, targetId: string, details?: PimsErrorDetails) {
+    super(
+      `Dangling ${linkType} link to id ${targetId}`,
+      `LINK_DANGLING:${linkType}:${targetId}`,
+      details,
+    );
+    this.linkType = linkType;
+    this.targetId = targetId;
+  }
+}
+
+export class PathEscapeError extends PimsBaseError {
+  readonly attemptedPath: string;
+
+  constructor(attemptedPath: string, details?: PimsErrorDetails) {
+    super(
+      `Path escape detected outside sandbox: ${attemptedPath}`,
+      "PATH_ESCAPE",
+      details,
+    );
+    this.attemptedPath = attemptedPath;
+  }
+}
+
+export class LeaseLostError extends PimsBaseError {
+  readonly incidentCode: string;
+
+  constructor(incidentCode: string, details?: PimsErrorDetails) {
+    super(
+      `Execution lease lost for incident ${incidentCode}`,
+      "LEASE_LOST",
+      details,
+    );
+    this.incidentCode = incidentCode;
+  }
+}
+
+export class LeaseHeldError extends PimsBaseError {
+  readonly holder: string;
+
+  constructor(holder: string, details?: PimsErrorDetails) {
+    super(
+      `Execution lease is held by another worker: ${holder}`,
+      `LEASE_HELD_BY:${holder}`,
+      details,
+    );
+    this.holder = holder;
+  }
+}
+
+export class ExemptionUngroundedError extends PimsBaseError {
+  readonly letter: string;
+  readonly reason: string;
+
+  constructor(letter: string, reason: string, details?: PimsErrorDetails) {
+    super(
+      `Article 34(3) exemption (${letter}) ungrounded: ${reason}`,
+      `EXEMPTION_UNGROUNDED:${letter}:${reason}`,
+      details,
+    );
+    this.letter = letter;
+    this.reason = reason;
+  }
+}
+
+export class PlainLanguageViolationError extends PimsBaseError {
+  readonly sentenceIndex: number;
+  readonly wordCount: number;
+
+  constructor(
+    sentenceIndex: number,
+    wordCount: number,
+    details?: PimsErrorDetails,
+  ) {
+    super(
+      `Sentence ${sentenceIndex} exceeds plain language limit: ${wordCount} words (max 25)`,
+      "PLAIN_LANGUAGE_VIOLATION",
+      details,
+    );
+    this.sentenceIndex = sentenceIndex;
+    this.wordCount = wordCount;
+  }
+}
+
+export class SubjectCountForbiddenError extends PimsBaseError {
+  constructor(
+    message = "Subject counts are strictly forbidden in Art 34 body unless approved by reviewer waiver",
+    details?: PimsErrorDetails,
+  ) {
+    super(message, "SUBJECT_COUNT_FORBIDDEN", details);
+  }
+}
+
+export class EvidenceStoreEncryptionError extends PimsBaseError {
+  constructor(
+    message = "Evidence store cryptographic verification or decryption failed",
+    details?: PimsErrorDetails,
+  ) {
+    super(message, "EVIDENCE_STORE_ENCRYPTION_ERROR", details);
+  }
+}
+
+export class EvidenceNotFoundError extends PimsBaseError {
+  readonly entity: string;
+  readonly entityId: string | number;
+
+  constructor(entity: string, id: string | number, details?: PimsErrorDetails) {
+    super(
+      `Evidence entity '${entity}' with id '${id}' not found`,
+      `EVIDENCE_NOT_FOUND:${entity}:${id}`,
+      details,
+    );
+    this.entity = entity;
+    this.entityId = id;
+  }
+}

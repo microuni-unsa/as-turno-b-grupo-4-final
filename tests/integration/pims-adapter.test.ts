@@ -264,9 +264,9 @@ describe("PIMS Client Adapter & Reverse-Engineered DRF API Integration Suite", (
         await adapter.deleteRecipient(r.id);
       }
 
-      await expect(
-        adapter.notifyIncident(incidentForNotify),
-      ).rejects.toThrow(NotifyNoRecipientsError);
+      await expect(adapter.notifyIncident(incidentForNotify)).rejects.toThrow(
+        NotifyNoRecipientsError,
+      );
     });
 
     it("E15: creates new notification recipient", async () => {

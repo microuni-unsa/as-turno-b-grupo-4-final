@@ -22,6 +22,10 @@
       "@pims/models/*": ["./packages/models/src/*"],
       "@pims/rag": ["./packages/rag/src/index.ts"],
       "@pims/rag/*": ["./packages/rag/src/*"],
+      "@pims/evidence": ["./packages/evidence/src/index.ts"],
+      "@pims/evidence/*": ["./packages/evidence/src/*"],
+      "@pims/notices": ["./packages/notices/src/index.ts"],
+      "@pims/notices/*": ["./packages/notices/src/*"],
       "@tests/*": ["./tests/*"]
     },
     "verbatimModuleSyntax": true,

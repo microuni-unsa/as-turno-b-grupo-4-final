@@ -1,0 +1,14 @@
+{
+  "name": "@pims/evidence",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "src/index.ts",
+  "dependencies": {
+    "@pims/types": "workspace:*",
+    "@pims/config": "workspace:*",
+    "@pims/models": "workspace:*",
+    "@pims/pims-adapter": "workspace:*",
+    "drizzle-orm": "^0.45.4",
+    "postgres": "^3.4.5"
+  }
+}

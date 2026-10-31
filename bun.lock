@@ -32,6 +32,18 @@
         "zod": "^3.24.2",
       },
     },
+    "packages/evidence": {
+      "name": "@pims/evidence",
+      "version": "1.0.0",
+      "dependencies": {
+        "@pims/config": "workspace:*",
+        "@pims/models": "workspace:*",
+        "@pims/pims-adapter": "workspace:*",
+        "@pims/types": "workspace:*",
+        "drizzle-orm": "^0.45.4",
+        "postgres": "^3.4.5",
+      },
+    },
     "packages/models": {
       "name": "@pims/models",
       "version": "1.0.0",
@@ -40,6 +52,15 @@
         "@pims/types": "workspace:*",
         "openai": "^7.45.1",
         "zod": "^3.24.2",
+      },
+    },
+    "packages/notices": {
+      "name": "@pims/notices",
+      "version": "1.0.0",
+      "dependencies": {
+        "@pims/config": "workspace:*",
+        "@pims/models": "workspace:*",
+        "@pims/types": "workspace:*",
       },
     },
     "packages/pims-adapter": {
@@ -232,7 +253,11 @@
 
     "@pims/config": ["@pims/config@workspace:packages/config"],
 
+    "@pims/evidence": ["@pims/evidence@workspace:packages/evidence"],
+
     "@pims/models": ["@pims/models@workspace:packages/models"],
+
+    "@pims/notices": ["@pims/notices@workspace:packages/notices"],
 
     "@pims/pims-adapter": ["@pims/pims-adapter@workspace:packages/pims-adapter"],
 

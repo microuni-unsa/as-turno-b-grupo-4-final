@@ -1,0 +1,11 @@
+{
+  "name": "@pims/notices",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "src/index.ts",
+  "dependencies": {
+    "@pims/types": "workspace:*",
+    "@pims/config": "workspace:*",
+    "@pims/models": "workspace:*"
+  }
+}
