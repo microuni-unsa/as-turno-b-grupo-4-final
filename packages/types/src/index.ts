@@ -1,3 +1,4 @@
+export * from "@pims/types/agent.ts";
 export * from "@pims/types/attachments.ts";
 export * from "@pims/types/canonical.ts";
 export * from "@pims/types/constants.ts";

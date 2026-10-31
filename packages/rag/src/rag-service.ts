@@ -34,6 +34,7 @@ import type {
   RankedPassage,
 } from "@pims/types/models.ts";
 import type {
+  CorpusChunk,
   CRAGResult,
   QueryDecomposition,
   RagQueryResult,
@@ -173,6 +174,34 @@ export class RAGService {
 
   formatCitation(passage: Passage): string {
     return `${passage.doc_id}:${passage.chunk_id}:${passage.lines}`;
+  }
+
+  getPassageByCitation(citation: string): {
+    passage: Passage;
+    chunk: CorpusChunk;
+  } {
+    this.validateCitation(citation, false);
+    const firstColonIdx = citation.indexOf(":");
+    const lastColonIdx = citation.lastIndexOf(":");
+    const chunkId = citation.slice(firstColonIdx + 1, lastColonIdx);
+    const chunk = this.indexer.getChunk(chunkId);
+    if (!chunk) {
+      throw new CitationFabricatedError(
+        chunkId,
+        `Citation references unknown chunk: ${chunkId}`,
+      );
+    }
+    return {
+      passage: {
+        chunk_id: chunk.chunk_id,
+        doc_id: chunk.doc_id,
+        article_or_clause: chunk.article_or_clause,
+        lines: chunk.lines,
+        text: chunk.text,
+        normative: chunk.normative,
+      },
+      chunk,
+    };
   }
 
   validateCitation(citation: string, normativeOnly: boolean): void {

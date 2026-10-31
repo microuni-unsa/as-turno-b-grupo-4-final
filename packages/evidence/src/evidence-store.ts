@@ -3,15 +3,31 @@ import fs from "node:fs";
 import path from "node:path";
 import { decryptPayload, encryptPayload } from "@pims/evidence/crypto.ts";
 import {
+  agentStateTable,
   bundleManifestsTable,
   dedupeIndexTable,
   draftPacksTable,
+  incidentOutcomesTable,
   indicatorSpoolTable,
   leasesTable,
+  reviewApprovalsTable,
+  riskQueueTable,
   stagedAttachmentsTable,
   timersTable,
   toolLedgerTable,
+  totAnalysesTable,
+  triageCalibrationTable,
 } from "@pims/evidence/schema.ts";
+import {
+  type IncidentOutcome,
+  IncidentOutcomeSchema,
+  type ReviewApproval,
+  ReviewApprovalSchema,
+  type TotAnalysis,
+  TotAnalysisSchema,
+  type TriageCalibration,
+  TriageCalibrationSchema,
+} from "@pims/types/agent.ts";
 import {
   assertSafeFileName,
   parseStorageSegment,
@@ -25,6 +41,9 @@ import {
   LeaseLostError,
   PathEscapeError,
   PimsValidationError,
+  ReviewApprovalInvalidError,
+  ReviewApprovalReusedError,
+  SchedulerUnknownTimerError,
 } from "@pims/types/errors.ts";
 import {
   type AuditTrailLedgerEntry,
@@ -35,7 +54,13 @@ import {
   type ForensicScanResult,
   ForensicScanResultSchema,
   type IndicatorSpoolRecord,
+  type RiskQueueRecord,
+  RiskQueueRecordSchema,
+  type RiskSignalPayload,
+  RiskSignalPayloadSchema,
   type TimerRecord,
+  type ToolLedgerRecord,
+  ToolLedgerRecordSchema,
 } from "@pims/types/evidence.ts";
 import {
   type JsonObject,
@@ -45,7 +70,19 @@ import {
 } from "@pims/types/models.ts";
 import { type NoticeState, NoticeStateSchema } from "@pims/types/notices.ts";
 import { zodIssuesToDetails } from "@pims/types/validation.ts";
-import { and, asc, desc, eq, gt, isNull, lt, or } from "drizzle-orm";
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  gt,
+  inArray,
+  isNull,
+  lt,
+  lte,
+  or,
+  sql,
+} from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 
@@ -210,12 +247,16 @@ export class EvidenceStore {
 
       CREATE TABLE IF NOT EXISTS evidence.dedupe_index (
         incident_code VARCHAR(64) PRIMARY KEY,
+        pims_incident_id INTEGER,
         title_normalized VARCHAR(255) NOT NULL,
         incident_date VARCHAR(32) NOT NULL,
         system_or_url VARCHAR(255) NOT NULL,
         embedding_vector JSONB NOT NULL,
         is_deleted BOOLEAN NOT NULL DEFAULT FALSE
       );
+
+      ALTER TABLE evidence.dedupe_index
+        ADD COLUMN IF NOT EXISTS pims_incident_id INTEGER;
 
       CREATE TABLE IF NOT EXISTS evidence.risk_queue (
         id SERIAL PRIMARY KEY,
@@ -242,6 +283,50 @@ export class EvidenceStore {
         result_ref VARCHAR(255) NOT NULL,
         idempotency_key VARCHAR(128) NOT NULL
       );
+
+      CREATE TABLE IF NOT EXISTS evidence.review_approvals (
+        approval_id VARCHAR(64) PRIMARY KEY,
+        incident_code VARCHAR(64) NOT NULL,
+        pack_type VARCHAR(32) NOT NULL,
+        content_sha256 VARCHAR(64) NOT NULL,
+        approved_at_utc TIMESTAMPTZ NOT NULL,
+        consumed_at_utc TIMESTAMPTZ,
+        consumed_by VARCHAR(128),
+        note TEXT NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS evidence.incident_outcomes (
+        incident_code VARCHAR(64) PRIMARY KEY,
+        awareness_at_utc TIMESTAMPTZ NOT NULL,
+        closed_at_utc TIMESTAMPTZ NOT NULL,
+        severity VARCHAR(1) NOT NULL,
+        review_cycles INTEGER NOT NULL,
+        sla_72h_met BOOLEAN NOT NULL,
+        recorded_at_utc TIMESTAMPTZ NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS evidence.triage_calibration (
+        id SERIAL PRIMARY KEY,
+        incident_code VARCHAR(64) UNIQUE NOT NULL,
+        actual_incident_type VARCHAR(2) NOT NULL,
+        nonconformity_score DOUBLE PRECISION NOT NULL,
+        recorded_at_utc TIMESTAMPTZ NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS evidence.tot_analyses (
+        incident_code VARCHAR(64) PRIMARY KEY,
+        analysis_json JSONB NOT NULL,
+        created_at_utc TIMESTAMPTZ NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS evidence.agent_state (
+        key VARCHAR(128) PRIMARY KEY,
+        value JSONB NOT NULL,
+        updated_at_utc TIMESTAMPTZ NOT NULL
+      );
+
+      CREATE UNIQUE INDEX IF NOT EXISTS tool_ledger_incident_idem_idx
+        ON evidence.tool_ledger (incident_code, idempotency_key);
     `);
   }
 
@@ -584,6 +669,50 @@ export class EvidenceStore {
     };
   }
 
+  async setDraftPackState(
+    incidentCode: string,
+    packType: "authority" | "subject",
+    state: NoticeState,
+    reviewApprovalId: string | null,
+  ): Promise<void> {
+    const parsedState = NoticeStateSchema.safeParse(state);
+    if (!parsedState.success) {
+      throw new PimsValidationError(
+        "draft_pack.state",
+        "Invalid notice state",
+        { issues: zodIssuesToDetails(parsedState.error) },
+      );
+    }
+    const latest = await this.db
+      .select({ id: draftPacksTable.id })
+      .from(draftPacksTable)
+      .where(
+        and(
+          eq(draftPacksTable.incident_code, incidentCode),
+          eq(draftPacksTable.pack_type, packType),
+        ),
+      )
+      .orderBy(desc(draftPacksTable.id))
+      .limit(1);
+
+    const rowId = latest[0]?.id;
+    if (rowId === undefined) {
+      throw new EvidenceNotFoundError(
+        "draft_pack",
+        `${incidentCode}:${packType}`,
+      );
+    }
+
+    await this.db
+      .update(draftPacksTable)
+      .set({
+        state: parsedState.data,
+        review_approval_id: reviewApprovalId,
+        updated_at: new Date(),
+      })
+      .where(eq(draftPacksTable.id, rowId));
+  }
+
   async acquireLease(
     incidentCode: string,
     holderId: string,
@@ -732,15 +861,23 @@ export class EvidenceStore {
   async appendToolLedger(
     entry: AuditTrailLedgerEntry & { incident_code: string },
   ): Promise<void> {
-    await this.db.insert(toolLedgerTable).values({
-      incident_code: entry.incident_code,
-      at_utc: new Date(entry.at_utc),
-      role: entry.role,
-      tool: entry.tool,
-      args_redacted: entry.args_redacted,
-      result_ref: entry.result_ref,
-      idempotency_key: entry.idempotency_key,
-    });
+    await this.db
+      .insert(toolLedgerTable)
+      .values({
+        incident_code: entry.incident_code,
+        at_utc: new Date(entry.at_utc),
+        role: entry.role,
+        tool: entry.tool,
+        args_redacted: entry.args_redacted,
+        result_ref: entry.result_ref,
+        idempotency_key: entry.idempotency_key,
+      })
+      .onConflictDoNothing({
+        target: [
+          toolLedgerTable.incident_code,
+          toolLedgerTable.idempotency_key,
+        ],
+      });
   }
 
   async listToolLedger(incidentCode: string): Promise<AuditTrailLedgerEntry[]> {
@@ -804,6 +941,7 @@ export class EvidenceStore {
       .insert(dedupeIndexTable)
       .values({
         incident_code: record.incident_code,
+        pims_incident_id: record.pims_incident_id,
         title_normalized: record.title_normalized,
         incident_date: record.incident_date,
         system_or_url: record.system_or_url,
@@ -813,6 +951,7 @@ export class EvidenceStore {
       .onConflictDoUpdate({
         target: dedupeIndexTable.incident_code,
         set: {
+          pims_incident_id: record.pims_incident_id,
           title_normalized: record.title_normalized,
           incident_date: record.incident_date,
           system_or_url: record.system_or_url,
@@ -847,6 +986,7 @@ export class EvidenceStore {
     const r = rows[0];
     return {
       incident_code: r.incident_code,
+      pims_incident_id: r.pims_incident_id,
       title_normalized: r.title_normalized,
       incident_date: r.incident_date,
       system_or_url: r.system_or_url,
@@ -973,6 +1113,598 @@ export class EvidenceStore {
       prunedDraftsCount: deletedDrafts.length,
       prunedFilesCount,
     };
+  }
+
+  private toReviewApprovalRow(
+    row: typeof reviewApprovalsTable.$inferSelect,
+  ): ReviewApproval {
+    const parsed = ReviewApprovalSchema.safeParse({
+      approval_id: row.approval_id,
+      incident_code: row.incident_code,
+      pack_type: row.pack_type,
+      content_sha256: row.content_sha256,
+      approved_at_utc: row.approved_at_utc.toISOString(),
+      consumed_at_utc: row.consumed_at_utc
+        ? row.consumed_at_utc.toISOString()
+        : null,
+      consumed_by: row.consumed_by,
+      note: row.note,
+    });
+    if (!parsed.success) {
+      throw new EvidenceStoreWriteError("Invalid review approval row", {
+        issues: zodIssuesToDetails(parsed.error),
+      });
+    }
+    return parsed.data;
+  }
+
+  async markStagedAttachmentUploaded(
+    incidentCode: string,
+    fileName: string,
+    sha256: string,
+    pimsAttachmentId: number,
+  ): Promise<void> {
+    const safeFileName = assertSafeFileName(fileName);
+    const updated = await this.db
+      .update(stagedAttachmentsTable)
+      .set({ pims_attachment_id: pimsAttachmentId })
+      .where(
+        and(
+          eq(stagedAttachmentsTable.incident_code, incidentCode),
+          eq(stagedAttachmentsTable.file_name, safeFileName),
+          eq(stagedAttachmentsTable.sha256, sha256),
+        ),
+      )
+      .returning({ id: stagedAttachmentsTable.id });
+
+    if (updated.length === 0) {
+      throw new EvidenceNotFoundError("staged_attachment", fileName);
+    }
+  }
+
+  async saveTotAnalysis(
+    incidentCode: string,
+    analysis: TotAnalysis,
+  ): Promise<void> {
+    const parsed = TotAnalysisSchema.safeParse(analysis);
+    if (!parsed.success) {
+      throw new EvidenceStoreWriteError("Invalid ToT analysis", {
+        issues: zodIssuesToDetails(parsed.error),
+      });
+    }
+    const now = new Date();
+    await this.db
+      .insert(totAnalysesTable)
+      .values({
+        incident_code: incidentCode,
+        analysis_json: parsed.data,
+        created_at_utc: now,
+      })
+      .onConflictDoUpdate({
+        target: totAnalysesTable.incident_code,
+        set: {
+          analysis_json: parsed.data,
+          created_at_utc: now,
+        },
+      });
+  }
+
+  async getTotAnalysis(incidentCode: string): Promise<TotAnalysis | null> {
+    const rows = await this.db
+      .select()
+      .from(totAnalysesTable)
+      .where(eq(totAnalysesTable.incident_code, incidentCode))
+      .limit(1);
+
+    if (rows.length === 0 || !rows[0]) {
+      return null;
+    }
+
+    const parsed = TotAnalysisSchema.safeParse(rows[0].analysis_json);
+    if (!parsed.success) {
+      throw new EvidenceStoreWriteError("Invalid stored ToT analysis", {
+        issues: zodIssuesToDetails(parsed.error),
+      });
+    }
+    return parsed.data;
+  }
+
+  async getAgentState(key: string): Promise<JsonValue | null> {
+    const rows = await this.db
+      .select()
+      .from(agentStateTable)
+      .where(eq(agentStateTable.key, key))
+      .limit(1);
+
+    if (rows.length === 0 || !rows[0]) {
+      return null;
+    }
+
+    const parsed = JsonValueSchema.safeParse(rows[0].value);
+    if (!parsed.success) {
+      throw new EvidenceStoreWriteError(`Invalid agent state: ${key}`, {
+        issues: zodIssuesToDetails(parsed.error),
+      });
+    }
+    return parsed.data;
+  }
+
+  async setAgentState(key: string, value: JsonValue): Promise<void> {
+    const parsed = JsonValueSchema.safeParse(value);
+    if (!parsed.success) {
+      throw new EvidenceStoreWriteError(`Invalid agent state: ${key}`, {
+        issues: zodIssuesToDetails(parsed.error),
+      });
+    }
+    const now = new Date();
+    await this.db
+      .insert(agentStateTable)
+      .values({ key, value: parsed.data, updated_at_utc: now })
+      .onConflictDoUpdate({
+        target: agentStateTable.key,
+        set: { value: parsed.data, updated_at_utc: now },
+      });
+  }
+
+  async mintReviewApproval(params: {
+    incidentCode: string;
+    packType: "authority" | "subject" | "resolution";
+    contentSha256: string;
+    note: string;
+  }): Promise<ReviewApproval> {
+    const approvalId = crypto.randomUUID();
+    const inserted = await this.db
+      .insert(reviewApprovalsTable)
+      .values({
+        approval_id: approvalId,
+        incident_code: params.incidentCode,
+        pack_type: params.packType,
+        content_sha256: params.contentSha256,
+        approved_at_utc: new Date(),
+        consumed_at_utc: null,
+        consumed_by: null,
+        note: params.note,
+      })
+      .onConflictDoNothing({ target: reviewApprovalsTable.approval_id })
+      .returning();
+
+    const row = inserted[0];
+    if (row === undefined) {
+      throw new ReviewApprovalInvalidError(
+        `Review approval id collision: ${approvalId}`,
+      );
+    }
+    return this.toReviewApprovalRow(row);
+  }
+
+  async getReviewApproval(approvalId: string): Promise<ReviewApproval | null> {
+    const rows = await this.db
+      .select()
+      .from(reviewApprovalsTable)
+      .where(eq(reviewApprovalsTable.approval_id, approvalId))
+      .limit(1);
+
+    if (rows.length === 0 || !rows[0]) {
+      return null;
+    }
+    return this.toReviewApprovalRow(rows[0]);
+  }
+
+  async consumeReviewApproval(
+    approvalId: string,
+    contentSha256: string,
+    consumedBy: string,
+  ): Promise<ReviewApproval> {
+    const updated = await this.db
+      .update(reviewApprovalsTable)
+      .set({ consumed_at_utc: new Date(), consumed_by: consumedBy })
+      .where(
+        and(
+          eq(reviewApprovalsTable.approval_id, approvalId),
+          eq(reviewApprovalsTable.content_sha256, contentSha256),
+          isNull(reviewApprovalsTable.consumed_at_utc),
+        ),
+      )
+      .returning();
+
+    const row = updated[0];
+    if (row === undefined) {
+      const existing = await this.db
+        .select()
+        .from(reviewApprovalsTable)
+        .where(eq(reviewApprovalsTable.approval_id, approvalId))
+        .limit(1);
+
+      const existingRow = existing[0];
+      if (existingRow !== undefined) {
+        if (existingRow.consumed_at_utc !== null) {
+          throw new ReviewApprovalReusedError();
+        }
+        throw new ReviewApprovalInvalidError(
+          `Review approval content hash mismatch: ${approvalId}`,
+        );
+      }
+      throw new ReviewApprovalInvalidError(
+        `Unknown review approval: ${approvalId}`,
+      );
+    }
+    return this.toReviewApprovalRow(row);
+  }
+
+  async revokeReviewApprovals(
+    incidentCode: string,
+    packType?: "authority" | "subject" | "resolution",
+  ): Promise<number> {
+    const conditions = [eq(reviewApprovalsTable.incident_code, incidentCode)];
+    if (packType !== undefined) {
+      conditions.push(eq(reviewApprovalsTable.pack_type, packType));
+    }
+
+    const deleted = await this.db
+      .delete(reviewApprovalsTable)
+      .where(and(...conditions))
+      .returning({ approval_id: reviewApprovalsTable.approval_id });
+
+    return deleted.length;
+  }
+
+  async listReviewApprovals(incidentCode: string): Promise<ReviewApproval[]> {
+    const rows = await this.db
+      .select()
+      .from(reviewApprovalsTable)
+      .where(eq(reviewApprovalsTable.incident_code, incidentCode))
+      .orderBy(asc(reviewApprovalsTable.approved_at_utc));
+
+    return rows.map((row) => this.toReviewApprovalRow(row));
+  }
+
+  async listDueTimers(now: Date, limit: number): Promise<TimerRecord[]> {
+    const rows = await this.db
+      .select()
+      .from(timersTable)
+      .where(
+        and(
+          eq(timersTable.fired, false),
+          isNull(timersTable.cancelled_reason),
+          lte(timersTable.fire_at_utc, now),
+        ),
+      )
+      .orderBy(asc(timersTable.fire_at_utc))
+      .limit(limit);
+
+    return rows.map((r) => ({
+      timer_id: r.timer_id,
+      incident_code: r.incident_code,
+      timer_type: r.timer_type,
+      fire_at_utc: r.fire_at_utc.toISOString(),
+      payload: parseJsonObject(r.payload_json, "timers.payload_json"),
+      fired: r.fired,
+      cancelled_reason: r.cancelled_reason,
+    }));
+  }
+
+  async markTimerFired(timerId: string, firedAt: Date): Promise<void> {
+    void firedAt;
+    const updated = await this.db
+      .update(timersTable)
+      .set({ fired: true })
+      .where(eq(timersTable.timer_id, timerId))
+      .returning({ timer_id: timersTable.timer_id });
+
+    if (updated.length === 0) {
+      throw new SchedulerUnknownTimerError(timerId);
+    }
+  }
+
+  async enqueueRiskSignal(
+    incidentCode: string,
+    payload: RiskSignalPayload,
+  ): Promise<number> {
+    const parsed = RiskSignalPayloadSchema.safeParse(payload);
+    if (!parsed.success) {
+      throw new EvidenceStoreWriteError("Invalid risk signal payload", {
+        issues: zodIssuesToDetails(parsed.error),
+      });
+    }
+
+    const inserted = await this.db
+      .insert(riskQueueTable)
+      .values({
+        incident_code: incidentCode,
+        signal_payload: parseJsonObject(
+          parsed.data,
+          "risk_queue.signal_payload",
+        ),
+        status: "queued",
+        queued_at: new Date(),
+      })
+      .returning({ id: riskQueueTable.id });
+
+    const insertedId = inserted[0]?.id;
+    if (insertedId === undefined) {
+      throw new EvidenceStoreWriteError("Risk queue insert returned no id");
+    }
+    return insertedId;
+  }
+
+  async listQueuedRiskSignals(
+    incidentCode?: string,
+  ): Promise<RiskQueueRecord[]> {
+    const rows = await this.db
+      .select()
+      .from(riskQueueTable)
+      .where(
+        incidentCode === undefined
+          ? undefined
+          : eq(riskQueueTable.incident_code, incidentCode),
+      )
+      .orderBy(asc(riskQueueTable.id));
+
+    return rows.map((row) => {
+      const parsed = RiskQueueRecordSchema.safeParse({
+        id: row.id,
+        incident_code: row.incident_code,
+        signal_payload: row.signal_payload,
+        status: row.status,
+        queued_at_utc: row.queued_at.toISOString(),
+      });
+      if (!parsed.success) {
+        throw new EvidenceStoreWriteError("Invalid risk queue row", {
+          issues: zodIssuesToDetails(parsed.error),
+        });
+      }
+      return parsed.data;
+    });
+  }
+
+  async markRiskSignalSent(id: number): Promise<void> {
+    const updated = await this.db
+      .update(riskQueueTable)
+      .set({ status: "sent" })
+      .where(eq(riskQueueTable.id, id))
+      .returning({ id: riskQueueTable.id });
+
+    if (updated.length === 0) {
+      throw new EvidenceStoreWriteError(
+        `Risk signal ${id} could not be marked sent`,
+      );
+    }
+  }
+
+  async markRiskSignalFailed(id: number, reason: string): Promise<void> {
+    const updated = await this.db
+      .update(riskQueueTable)
+      .set({ status: "failed" })
+      .where(eq(riskQueueTable.id, id))
+      .returning({ id: riskQueueTable.id });
+
+    if (updated.length === 0) {
+      throw new EvidenceStoreWriteError(
+        `Risk signal ${id} could not be marked failed: ${reason}`,
+      );
+    }
+  }
+
+  async updateRiskSignalPayload(
+    id: number,
+    payload: RiskSignalPayload,
+  ): Promise<void> {
+    const parsed = RiskSignalPayloadSchema.safeParse(payload);
+    if (!parsed.success) {
+      throw new EvidenceStoreWriteError("Invalid risk signal payload", {
+        issues: zodIssuesToDetails(parsed.error),
+      });
+    }
+
+    const updated = await this.db
+      .update(riskQueueTable)
+      .set({
+        signal_payload: parseJsonObject(
+          parsed.data,
+          "risk_queue.signal_payload",
+        ),
+      })
+      .where(eq(riskQueueTable.id, id))
+      .returning({ id: riskQueueTable.id });
+
+    if (updated.length === 0) {
+      throw new EvidenceStoreWriteError(
+        `Risk signal ${id} payload could not be updated`,
+      );
+    }
+  }
+
+  async deleteIndicatorSpool(ids: number[]): Promise<number> {
+    if (ids.length === 0) {
+      return 0;
+    }
+    const deleted = await this.db
+      .delete(indicatorSpoolTable)
+      .where(inArray(indicatorSpoolTable.id, ids))
+      .returning({ id: indicatorSpoolTable.id });
+    return deleted.length;
+  }
+
+  async countIndicatorSpool(): Promise<number> {
+    const rows = await this.db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(indicatorSpoolTable);
+    return rows[0]?.count ?? 0;
+  }
+
+  async dropOldestIndicatorSpool(count: number): Promise<number> {
+    if (count <= 0) {
+      return 0;
+    }
+    const rows = await this.db
+      .select({ id: indicatorSpoolTable.id })
+      .from(indicatorSpoolTable)
+      .orderBy(asc(indicatorSpoolTable.id))
+      .limit(count);
+
+    const ids = rows.map((row) => row.id);
+    if (ids.length === 0) {
+      return 0;
+    }
+
+    const deleted = await this.db
+      .delete(indicatorSpoolTable)
+      .where(inArray(indicatorSpoolTable.id, ids))
+      .returning({ id: indicatorSpoolTable.id });
+    return deleted.length;
+  }
+
+  async listDedupeIndex(): Promise<DedupeIndexRecord[]> {
+    const rows = await this.db
+      .select()
+      .from(dedupeIndexTable)
+      .orderBy(asc(dedupeIndexTable.incident_code));
+
+    return rows.map((r) => ({
+      incident_code: r.incident_code,
+      pims_incident_id: r.pims_incident_id,
+      title_normalized: r.title_normalized,
+      incident_date: r.incident_date,
+      system_or_url: r.system_or_url,
+      embedding_vector: r.embedding_vector,
+      is_deleted: r.is_deleted,
+    }));
+  }
+
+  async recordIncidentOutcome(outcome: IncidentOutcome): Promise<void> {
+    const parsed = IncidentOutcomeSchema.safeParse(outcome);
+    if (!parsed.success) {
+      throw new EvidenceStoreWriteError("Invalid incident outcome", {
+        issues: zodIssuesToDetails(parsed.error),
+      });
+    }
+    const data = parsed.data;
+    const values = {
+      incident_code: data.incident_code,
+      awareness_at_utc: new Date(data.awareness_at_utc),
+      closed_at_utc: new Date(data.closed_at_utc),
+      severity: data.severity,
+      review_cycles: data.review_cycles,
+      sla_72h_met: data.sla_72h_met,
+      recorded_at_utc: new Date(data.recorded_at_utc),
+    };
+
+    await this.db
+      .insert(incidentOutcomesTable)
+      .values(values)
+      .onConflictDoUpdate({
+        target: incidentOutcomesTable.incident_code,
+        set: values,
+      });
+  }
+
+  async listIncidentOutcomes(): Promise<IncidentOutcome[]> {
+    const rows = await this.db
+      .select()
+      .from(incidentOutcomesTable)
+      .orderBy(asc(incidentOutcomesTable.closed_at_utc));
+
+    return rows.map((row) => {
+      const parsed = IncidentOutcomeSchema.safeParse({
+        incident_code: row.incident_code,
+        awareness_at_utc: row.awareness_at_utc.toISOString(),
+        closed_at_utc: row.closed_at_utc.toISOString(),
+        severity: row.severity,
+        review_cycles: row.review_cycles,
+        sla_72h_met: row.sla_72h_met,
+        recorded_at_utc: row.recorded_at_utc.toISOString(),
+      });
+      if (!parsed.success) {
+        throw new EvidenceStoreWriteError("Invalid incident outcome row", {
+          issues: zodIssuesToDetails(parsed.error),
+        });
+      }
+      return parsed.data;
+    });
+  }
+
+  async saveTriageCalibration(sample: TriageCalibration): Promise<void> {
+    const parsed = TriageCalibrationSchema.safeParse(sample);
+    if (!parsed.success) {
+      throw new EvidenceStoreWriteError("Invalid triage calibration sample", {
+        issues: zodIssuesToDetails(parsed.error),
+      });
+    }
+    const data = parsed.data;
+    const values = {
+      incident_code: data.incident_code,
+      actual_incident_type: data.actual_incident_type,
+      nonconformity_score: data.nonconformity_score,
+      recorded_at_utc: new Date(data.recorded_at_utc),
+    };
+
+    await this.db
+      .insert(triageCalibrationTable)
+      .values(values)
+      .onConflictDoUpdate({
+        target: triageCalibrationTable.incident_code,
+        set: values,
+      });
+  }
+
+  async listTriageCalibration(): Promise<TriageCalibration[]> {
+    const rows = await this.db
+      .select()
+      .from(triageCalibrationTable)
+      .orderBy(asc(triageCalibrationTable.id));
+
+    return rows.map((row) => {
+      const parsed = TriageCalibrationSchema.safeParse({
+        incident_code: row.incident_code,
+        actual_incident_type: row.actual_incident_type,
+        nonconformity_score: row.nonconformity_score,
+        recorded_at_utc: row.recorded_at_utc.toISOString(),
+      });
+      if (!parsed.success) {
+        throw new EvidenceStoreWriteError("Invalid triage calibration row", {
+          issues: zodIssuesToDetails(parsed.error),
+        });
+      }
+      return parsed.data;
+    });
+  }
+
+  async findToolLedgerByIdempotencyKey(
+    incidentCode: string,
+    idempotencyKey: string,
+  ): Promise<ToolLedgerRecord | null> {
+    const rows = await this.db
+      .select()
+      .from(toolLedgerTable)
+      .where(
+        and(
+          eq(toolLedgerTable.incident_code, incidentCode),
+          eq(toolLedgerTable.idempotency_key, idempotencyKey),
+        ),
+      )
+      .limit(1);
+
+    if (rows.length === 0 || !rows[0]) {
+      return null;
+    }
+
+    const row = rows[0];
+    const parsed = ToolLedgerRecordSchema.safeParse({
+      id: row.id,
+      incident_code: row.incident_code,
+      at_utc: row.at_utc.toISOString(),
+      role: row.role,
+      tool: row.tool,
+      args_redacted: row.args_redacted,
+      result_ref: row.result_ref,
+      idempotency_key: row.idempotency_key,
+    });
+    if (!parsed.success) {
+      throw new EvidenceStoreWriteError("Invalid tool ledger row", {
+        issues: zodIssuesToDetails(parsed.error),
+      });
+    }
+    return parsed.data;
   }
 
   async close(): Promise<void> {

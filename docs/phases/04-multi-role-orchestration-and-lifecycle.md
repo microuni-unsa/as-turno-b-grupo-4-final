@@ -4,14 +4,14 @@
 Implement the 8 agent roles, 11 skills, 21 tools, the autonomous incident response lifecycle loop, Tree-of-Thoughts neuro-symbolic root-cause analysis, deadline scheduler, and the adversarial red-team constitutional review rubric.
 
 ## Requirements & Scope
-- **Agent Roles & Governance (`src/orchestrator/roles.ts`)**:
+- **Agent Roles & Governance (`packages/agent/src/orchestrator/roles.ts`)**:
   - Implementation of the 8 roles: `orchestrator`, `intake`, `triage`, `investigator`, `drafter`, `compliance_reviewer`, `notifier`, `monitor`.
   - Versioned system prompts with SHA-256 recording for compliance auditing.
   - Strict enforcement of tool allowlists and denylists; violations raise `ROLE_TOOL_DENIED`.
-- **Skills Catalog & Tool Manifest (`src/tools/index.ts`)**:
+- **Skills Catalog & Tool Manifest (`packages/agent/src/tools/registry.ts`)**:
   - Implementation of the 21 tools with strict Zod argument validation and error mapping.
   - Sequencing enforcement for incident actions: `C* -> A+ -> R` (minimum 1 Analysis action before Resolution; Resolution actions strictly require `review_approval_id`).
-- **Neuro-Symbolic Root-Cause Analysis (`src/investigation/root-cause.ts`)**:
+- **Neuro-Symbolic Root-Cause Analysis (`packages/agent/src/investigation/tot-analyzer.ts`)**:
   - Tree-of-Thoughts (ToT) candidate hypothesis generation with Bayesian posterior likelihood scoring over evidence and IOCs.
   - Method selector:
     - Single causal chain: 5-Whys (exactly 5 falsifiable levels).
@@ -21,7 +21,7 @@ Implement the 8 agent roles, 11 skills, 21 tools, the autonomous incident respon
 - **Corrective Action & Risk Linkage**:
   - Automatic creation of `core_auditfinding` (`classification=N`) and `core_auditactionplan` rows for qualifying high-severity incidents.
   - Risk feedback: emission of `core_riskevaluation` drafts into active risk periods; queued upon closed periods (`RISK_PERIOD_CLOSED`).
-- **Deadline Scheduler (`src/orchestrator/scheduler.ts`)**:
+- **Deadline Scheduler (`packages/agent/src/orchestrator/scheduler.ts`)**:
   - Timers: GDPR 72h authority clock, processor immediacy SLA, high-risk subject notification SLA, expedited 4h review SLA, Peru 48h provisional advisory clock.
   - Weibull survival hazard forecasting to detect and alert on deadline overrun risks.
 - **Adversarial Red-Team & 4-Judge Constitutional Review**:
@@ -38,12 +38,13 @@ Implement the 8 agent roles, 11 skills, 21 tools, the autonomous incident respon
   - Comprehensive 8-point closure checklist enforcement (§9.6).
 
 ## Deliverables
-- `src/orchestrator/orchestrator.ts`: Central execution engine and autonomous loop.
-- `src/orchestrator/roles.ts`: Role definitions, prompts, and policy enforcement.
-- `src/tools/registry.ts`: Tool execution engine with input validation.
-- `src/investigation/tot-analyzer.ts`: Neuro-symbolic root-cause analyzer.
-- `src/orchestrator/scheduler.ts`: Deadline scheduler with Weibull hazard model.
-- `src/review/constitutional-judges.ts`: Adversarial review and 4-judge rubric.
+- `packages/agent/src/orchestrator/orchestrator.ts`: Central execution engine and autonomous loop.
+- `packages/agent/src/orchestrator/roles.ts`: Role definitions, prompts, and policy enforcement.
+- `packages/agent/src/tools/registry.ts`: Tool execution engine with input validation.
+- `packages/agent/src/investigation/tot-analyzer.ts`: Neuro-symbolic root-cause analyzer.
+- `packages/agent/src/orchestrator/scheduler.ts`: Deadline scheduler with Weibull hazard model.
+- `packages/agent/src/review/constitutional-judges.ts`: Adversarial review and 4-judge rubric.
+- `packages/types/src/agent.ts`: Phase-4 contract surface (roles, tools, timers, ToT, review, lifecycle, indicators).
 - `tests/integration/lifecycle-loop.test.ts`: End-to-end integration test of incident transitions.
 - `tests/unit/root-cause.test.ts`: Unit tests for ToT and counterfactual simulation.
 

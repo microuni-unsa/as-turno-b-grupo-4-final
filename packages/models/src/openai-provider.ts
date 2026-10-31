@@ -51,6 +51,53 @@ const OpenAIProviderOptionsSchema = z.object({
   cohereApiKey: z.string().optional(),
 });
 
+const TOP_LOGPROBS = 5;
+
+export function computeTopLogprobEntropy(
+  positions: Array<Array<{ logprob: number }>>,
+): number | null {
+  let total = 0;
+  let counted = 0;
+
+  for (const position of positions) {
+    if (position.length === 0) {
+      continue;
+    }
+    const normalizer = Math.log2(position.length);
+    if (!(normalizer > 0)) {
+      continue;
+    }
+    let entropy = 0;
+    let mass = 0;
+    for (const item of position) {
+      if (typeof item.logprob !== "number" || !Number.isFinite(item.logprob)) {
+        continue;
+      }
+      const probability = Math.exp(item.logprob);
+      if (!Number.isFinite(probability) || probability <= 0) {
+        continue;
+      }
+      mass += probability;
+      entropy -= probability * Math.log2(probability);
+    }
+    if (!(mass > 0)) {
+      continue;
+    }
+    total += entropy / normalizer;
+    counted += 1;
+  }
+
+  if (counted === 0) {
+    return null;
+  }
+
+  const mean = total / counted;
+  if (!Number.isFinite(mean)) {
+    return null;
+  }
+  return Math.min(1, Math.max(0, mean));
+}
+
 export class OpenAIModelProvider implements ModelProvider {
   private readonly reasoningConfig: ModelConfig;
   private readonly fastConfig: ModelConfig;
@@ -216,6 +263,8 @@ export class OpenAIModelProvider implements ModelProvider {
         temperature: args.temperature,
         max_tokens: args.max_tokens,
         response_format: { type: "json_object" },
+        logprobs: true,
+        top_logprobs: TOP_LOGPROBS,
       });
 
       const rawContent = response.choices?.[0]?.message?.content;
@@ -254,18 +303,35 @@ export class OpenAIModelProvider implements ModelProvider {
 
       const logprobs: number[] = [];
       const choiceLogprobs = response.choices?.[0]?.logprobs?.content;
+      const topLogprobPositions: Array<Array<{ logprob: number }>> = [];
       if (Array.isArray(choiceLogprobs)) {
         for (const item of choiceLogprobs) {
           if (typeof item.logprob === "number") {
             logprobs.push(item.logprob);
           }
+          const tops = item.top_logprobs;
+          if (!Array.isArray(tops)) {
+            continue;
+          }
+          const position: Array<{ logprob: number }> = [];
+          for (const candidate of tops) {
+            if (typeof candidate.logprob === "number") {
+              position.push({ logprob: candidate.logprob });
+            }
+          }
+          topLogprobPositions.push(position);
         }
       }
+
+      const semanticEntropy = computeTopLogprobEntropy(topLogprobPositions);
 
       return {
         content: parsed,
         citations_requested: citationsRequested,
         logprobs: logprobs.length > 0 ? logprobs : undefined,
+        ...(semanticEntropy === null
+          ? {}
+          : { semantic_entropy: semanticEntropy }),
       };
     } catch (err: unknown) {
       throw this.mapError(route, err);

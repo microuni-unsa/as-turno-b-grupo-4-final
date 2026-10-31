@@ -264,6 +264,84 @@ describe("OpenAIModelProvider (§4.3 Unit Suite)", () => {
     expect(fetchSpy).toHaveBeenCalledTimes(1);
   });
 
+  it("chat_json computes semantic entropy from top_logprobs and requests them", async () => {
+    const uniform = Math.log(0.5);
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          choices: [
+            {
+              message: { content: JSON.stringify({ status: "OK" }) },
+              logprobs: {
+                content: [
+                  {
+                    logprob: uniform,
+                    top_logprobs: [
+                      { token: "A", logprob: uniform },
+                      { token: "B", logprob: uniform },
+                    ],
+                  },
+                  {
+                    logprob: uniform,
+                    top_logprobs: [
+                      { token: "C", logprob: uniform },
+                      { token: "D", logprob: uniform },
+                    ],
+                  },
+                ],
+              },
+            },
+          ],
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+
+    const res = await provider.chat_json({
+      route: "REASONING_MODEL",
+      system: "System prompt",
+      messages: [{ role: "user", content: "Classify" }],
+      max_tokens: 200,
+      temperature: 0.0,
+    });
+
+    expect(res.semantic_entropy).toBeCloseTo(1, 6);
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    const init = fetchSpy.mock.calls[0]?.[1];
+    const body = JSON.parse(String(init?.body)) as {
+      logprobs?: boolean;
+      top_logprobs?: number;
+    };
+    expect(body.logprobs).toBe(true);
+    expect(body.top_logprobs).toBe(5);
+  });
+
+  it("chat_json omits semantic_entropy when the endpoint returns no top_logprobs", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          choices: [
+            {
+              message: { content: JSON.stringify({ status: "OK" }) },
+              logprobs: { content: [{ logprob: -0.1 }] },
+            },
+          ],
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+
+    const res = await provider.chat_json({
+      route: "REASONING_MODEL",
+      system: "System prompt",
+      messages: [{ role: "user", content: "Classify" }],
+      max_tokens: 200,
+      temperature: 0.0,
+    });
+
+    expect(res.semantic_entropy).toBeUndefined();
+  });
+
   it("handles HTTP 500 with retry and throws ModelUnavailableError on exhaustion", async () => {
     vi.spyOn(globalThis, "fetch").mockImplementation(() =>
       Promise.resolve(new Response("Internal Server Error", { status: 500 })),

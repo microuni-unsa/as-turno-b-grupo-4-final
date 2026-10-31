@@ -19,6 +19,7 @@ import {
   PimsThrottledError,
   PimsUnavailableError,
   PimsValidationError,
+  RestoreFailedError,
 } from "@pims/types/errors.ts";
 import type {
   PaginatedResult,
@@ -68,6 +69,11 @@ export interface PimsAdapterConfig {
   tokenCmd?: string[];
   username?: string;
   password?: string;
+}
+
+export interface PimsRequestOverrides {
+  incidentCode?: string | null;
+  idempotencyKey?: string;
 }
 
 export class PimsAdapter {
@@ -259,11 +265,15 @@ export class PimsAdapter {
     };
   }
 
-  async createIncident(data: PimsIncidentCreate): Promise<PimsIncident> {
+  async createIncident(
+    data: PimsIncidentCreate,
+    overrides?: PimsRequestOverrides,
+  ): Promise<PimsIncident> {
     const raw = await this.request<unknown>("POST", "/api/incidents/", {
       body: data,
       operation: "create_incident",
-      incidentCode: data.incident_code,
+      incidentCode: overrides?.incidentCode ?? data.incident_code,
+      idempotencyKey: overrides?.idempotencyKey,
     });
     const parsed = PimsIncidentSchema.safeParse(raw);
     if (!parsed.success) {
@@ -292,11 +302,13 @@ export class PimsAdapter {
   async updateIncident(
     id: number,
     data: PimsIncidentUpdate,
+    overrides?: PimsRequestOverrides,
   ): Promise<PimsIncident> {
     const raw = await this.request<unknown>("PATCH", `/api/incidents/${id}/`, {
       body: data,
       operation: "update_incident",
-      incidentCode: data.incident_code,
+      incidentCode: overrides?.incidentCode ?? data.incident_code,
+      idempotencyKey: overrides?.idempotencyKey,
     });
     const parsed = PimsIncidentSchema.safeParse(raw);
     if (!parsed.success) {
@@ -308,10 +320,123 @@ export class PimsAdapter {
     return parsed.data;
   }
 
-  async deleteIncident(id: number): Promise<void> {
+  async deleteIncident(
+    id: number,
+    overrides?: PimsRequestOverrides,
+  ): Promise<void> {
     await this.request<void>("DELETE", `/api/incidents/${id}/`, {
       operation: "delete_incident",
+      incidentCode: overrides?.incidentCode,
+      idempotencyKey: overrides?.idempotencyKey,
     });
+  }
+
+  async appendIncidentAction(
+    id: number,
+    action: PimsIncidentAction,
+    overrides?: PimsRequestOverrides,
+  ): Promise<PimsIncident> {
+    const appended: PimsIncidentAction = {
+      action_type: action.action_type,
+      responsible: action.responsible,
+      action_date: action.action_date,
+      description: action.description,
+      evidence: action.evidence ?? null,
+    };
+
+    if (this.nestedActionMode === "merge") {
+      return this.updateIncident(id, { actions: [appended] }, overrides);
+    }
+
+    const before = await this.getIncident(id);
+    const after = await this.getIncident(id);
+
+    let base = after;
+    if (after.updated_at !== before.updated_at) {
+      const fresh = await this.getIncident(id);
+      if (fresh.updated_at !== after.updated_at) {
+        throw new PimsConflictCodeError("READ_MODIFY_WRITE_CONFLICT");
+      }
+      base = fresh;
+    }
+
+    const nextActions: PimsIncidentAction[] = [
+      ...(base.actions ?? []),
+      appended,
+    ];
+
+    return this.updateIncident(id, { actions: nextActions }, overrides);
+  }
+
+  async restoreIncident(
+    id: number,
+    overrides?: PimsRequestOverrides,
+  ): Promise<PimsIncident> {
+    try {
+      await this.request<unknown>("PATCH", `/api/incidents/${id}/`, {
+        body: { is_deleted: false, deleted_at: null },
+        operation: "restore_incident",
+        incidentCode: overrides?.incidentCode,
+        idempotencyKey: overrides?.idempotencyKey,
+      });
+    } catch (error: unknown) {
+      if (error instanceof PimsNotFoundError) {
+        console.warn(`RESTORE:${String(id)}:rejected`);
+        throw new RestoreFailedError(String(id));
+      }
+      throw error;
+    }
+
+    const restored = await this.getIncident(id);
+    const accepted = restored.is_deleted === false;
+    console.info(
+      `RESTORE:${restored.incident_code}:${accepted ? "ok" : "rejected"}`,
+    );
+    if (!accepted) {
+      throw new RestoreFailedError(restored.incident_code);
+    }
+    return restored;
+  }
+
+  async downloadAttachment(
+    fileUrl: string,
+    overrides?: PimsRequestOverrides,
+  ): Promise<Buffer> {
+    const url = fileUrl.startsWith("http")
+      ? fileUrl
+      : `${this.baseUrl}${fileUrl.startsWith("/") ? "" : "/"}${fileUrl}`;
+
+    if (!this.accessToken) {
+      await this.obtainToken();
+    }
+
+    const headers: Record<string, string> = {
+      Accept: "application/octet-stream",
+      "X-PIMS-Schema": this.schema,
+      "Idempotency-Key":
+        overrides?.idempotencyKey ??
+        `${this.idempotencyKeyPrefix}:${overrides?.incidentCode ?? "global"}:download_attachment:${crypto.randomUUID()}`,
+    };
+    if (this.accessToken) {
+      headers.Authorization = `Bearer ${this.accessToken}`;
+    }
+
+    const response = await fetch(url, { method: "GET", headers });
+    if (response.status === 404) {
+      throw new PimsNotFoundError("Attachment", fileUrl);
+    }
+    if (response.status >= 500) {
+      throw new PimsUnavailableError(
+        `PIMS attachment download failed with HTTP ${response.status}`,
+      );
+    }
+    if (!response.ok) {
+      throw new PimsErrorShapeUnknownError(
+        `Unexpected HTTP status ${response.status} downloading attachment`,
+        await response.text().catch(() => ""),
+      );
+    }
+    return Buffer.from(await response.arrayBuffer());
   }
 
   async getIncidentHistory(id: number): Promise<PimsIncidentHistory[]> {
@@ -356,6 +481,7 @@ export class PimsAdapter {
     id: number,
     file: Blob | Buffer | Uint8Array,
     fileName: string,
+    overrides?: PimsRequestOverrides,
   ): Promise<PimsIncidentAttachment[]> {
     const byteLength = file instanceof Blob ? file.size : file.byteLength;
     assertAttachmentMeta(fileName, byteLength, MAX_ATTACHMENT_SIZE_MB);
@@ -371,6 +497,8 @@ export class PimsAdapter {
       {
         formData,
         operation: "upload_attachment",
+        incidentCode: overrides?.incidentCode,
+        idempotencyKey: overrides?.idempotencyKey,
       },
     );
     const schema = PimsIncidentAttachmentSchema.array();
@@ -384,13 +512,18 @@ export class PimsAdapter {
     return parsed.data;
   }
 
-  async notifyIncident(id: number): Promise<PimsIncident> {
+  async notifyIncident(
+    id: number,
+    overrides?: PimsRequestOverrides,
+  ): Promise<PimsIncident> {
     const raw = await this.request<unknown>(
       "POST",
       `/api/incidents/${id}/notify/`,
       {
         body: {},
         operation: "notify_incident",
+        incidentCode: overrides?.incidentCode,
+        idempotencyKey: overrides?.idempotencyKey,
       },
     );
     const parsed = PimsIncidentSchema.safeParse(raw);
@@ -424,6 +557,7 @@ export class PimsAdapter {
 
   async createRecipient(
     data: PimsIncidentRecipientCreate,
+    overrides?: PimsRequestOverrides,
   ): Promise<PimsIncidentRecipient> {
     const raw = await this.request<unknown>(
       "POST",
@@ -431,6 +565,8 @@ export class PimsAdapter {
       {
         body: data,
         operation: "create_recipient",
+        incidentCode: overrides?.incidentCode,
+        idempotencyKey: overrides?.idempotencyKey,
       },
     );
     const parsed = PimsIncidentRecipientSchema.safeParse(raw);
@@ -443,9 +579,14 @@ export class PimsAdapter {
     return parsed.data;
   }
 
-  async deleteRecipient(id: number): Promise<void> {
+  async deleteRecipient(
+    id: number,
+    overrides?: PimsRequestOverrides,
+  ): Promise<void> {
     await this.request<void>("DELETE", `/api/incident-recipients/${id}/`, {
       operation: "delete_recipient",
+      incidentCode: overrides?.incidentCode,
+      idempotencyKey: overrides?.idempotencyKey,
     });
   }
 
@@ -469,10 +610,15 @@ export class PimsAdapter {
     return parsed.data;
   }
 
-  async createAudit(data: PimsAuditCreate): Promise<PimsAudit> {
+  async createAudit(
+    data: PimsAuditCreate,
+    overrides?: PimsRequestOverrides,
+  ): Promise<PimsAudit> {
     const raw = await this.request<unknown>("POST", "/api/audits/", {
       body: data,
       operation: "create_audit",
+      incidentCode: overrides?.incidentCode,
+      idempotencyKey: overrides?.idempotencyKey,
     });
     const parsed = PimsAuditSchema.safeParse(raw);
     if (!parsed.success) {
@@ -484,10 +630,16 @@ export class PimsAdapter {
     return parsed.data;
   }
 
-  async updateAudit(id: number, data: PimsAuditUpdate): Promise<PimsAudit> {
+  async updateAudit(
+    id: number,
+    data: PimsAuditUpdate,
+    overrides?: PimsRequestOverrides,
+  ): Promise<PimsAudit> {
     const raw = await this.request<unknown>("PATCH", `/api/audits/${id}/`, {
       body: data,
       operation: "update_audit",
+      incidentCode: overrides?.incidentCode,
+      idempotencyKey: overrides?.idempotencyKey,
     });
     const parsed = PimsAuditSchema.safeParse(raw);
     if (!parsed.success) {
@@ -516,10 +668,13 @@ export class PimsAdapter {
 
   async createRiskEvaluation(
     data: PimsRiskEvaluationCreate,
+    overrides?: PimsRequestOverrides,
   ): Promise<PimsRiskEvaluation> {
     const raw = await this.request<unknown>("POST", "/api/risk-evaluations/", {
       body: data,
       operation: "create_risk_evaluation",
+      incidentCode: overrides?.incidentCode,
+      idempotencyKey: overrides?.idempotencyKey,
     });
     const parsed = PimsRiskEvaluationSchema.safeParse(raw);
     if (!parsed.success) {

@@ -1,0 +1,18 @@
+{
+  "name": "@pims/agent",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "dependencies": {
+    "@pims/config": "workspace:*",
+    "@pims/evidence": "workspace:*",
+    "@pims/models": "workspace:*",
+    "@pims/notices": "workspace:*",
+    "@pims/pims-adapter": "workspace:*",
+    "@pims/rag": "workspace:*",
+    "@pims/types": "workspace:*",
+    "libphonenumber-js": "^1.13.15",
+    "zod": "^3.24.2"
+  }
+}

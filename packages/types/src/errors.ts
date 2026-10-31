@@ -543,3 +543,425 @@ export class EvidenceNotFoundError extends PimsBaseError {
     this.entityId = id;
   }
 }
+
+export class RoleUnknownError extends PimsBaseError {
+  readonly role: string;
+
+  constructor(role: string, details?: PimsErrorDetails) {
+    super(`Unknown agent role: ${role}`, `ROLE_UNKNOWN:${role}`, details);
+    this.role = role;
+  }
+}
+
+export class RoleToolDeniedError extends PimsBaseError {
+  readonly role: string;
+  readonly tool: string;
+
+  constructor(role: string, tool: string, details?: PimsErrorDetails) {
+    super(
+      `Role '${role}' is not allowed to call tool '${tool}'`,
+      `ROLE_TOOL_DENIED:${role}:${tool}`,
+      details,
+    );
+    this.role = role;
+    this.tool = tool;
+  }
+}
+
+export class ToolUnknownError extends PimsBaseError {
+  readonly tool: string;
+
+  constructor(tool: string, details?: PimsErrorDetails) {
+    super(`Unknown agent tool: ${tool}`, `TOOL_UNKNOWN:${tool}`, details);
+    this.tool = tool;
+  }
+}
+
+export class ToolArgsInvalidError extends PimsBaseError {
+  readonly tool: string;
+  readonly field: string;
+
+  constructor(tool: string, field: string, details?: PimsErrorDetails) {
+    super(
+      `Invalid arguments for tool '${tool}' at field '${field}'`,
+      `TOOL_ARGS_INVALID:${tool}:${field}`,
+      details,
+    );
+    this.tool = tool;
+    this.field = field;
+  }
+}
+
+export class ToolResultInvalidError extends PimsBaseError {
+  readonly tool: string;
+
+  constructor(tool: string, details?: PimsErrorDetails) {
+    super(
+      `Tool '${tool}' returned a result violating its contract`,
+      `TOOL_RESULT_INVALID:${tool}`,
+      details,
+    );
+    this.tool = tool;
+  }
+}
+
+export class SkillUnknownError extends PimsBaseError {
+  readonly skill: string;
+
+  constructor(skill: string, details?: PimsErrorDetails) {
+    super(`Unknown agent skill: ${skill}`, `SKILL_UNKNOWN:${skill}`, details);
+    this.skill = skill;
+  }
+}
+
+export class TransitionForbiddenError extends PimsBaseError {
+  readonly from: string;
+  readonly to: string;
+
+  constructor(from: string, to: string, details?: PimsErrorDetails) {
+    super(
+      `Forbidden incident status transition: ${from} -> ${to}`,
+      `TRANSITION_FORBIDDEN:${from}->${to}`,
+      details,
+    );
+    this.from = from;
+    this.to = to;
+  }
+}
+
+export class ActionSequenceViolationError extends PimsBaseError {
+  constructor(message: string, details?: PimsErrorDetails) {
+    super(message, "ACTION_SEQUENCE_VIOLATION", details);
+  }
+}
+
+export class ReviewApprovalMissingError extends PimsBaseError {
+  constructor(
+    message = "A valid single-use review approval id is required",
+    details?: PimsErrorDetails,
+  ) {
+    super(message, "REVIEW_APPROVAL_MISSING", details);
+  }
+}
+
+export class ReviewApprovalReusedError extends PimsBaseError {
+  constructor(
+    message = "Review approval was already consumed (single use only)",
+    details?: PimsErrorDetails,
+  ) {
+    super(message, "REVIEW_APPROVAL_REUSED", details);
+  }
+}
+
+export class CloseChecklistFailedError extends PimsBaseError {
+  readonly item: string;
+
+  constructor(item: string, details?: PimsErrorDetails) {
+    super(
+      `Close checklist item failed: ${item}`,
+      `CLOSE_CHECKLIST_FAILED:${item}`,
+      details,
+    );
+    this.item = item;
+  }
+}
+
+export class LoopStepSkippedError extends PimsBaseError {
+  readonly step: string;
+
+  constructor(step: string, details?: PimsErrorDetails) {
+    super(
+      `Lifecycle step '${step}' was reached out of order`,
+      `LOOP_STEP_SKIPPED:${step}`,
+      details,
+    );
+    this.step = step;
+  }
+}
+
+export class HistoryGapError extends PimsBaseError {
+  constructor(
+    message = "Expected a new core_incidenthistory row after a mutation",
+    details?: PimsErrorDetails,
+  ) {
+    super(message, "HISTORY_GAP", details);
+  }
+}
+
+export class TimerMissingError extends PimsBaseError {
+  constructor(
+    message = "Required awareness timer is not armed for a PII incident",
+    details?: PimsErrorDetails,
+  ) {
+    super(message, "TIMER_MISSING", details);
+  }
+}
+
+export class SchedulerDuplicateError extends PimsBaseError {
+  constructor(message: string, details?: PimsErrorDetails) {
+    super(message, "SCHEDULER_DUPLICATE", details);
+  }
+}
+
+export class SchedulerPastDueError extends PimsBaseError {
+  readonly timerId: string;
+
+  constructor(timerId: string, details?: PimsErrorDetails) {
+    super(
+      `Timer ${timerId} was already past due and fired immediately as TIMER_FIRED_LATE`,
+      "SCHEDULER_PAST_DUE",
+      details,
+    );
+    this.timerId = timerId;
+  }
+}
+
+export class SchedulerUnknownTimerError extends PimsBaseError {
+  readonly timerId: string;
+
+  constructor(timerId: string, details?: PimsErrorDetails) {
+    super(
+      `Unknown or already fired timer: ${timerId}`,
+      "SCHEDULER_UNKNOWN_TIMER",
+      details,
+    );
+    this.timerId = timerId;
+  }
+}
+
+export class SchedulerOverflowError extends PimsBaseError {
+  constructor(message: string, details?: PimsErrorDetails) {
+    super(message, "SCHEDULER_OVERFLOW", details);
+  }
+}
+
+export class IntakeEmptyError extends PimsBaseError {
+  constructor(message = "Intake payload is empty", details?: PimsErrorDetails) {
+    super(message, "INTAKE_EMPTY", details);
+  }
+}
+
+export class IntakeFutureDateError extends PimsBaseError {
+  constructor(
+    message = "Incident date is in the future",
+    details?: PimsErrorDetails,
+  ) {
+    super(message, "INTAKE_FUTURE_DATE", details);
+  }
+}
+
+export class IntakeTitleTooLongError extends PimsBaseError {
+  constructor(
+    message = "Intake title exceeds the maximum length and cannot be truncated at a word boundary",
+    details?: PimsErrorDetails,
+  ) {
+    super(message, "INTAKE_TITLE_TOO_LONG", details);
+  }
+}
+
+export class IntakeDescriptionTooLongError extends PimsBaseError {
+  constructor(
+    message = "Intake description exceeds the maximum length and cannot be truncated at a word boundary",
+    details?: PimsErrorDetails,
+  ) {
+    super(message, "INTAKE_DESCRIPTION_TOO_LONG", details);
+  }
+}
+
+export class IntakeSlotAmbiguousError extends PimsBaseError {
+  readonly field: string;
+  readonly candidates: string[];
+
+  constructor(field: string, candidates: string[], details?: PimsErrorDetails) {
+    super(
+      `Intake slot '${field}' is ambiguous between candidates: ${candidates.join(",")}`,
+      `INTAKE_SLOT_AMBIGUOUS:${field}:${candidates.join(",")}`,
+      details,
+    );
+    this.field = field;
+    this.candidates = candidates;
+  }
+}
+
+export class DuplicateCreatedError extends PimsBaseError {
+  constructor(message: string, details?: PimsErrorDetails) {
+    super(message, "DUPLICATE_CREATED", details);
+  }
+}
+
+export class RestoreFailedError extends PimsBaseError {
+  readonly incidentCode: string;
+
+  constructor(incidentCode: string, details?: PimsErrorDetails) {
+    super(
+      `Logical restore rejected or not visible for incident ${incidentCode}`,
+      `RESTORE_FAILED:${incidentCode}`,
+      details,
+    );
+    this.incidentCode = incidentCode;
+  }
+}
+
+export class RiskSignalNoAssetError extends PimsBaseError {
+  constructor(
+    message = "No tenant asset matches the compromised system; signal queued with asset_pending",
+    details?: PimsErrorDetails,
+  ) {
+    super(message, "RISK_SIGNAL_NO_ASSET", details);
+  }
+}
+
+export class AuditLinkFailedError extends PimsBaseError {
+  readonly reason: string;
+
+  constructor(reason: string, details?: PimsErrorDetails) {
+    super(
+      `Audit action link failed: ${reason}`,
+      `AUDIT_LINK_FAILED:${reason}`,
+      details,
+    );
+    this.reason = reason;
+  }
+}
+
+export class AuditLinkDuplicateError extends PimsBaseError {
+  constructor(
+    message = "More than one audit finding matches the incident corrective-action prefix",
+    details?: PimsErrorDetails,
+  ) {
+    super(message, "AUDIT_LINK_DUPLICATE", details);
+  }
+}
+
+export class EscalateStuckReviewError extends PimsBaseError {
+  constructor(
+    message = "Review rejected MAX_REVIEW_CYCLES times; notices parked and operator paged",
+    details?: PimsErrorDetails,
+  ) {
+    super(message, "ESCALATE_STUCK_REVIEW", details);
+  }
+}
+
+export class IndicatorSpoolFullError extends PimsBaseError {
+  constructor(message: string, details?: PimsErrorDetails) {
+    super(message, "INDICATOR_SPOOL_FULL", details);
+  }
+}
+
+export class OperatorHaltError extends PimsBaseError {
+  constructor(
+    message = "OPERATOR_HALT is engaged; new mutations are frozen",
+    details?: PimsErrorDetails,
+  ) {
+    super(message, "OPERATOR_HALT", details);
+  }
+}
+
+export class VoiceUnavailableError extends PimsBaseError {
+  constructor(
+    message = "Voice provider is unavailable or unconfigured",
+    details?: PimsErrorDetails,
+  ) {
+    super(message, "VOICE_UNAVAILABLE", details);
+  }
+}
+
+export class VoiceLowConfidenceError extends PimsBaseError {
+  constructor(message: string, details?: PimsErrorDetails) {
+    super(message, "VOICE_LOW_CONFIDENCE", details);
+  }
+}
+
+export class VoiceEmptyAudioError extends PimsBaseError {
+  constructor(
+    message = "Audio contained zero speech frames",
+    details?: PimsErrorDetails,
+  ) {
+    super(message, "VOICE_EMPTY_AUDIO", details);
+  }
+}
+
+export class VoiceSpoofSuspectedError extends PimsBaseError {
+  constructor(message: string, details?: PimsErrorDetails) {
+    super(message, "VOICE_SPOOF_SUSPECTED", details);
+  }
+}
+
+export class TtsPiiLeakBlockedError extends PimsBaseError {
+  constructor(message: string, details?: PimsErrorDetails) {
+    super(message, "TTS_PII_LEAK_BLOCKED", details);
+  }
+}
+
+export class TtsUnapprovedBlockedError extends PimsBaseError {
+  constructor(message: string, details?: PimsErrorDetails) {
+    super(message, "TTS_UNAPPROVED_BLOCKED", details);
+  }
+}
+
+export class VoiceAudioTooLargeError extends PimsBaseError {
+  constructor(message: string, details?: PimsErrorDetails) {
+    super(message, "VOICE_AUDIO_TOO_LARGE", details);
+  }
+}
+
+export class ConformalCalibrationError extends PimsBaseError {
+  constructor(message: string, details?: PimsErrorDetails) {
+    super(message, "CONFORMAL_CALIBRATION_ERROR", details);
+  }
+}
+
+export class WeibullFitError extends PimsBaseError {
+  readonly reason: string;
+
+  constructor(reason: string, details?: PimsErrorDetails) {
+    super(`Weibull fit failed: ${reason}`, `WEIBULL_FIT:${reason}`, details);
+    this.reason = reason;
+  }
+}
+
+export class PromptPiiBlockedError extends PimsBaseError {
+  readonly fields: string[];
+
+  constructor(fields: string[], details?: PimsErrorDetails) {
+    super(
+      `Prompt PII gate blocked model call for fields: ${fields.join(",")}`,
+      "PROMPT_PII_BLOCKED",
+      details,
+    );
+    this.fields = fields;
+  }
+}
+
+export class RootCauseUnprovenError extends PimsBaseError {
+  constructor(message: string, details?: PimsErrorDetails) {
+    super(message, "ROOT_CAUSE_UNPROVEN", details);
+  }
+}
+
+export class RootCauseAmbiguousError extends PimsBaseError {
+  constructor(message: string, details?: PimsErrorDetails) {
+    super(message, "ROOT_CAUSE_AMBIGUOUS", details);
+  }
+}
+
+export const DEADLINE_MISSED_KINDS = ["72H", "SUBJECT", "REVIEW_SLA"] as const;
+export type DeadlineMissedKind = (typeof DEADLINE_MISSED_KINDS)[number];
+
+export class DeadlineMissedError extends PimsBaseError {
+  readonly kind: DeadlineMissedKind;
+
+  constructor(kind: DeadlineMissedKind, details?: PimsErrorDetails) {
+    super(`Deadline missed: ${kind}`, `DEADLINE_MISSED_${kind}`, details);
+    this.kind = kind;
+  }
+}
+
+export class PeruAdvisoryError extends PimsBaseError {
+  constructor(
+    message = "Peru 48h advisory clock reached (advisory only, never blocks close)",
+    details?: PimsErrorDetails,
+  ) {
+    super(message, "PERU_48H_ADVISORY", details);
+  }
+}

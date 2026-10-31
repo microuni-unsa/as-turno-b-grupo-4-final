@@ -89,12 +89,24 @@ export const INCIDENT_TYPES = [
   "OT",
 ] as const;
 
+export type IncidentType = (typeof INCIDENT_TYPES)[number];
+export type IncidentStatus = (typeof INCIDENT_STATUSES)[number];
+
 export const ACTION_TYPES = ["C", "A", "R"] as const;
 export const AUDIT_STATUSES = ["P", "R", "C"] as const;
 export const AUDIT_TYPES = ["I", "E"] as const;
 export const FINDING_CLASSIFICATIONS = ["N", "O", "M"] as const;
 export const ACTION_PLAN_STATUSES = ["O", "P", "C"] as const;
 export const RISK_EVAL_STATUSES = ["B", "O", "T", "C"] as const;
+
+export type SecurityMeasure = (typeof ALL_SECURITY_MEASURES)[number];
+export type AffectedCid = (typeof AFFECTED_CID)[number];
+export type ActionType = (typeof ACTION_TYPES)[number];
+export type FindingClassification = (typeof FINDING_CLASSIFICATIONS)[number];
+export type AuditStatus = (typeof AUDIT_STATUSES)[number];
+export type ActionPlanStatus = (typeof ACTION_PLAN_STATUSES)[number];
+export type RiskEvalStatus = (typeof RISK_EVAL_STATUSES)[number];
+export type ResponseStrategy = "M" | "A" | "T" | "E";
 export const ASSET_RELEVANCES = ["BAJO", "MEDIO", "ALTO", "CRITICO"] as const;
 export const FORM_MEASURE_VALUES = ["Y", "N", "U"] as const;
 export const EVENT_TYPES = [
@@ -347,7 +359,11 @@ export const PimsIncidentCreateSchema = z.object({
     .optional(),
 });
 
-export const PimsIncidentUpdateSchema = PimsIncidentCreateSchema.partial();
+export const PimsIncidentUpdateSchema =
+  PimsIncidentCreateSchema.partial().extend({
+    is_deleted: z.boolean().optional(),
+    deleted_at: z.string().nullable().optional(),
+  });
 
 export const PimsAuditActionPlanSchema = z.object({
   id: z.number().optional(),
@@ -355,10 +371,11 @@ export const PimsAuditActionPlanSchema = z.object({
   code: z.string().optional(),
   action_plan: z.string().optional(),
   description: z.string().optional(),
-  responsible: z.string(),
-  due_date: z.string(),
+  responsible: z.string().nullable().optional(),
+  due_date: z.string().nullable().optional(),
   status: z.enum(ACTION_PLAN_STATUSES),
   progress: z.number().optional(),
+  position: z.number().optional(),
 });
 
 export const PimsAuditFindingSchema = z.object({
@@ -457,7 +474,7 @@ export const PimsRiskRangeSchema = z.object({
 });
 
 export const PimsActiveMatrixSchema = z.object({
-  dimension: z.number().optional(),
+  dimension: z.number().int().positive().optional(),
   risk_ranges: z.array(PimsRiskRangeSchema).optional(),
 });
 
@@ -497,6 +514,21 @@ export const PimsRiskEvaluationCreateSchema = z.object({
     .optional(),
 });
 
+export const PimsAnnexAControlSchema = z.object({
+  code: z.string(),
+  name: z.string(),
+  group_code: z.string().optional(),
+  group_name: z.string().optional(),
+  applicable_role: z.string().optional(),
+  description: z.string().optional(),
+  source_standard: z.string().optional(),
+});
+
+export const PimsCatalogOptionSchema = z.object({
+  code: z.string(),
+  label: z.string(),
+});
+
 export const PimsRiskCatalogSchema = z.object({
   periods: z.array(PimsRiskPeriodSchema).optional(),
   current_period: PimsRiskPeriodSchema.optional(),
@@ -504,6 +536,12 @@ export const PimsRiskCatalogSchema = z.object({
   vulnerabilities: z.array(PimsVulnerabilitySchema),
   safeguards: z.array(PimsSafeguardSchema).optional(),
   active_matrix: PimsActiveMatrixSchema.optional(),
+  applicable_annex_a_controls: z.array(PimsAnnexAControlSchema).optional(),
+  annex_a_controls: z.array(PimsAnnexAControlSchema).optional(),
+  control_types: z.array(PimsCatalogOptionSchema).optional(),
+  security_measure_types: z.array(PimsCatalogOptionSchema).optional(),
+  estimated_times: z.array(PimsCatalogOptionSchema).optional(),
+  risk_treatment_levels: z.array(z.string()).optional(),
 });
 
 export const PimsAssetSchema = AuditModelSchema.extend({
@@ -643,6 +681,8 @@ export type PimsRiskEvaluationCreate = z.infer<
   typeof PimsRiskEvaluationCreateSchema
 >;
 export type PimsRiskCatalogResponse = z.infer<typeof PimsRiskCatalogSchema>;
+export type PimsAnnexAControl = z.infer<typeof PimsAnnexAControlSchema>;
+export type PimsCatalogOption = z.infer<typeof PimsCatalogOptionSchema>;
 export type PimsRiskPeriod = z.infer<typeof PimsRiskPeriodSchema>;
 export type PimsThreat = z.infer<typeof PimsThreatSchema>;
 export type PimsVulnerability = z.infer<typeof PimsVulnerabilitySchema>;

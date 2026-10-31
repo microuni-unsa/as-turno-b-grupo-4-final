@@ -479,6 +479,7 @@ describe("EvidenceStore Integration Suite (Testcontainers PostgreSQL)", {
     it("indexes an incident and finds the dedupe match", async () => {
       const dedupeRecord: DedupeIndexRecord = {
         incident_code: "INC-DEDUPE-001",
+        pims_incident_id: 101,
         title_normalized: "unauthorized postgres database dump exfiltration",
         incident_date: "2026-10-30",
         system_or_url: "https://db-cluster.corp.internal",

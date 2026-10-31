@@ -118,6 +118,7 @@ export type TimerRecord = z.infer<typeof TimerRecordSchema>;
 
 export const DedupeIndexRecordSchema = z.object({
   incident_code: z.string().min(1),
+  pims_incident_id: z.number().int().positive().nullable(),
   title_normalized: z.string().min(1),
   incident_date: z.string().min(1),
   system_or_url: z.string().min(1),
@@ -126,10 +127,30 @@ export const DedupeIndexRecordSchema = z.object({
 });
 export type DedupeIndexRecord = z.infer<typeof DedupeIndexRecordSchema>;
 
+export const RISK_RESPONSE_STRATEGIES = ["M", "A", "T", "E"] as const;
+export const RiskResponseStrategySchema = z.enum(RISK_RESPONSE_STRATEGIES);
+export type RiskResponseStrategy = z.infer<typeof RiskResponseStrategySchema>;
+
+export const RiskSignalPayloadSchema = z
+  .object({
+    description: z.string().min(1),
+    controlled_probability: z.number().int().positive(),
+    controlled_impact: z.number().int().positive(),
+    asset_ids: z.array(z.number().int().positive()),
+    threat_code: z.string().min(1).nullable(),
+    vulnerability_code: z.string().min(1).nullable(),
+    risk_owner: z.string().min(1).nullable(),
+    response_strategy: RiskResponseStrategySchema.nullable(),
+    reason: z.string().min(1),
+    asset_pending: z.boolean(),
+  })
+  .strict();
+export type RiskSignalPayload = z.infer<typeof RiskSignalPayloadSchema>;
+
 export const RiskQueueRecordSchema = z.object({
   id: z.number().int().positive(),
   incident_code: z.string().min(1),
-  signal_payload: JsonObjectSchema,
+  signal_payload: RiskSignalPayloadSchema,
   status: z.enum(["queued", "sent", "failed"]),
   queued_at_utc: z.string().datetime(),
 });

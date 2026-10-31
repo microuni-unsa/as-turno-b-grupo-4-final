@@ -196,11 +196,15 @@ describe("PIMS Client Adapter & Reverse-Engineered DRF API Integration Suite", (
       expect(updated.actions?.[0]?.description).toContain("perimeter firewall");
     });
 
-    it("E10: retrieves immutable history showing creation and triage updates", async () => {
+    it("E10: retrieves immutable history showing creation and status changes", async () => {
       const history = await adapter.getIncidentHistory(createdIncidentId);
       expect(history.length).toBeGreaterThanOrEqual(2);
       expect(history.some((h) => h.event_type === "created")).toBe(true);
-      expect(history.some((h) => h.event_type === "updated")).toBe(true);
+      const statusChanged = history.find(
+        (h) => h.event_type === "status_changed",
+      );
+      expect(statusChanged).toBeDefined();
+      expect(statusChanged?.description).toBe("Estado: O -> P");
     });
 
     it("E12: uploads incident attachment with multipart/form-data", async () => {
@@ -501,6 +505,127 @@ describe("PIMS Client Adapter & Reverse-Engineered DRF API Integration Suite", (
         },
       });
       expect(res.status).toBe(403);
+    });
+  });
+
+  describe("Phase 4 adapter extensions (append, restore, download)", () => {
+    it("appendIncidentAction preserves existing actions in replace mode", async () => {
+      const incident = await adapter.createIncident({
+        title: "append-action replace mode",
+        involves_personal_data: false,
+        incident_date: "2026-10-01",
+        incident_type: "OT",
+        status: "O",
+      });
+
+      const first = await adapter.appendIncidentAction(incident.id, {
+        action_type: "C",
+        responsible: "SOC",
+        action_date: "2026-10-01",
+        description: "contained the host",
+        evidence: "file:host.txt",
+      });
+      expect(first.actions?.map((a) => a.action_type)).toEqual(["C"]);
+
+      const second = await adapter.appendIncidentAction(incident.id, {
+        action_type: "A",
+        responsible: "SOC",
+        action_date: "2026-10-02",
+        description: "analysed the logs",
+        evidence: "file:logs.txt",
+      });
+      expect(second.actions?.map((a) => a.action_type)).toEqual(["C", "A"]);
+      expect(second.actions?.map((a) => a.position)).toEqual([1, 2]);
+    });
+
+    it("appendIncidentAction patches only the new action in merge mode", async () => {
+      const mergeServer = await createPimsTestServer(dbClient, {
+        nestedActionMode: "merge",
+      });
+      try {
+        const mergeAdapter = new PimsAdapter({
+          baseUrl: mergeServer.url,
+          schema: "unsa",
+          username: "admin",
+          password: PIMS_TEST_SEED_PASSWORD,
+        });
+        mergeAdapter.nestedActionMode = "merge";
+
+        const incident = await mergeAdapter.createIncident({
+          title: "append-action merge mode",
+          involves_personal_data: false,
+          incident_date: "2026-10-01",
+          incident_type: "OT",
+          status: "O",
+        });
+
+        await mergeAdapter.appendIncidentAction(incident.id, {
+          action_type: "C",
+          responsible: "SOC",
+          action_date: "2026-10-01",
+          description: "contained the host",
+          evidence: "file:host.txt",
+        });
+        const merged = await mergeAdapter.appendIncidentAction(incident.id, {
+          action_type: "A",
+          responsible: "SOC",
+          action_date: "2026-10-02",
+          description: "analysed the logs",
+          evidence: "file:logs.txt",
+        });
+
+        expect(merged.actions?.length).toBe(2);
+        expect(merged.actions?.map((a) => a.action_type)).toEqual(["C", "A"]);
+      } finally {
+        await mergeServer.stop();
+      }
+    });
+
+    it("restoreIncident clears the logical delete flags and logs the outcome", async () => {
+      const incident = await adapter.createIncident({
+        title: "restore me",
+        involves_personal_data: false,
+        incident_date: "2026-10-01",
+        incident_type: "OT",
+        status: "O",
+      });
+      await adapter.deleteIncident(incident.id);
+      await expect(adapter.getIncident(incident.id)).rejects.toThrow(
+        PimsNotFoundError,
+      );
+
+      const restored = await adapter.restoreIncident(incident.id, {
+        incidentCode: incident.incident_code,
+      });
+      expect(restored.is_deleted).toBe(false);
+      expect(restored.deleted_at ?? null).toBeNull();
+      expect(restored.incident_code).toBe(incident.incident_code);
+    });
+
+    it("downloadAttachment returns the uploaded bytes for hash verification", async () => {
+      const incident = await adapter.createIncident({
+        title: "attachment round trip",
+        involves_personal_data: false,
+        incident_date: "2026-10-01",
+        incident_type: "OT",
+        status: "O",
+      });
+      const bytes = Buffer.from("forensic attachment round trip", "utf8");
+      const uploaded = await adapter.uploadIncidentAttachment(
+        incident.id,
+        bytes,
+        "round-trip.txt",
+      );
+      const attachment = uploaded.find(
+        (row) => row.file_name === "round-trip.txt",
+      );
+      expect(attachment).toBeDefined();
+      if (attachment === undefined) {
+        throw new Error("upload returned no attachment");
+      }
+
+      const downloaded = await adapter.downloadAttachment(attachment.file);
+      expect(downloaded.equals(bytes)).toBe(true);
     });
   });
 });

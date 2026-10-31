@@ -83,6 +83,23 @@ export function buildPimsApp(
 
   app.use("*", cors());
 
+  const attachmentBytes = new Map<string, Buffer>();
+
+  const getIncidentRow = async (
+    incidentId: number,
+    opts?: { includeDeleted?: boolean },
+  ) => {
+    const where =
+      opts?.includeDeleted === true
+        ? eq(coreIncident.id, incidentId)
+        : and(
+            eq(coreIncident.id, incidentId),
+            eq(coreIncident.is_deleted, false),
+          );
+    const rows = await db.select().from(coreIncident).where(where);
+    return rows[0] ?? null;
+  };
+
   const getFullIncident = async (incidentId: number) => {
     const incidents = await db
       .select()
@@ -546,7 +563,7 @@ export function buildPimsApp(
 
   app.patch("/api/incidents/:id/", async (c) => {
     const id = Number.parseInt(c.req.param("id"), 10);
-    const existing = await getFullIncident(id);
+    const existing = await getIncidentRow(id, { includeDeleted: true });
     if (!existing) {
       return c.json({ detail: "No Incident matches the given query." }, 404);
     }
@@ -610,12 +627,19 @@ export function buildPimsApp(
       "security_measures_adopted",
       "resolved_date",
       "affected_cid",
+      "is_deleted",
+      "deleted_at",
     ];
 
     for (const key of allowedKeys) {
       if (body[key] !== undefined) {
         updateFields[key] = body[key];
       }
+    }
+
+    if (body.deleted_at !== undefined) {
+      updateFields.deleted_at =
+        body.deleted_at === null ? null : new Date(String(body.deleted_at));
     }
 
     await db
@@ -643,13 +667,17 @@ export function buildPimsApp(
       }
     }
 
+    const statusChanged =
+      body.status !== undefined && body.status !== existing.status;
     await db.insert(coreIncidentHistory).values({
       incident_id: id,
-      event_type: "updated",
+      event_type: statusChanged ? "status_changed" : "updated",
       changed_at: now,
       actor: "admin",
       changed_by_id: 1,
-      description: "Incidente actualizado",
+      description: statusChanged
+        ? `Estado: ${existing.status} -> ${body.status}`
+        : "Incidente actualizado",
       recipients_snapshot: [],
     });
 
@@ -784,6 +812,11 @@ export function buildPimsApp(
       })
       .returning();
 
+    const fileBuffer = Buffer.from(await file.arrayBuffer());
+    for (const row of inserted) {
+      attachmentBytes.set(`${row.incident_id}/${row.file_name}`, fileBuffer);
+    }
+
     return c.json(
       inserted.map((a) => ({
         id: a.id,
@@ -799,6 +832,18 @@ export function buildPimsApp(
       })),
       201,
     );
+  });
+
+  app.get("/media/attachments/:id/:fileName", (c) => {
+    const incidentId = c.req.param("id");
+    const fileName = c.req.param("fileName");
+    const bytes = attachmentBytes.get(`${incidentId}/${fileName}`);
+    if (!bytes) {
+      return c.json({ detail: "Attachment file not found." }, 404);
+    }
+    return c.body(new Uint8Array(bytes), 200, {
+      "Content-Type": "application/octet-stream",
+    });
   });
 
   app.post("/api/incidents/:id/notify/", async (c) => {
@@ -946,12 +991,29 @@ export function buildPimsApp(
           end_date: a.end_date,
           scope: a.scope,
           lead_auditor: a.lead_auditor,
-          findings: findings.map((f) => ({
-            id: f.id,
-            classification: f.classification,
-            description: f.description,
-            evidence: f.evidence,
-          })),
+          findings: await Promise.all(
+            findings.map(async (f) => ({
+              id: f.id,
+              classification: f.classification,
+              description: f.description,
+              evidence: f.evidence,
+              actions: (
+                await db
+                  .select()
+                  .from(coreAuditActionPlan)
+                  .where(eq(coreAuditActionPlan.finding_id, f.id))
+                  .orderBy(coreAuditActionPlan.position, coreAuditActionPlan.id)
+              ).map((p) => ({
+                id: p.id,
+                action_plan: p.action_plan,
+                responsible: p.responsible,
+                due_date: p.due_date,
+                status: p.status,
+                progress: p.progress,
+                position: p.position,
+              })),
+            })),
+          ),
           created_at: a.created_at.toISOString(),
           created_by: a.created_by_id,
           updated_at: a.updated_at.toISOString(),
@@ -1116,12 +1178,29 @@ export function buildPimsApp(
       end_date: audit.end_date,
       scope: audit.scope,
       lead_auditor: audit.lead_auditor,
-      findings: findings.map((f) => ({
-        id: f.id,
-        classification: f.classification,
-        description: f.description,
-        evidence: f.evidence,
-      })),
+      findings: await Promise.all(
+        findings.map(async (f) => ({
+          id: f.id,
+          classification: f.classification,
+          description: f.description,
+          evidence: f.evidence,
+          actions: (
+            await db
+              .select()
+              .from(coreAuditActionPlan)
+              .where(eq(coreAuditActionPlan.finding_id, f.id))
+              .orderBy(coreAuditActionPlan.position, coreAuditActionPlan.id)
+          ).map((p) => ({
+            id: p.id,
+            action_plan: p.action_plan,
+            responsible: p.responsible,
+            due_date: p.due_date,
+            status: p.status,
+            progress: p.progress,
+            position: p.position,
+          })),
+        })),
+      ),
       created_at: audit.created_at.toISOString(),
       created_by: audit.created_by_id,
       updated_at: audit.updated_at.toISOString(),

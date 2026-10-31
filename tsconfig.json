@@ -26,6 +26,8 @@
       "@pims/evidence/*": ["./packages/evidence/src/*"],
       "@pims/notices": ["./packages/notices/src/index.ts"],
       "@pims/notices/*": ["./packages/notices/src/*"],
+      "@pims/agent": ["./packages/agent/src/index.ts"],
+      "@pims/agent/*": ["./packages/agent/src/*"],
       "@tests/*": ["./tests/*"]
     },
     "verbatimModuleSyntax": true,

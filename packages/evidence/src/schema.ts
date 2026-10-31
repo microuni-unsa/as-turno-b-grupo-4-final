@@ -1,6 +1,8 @@
-import type { JsonObject } from "@pims/types/models.ts";
+import type { TotAnalysis } from "@pims/types/agent.ts";
+import type { JsonObject, JsonValue } from "@pims/types/models.ts";
 import {
   boolean,
+  doublePrecision,
   integer,
   jsonb,
   pgSchema,
@@ -82,6 +84,7 @@ export const timersTable = evidenceSchema.table("timers", {
 
 export const dedupeIndexTable = evidenceSchema.table("dedupe_index", {
   incident_code: varchar("incident_code", { length: 64 }).primaryKey(),
+  pims_incident_id: integer("pims_incident_id"),
   title_normalized: varchar("title_normalized", { length: 255 }).notNull(),
   incident_date: varchar("incident_date", { length: 32 }).notNull(),
   system_or_url: varchar("system_or_url", { length: 255 }).notNull(),
@@ -117,4 +120,64 @@ export const toolLedgerTable = evidenceSchema.table("tool_ledger", {
   args_redacted: jsonb("args_redacted").$type<JsonObject>().notNull(),
   result_ref: varchar("result_ref", { length: 255 }).notNull(),
   idempotency_key: varchar("idempotency_key", { length: 128 }).notNull(),
+});
+
+export const reviewApprovalsTable = evidenceSchema.table("review_approvals", {
+  approval_id: varchar("approval_id", { length: 64 }).primaryKey(),
+  incident_code: varchar("incident_code", { length: 64 }).notNull(),
+  pack_type: varchar("pack_type", { length: 32 }).notNull(),
+  content_sha256: varchar("content_sha256", { length: 64 }).notNull(),
+  approved_at_utc: timestamp("approved_at_utc", {
+    withTimezone: true,
+  }).notNull(),
+  consumed_at_utc: timestamp("consumed_at_utc", { withTimezone: true }),
+  consumed_by: varchar("consumed_by", { length: 128 }),
+  note: text("note").notNull(),
+});
+
+export const incidentOutcomesTable = evidenceSchema.table("incident_outcomes", {
+  incident_code: varchar("incident_code", { length: 64 }).primaryKey(),
+  awareness_at_utc: timestamp("awareness_at_utc", {
+    withTimezone: true,
+  }).notNull(),
+  closed_at_utc: timestamp("closed_at_utc", {
+    withTimezone: true,
+  }).notNull(),
+  severity: varchar("severity", { length: 1 }).notNull(),
+  review_cycles: integer("review_cycles").notNull(),
+  sla_72h_met: boolean("sla_72h_met").notNull(),
+  recorded_at_utc: timestamp("recorded_at_utc", {
+    withTimezone: true,
+  }).notNull(),
+});
+
+export const triageCalibrationTable = evidenceSchema.table(
+  "triage_calibration",
+  {
+    id: serial("id").primaryKey(),
+    incident_code: varchar("incident_code", { length: 64 }).notNull().unique(),
+    actual_incident_type: varchar("actual_incident_type", {
+      length: 2,
+    }).notNull(),
+    nonconformity_score: doublePrecision("nonconformity_score").notNull(),
+    recorded_at_utc: timestamp("recorded_at_utc", {
+      withTimezone: true,
+    }).notNull(),
+  },
+);
+
+export const totAnalysesTable = evidenceSchema.table("tot_analyses", {
+  incident_code: varchar("incident_code", { length: 64 }).primaryKey(),
+  analysis_json: jsonb("analysis_json").$type<TotAnalysis>().notNull(),
+  created_at_utc: timestamp("created_at_utc", {
+    withTimezone: true,
+  }).notNull(),
+});
+
+export const agentStateTable = evidenceSchema.table("agent_state", {
+  key: varchar("key", { length: 128 }).primaryKey(),
+  value: jsonb("value").$type<JsonValue>().notNull(),
+  updated_at_utc: timestamp("updated_at_utc", {
+    withTimezone: true,
+  }).notNull(),
 });

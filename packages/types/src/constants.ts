@@ -101,6 +101,21 @@ Given a query, return strict JSON with:
 2. "hyde_clause": A concise 1-2 sentence hypothetical normative clause snippet (under 50 words).
 3. "graph_anchors": Key domain entity anchors (e.g. "gdpr:art33.1", "gdpr:art33.5", "iso:b.3.12", "iso:10.2").
 Keep the response concise and strictly valid JSON.`;
+export const AGENT_VERSION = "1.0.0";
+export const PIMS_ACCESS_TOKEN_TTL_S = 3600;
+export const ROLE_PROMPT_VERSION = "1.0";
+export const WEIBULL_DEFAULT_SHAPE = 1.5;
+export const WEIBULL_DEFAULT_SCALE_H = 72;
+export const WEIBULL_MIN_SAMPLES = 30;
+export const HAZARD_REMAINING_STAGE_WEIGHT = 0.25;
+export const HAZARD_REVIEW_CYCLE_WEIGHT = 0.1;
+export const CONFORMAL_ALPHA = 0.1;
+export const CONFORMAL_MIN_SAMPLES = 20;
+export const DEDUPE_MAX_CANDIDATES = 100;
+export const EVIDENCE_REFS_MAX_CHARS = 1000;
+export const PERU_ADVISORY_H = 48;
+export const MAX_CUT_SETS = 10000;
+
 export function formatCorpusHeader(
   docId: string,
   clause: string,
