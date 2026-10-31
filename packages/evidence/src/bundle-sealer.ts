@@ -1,5 +1,7 @@
 import crypto from "node:crypto";
 import type { EvidenceStore } from "@pims/evidence/evidence-store.ts";
+import { canonicalizeJson } from "@pims/types/canonical.ts";
+import { AUDIT_TRAIL_ALLOWED_ARG_KEYS } from "@pims/types/constants.ts";
 import {
   ArtifactIncompleteError,
   BundleAlreadySealedError,
@@ -14,21 +16,11 @@ import {
   EvidenceBundleManifestSchema,
   type EvidenceBundleRootCause,
 } from "@pims/types/evidence.ts";
+import type { JsonObject } from "@pims/types/models.ts";
 
-function canonicalizeJson(obj: unknown): string {
-  if (obj === null || typeof obj !== "object") {
-    return JSON.stringify(obj);
-  }
-  if (Array.isArray(obj)) {
-    return `[${obj.map(canonicalizeJson).join(",")}]`;
-  }
-  const keys = Object.keys(obj as Record<string, unknown>).sort();
-  const parts = keys.map(
-    (k) =>
-      `${JSON.stringify(k)}:${canonicalizeJson((obj as Record<string, unknown>)[k])}`,
-  );
-  return `{${parts.join(",")}}`;
-}
+const ALLOWED_TRAIL_ARG_KEYS: ReadonlySet<string> = new Set(
+  AUDIT_TRAIL_ALLOWED_ARG_KEYS,
+);
 
 export class BundleSealer {
   constructor(private readonly evidenceStore: EvidenceStore) {}
@@ -77,13 +69,12 @@ export class BundleSealer {
     const staged = await this.evidenceStore.listStagedAttachments(incidentCode);
 
     for (const attachment of staged) {
-      if (
-        attachment.pims_attachment_id !== undefined &&
-        attachment.pims_attachment_id !== null
-      ) {
-        if (!pimsAttachmentIds.includes(attachment.pims_attachment_id)) {
-          throw new BundlePimsMismatchError(attachment.file_name);
-        }
+      const pimsAttachmentId = attachment.pims_attachment_id;
+      if (pimsAttachmentId === undefined) {
+        throw new BundlePimsMismatchError(attachment.file_name);
+      }
+      if (!pimsAttachmentIds.includes(pimsAttachmentId)) {
+        throw new BundlePimsMismatchError(attachment.file_name);
       }
     }
   }
@@ -135,17 +126,16 @@ export class BundleSealer {
 
   async exportAuditTrail(
     incidentCode: string,
-    timeline: Record<string, unknown>[],
-    timerLedger: Record<string, unknown>[],
+    timeline: JsonObject[],
+    timerLedger: JsonObject[],
   ): Promise<AuditTrailExport> {
     const rawToolLedger = await this.evidenceStore.listToolLedger(incidentCode);
 
     const redactedToolLedger = rawToolLedger.map((entry) => {
-      const redactedArgs: Record<string, unknown> = {};
-      const args = entry.args_redacted as Record<string, unknown>;
-      for (const key of Object.keys(args)) {
-        if (key === "incident_code" || key === "status") {
-          redactedArgs[key] = args[key];
+      const redactedArgs: JsonObject = {};
+      for (const [key, value] of Object.entries(entry.args_redacted)) {
+        if (ALLOWED_TRAIL_ARG_KEYS.has(key)) {
+          redactedArgs[key] = value;
         } else {
           redactedArgs[key] = "[REDACTED]";
         }

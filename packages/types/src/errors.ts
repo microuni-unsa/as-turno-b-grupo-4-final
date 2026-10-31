@@ -1,3 +1,4 @@
+import { PLAIN_LANGUAGE_MAX_WORDS } from "@pims/types/constants.ts";
 import type { JsonObject } from "@pims/types/models.ts";
 
 export type PimsErrorDetails = JsonObject | undefined;
@@ -473,19 +474,22 @@ export class ExemptionUngroundedError extends PimsBaseError {
 export class PlainLanguageViolationError extends PimsBaseError {
   readonly sentenceIndex: number;
   readonly wordCount: number;
+  readonly maxWords: number;
 
   constructor(
     sentenceIndex: number,
     wordCount: number,
+    maxWords = PLAIN_LANGUAGE_MAX_WORDS,
     details?: PimsErrorDetails,
   ) {
     super(
-      `Sentence ${sentenceIndex} exceeds plain language limit: ${wordCount} words (max 25)`,
+      `Sentence ${sentenceIndex} exceeds plain language limit: ${wordCount} words (max ${maxWords})`,
       "PLAIN_LANGUAGE_VIOLATION",
       details,
     );
     this.sentenceIndex = sentenceIndex;
     this.wordCount = wordCount;
+    this.maxWords = maxWords;
   }
 }
 
@@ -495,6 +499,24 @@ export class SubjectCountForbiddenError extends PimsBaseError {
     details?: PimsErrorDetails,
   ) {
     super(message, "SUBJECT_COUNT_FORBIDDEN", details);
+  }
+}
+
+export class CanonicalizationError extends PimsBaseError {
+  constructor(
+    message = "Value cannot be canonicalized as JSON",
+    details?: PimsErrorDetails,
+  ) {
+    super(message, "CANONICALIZATION_ERROR", details);
+  }
+}
+
+export class EvidenceStoreWriteError extends PimsBaseError {
+  constructor(
+    message = "Evidence store write or payload validation failed",
+    details?: PimsErrorDetails,
+  ) {
+    super(message, "EVIDENCE_STORE_WRITE_ERROR", details);
   }
 }
 

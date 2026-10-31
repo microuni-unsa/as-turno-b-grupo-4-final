@@ -1,11 +1,74 @@
 import {
+  type PlainLanguageValidationOptions,
+  PlainLanguageValidationOptionsSchema,
   PlainLanguageViolationError,
   SubjectCountForbiddenError,
 } from "@pims/types";
+import { PLAIN_LANGUAGE_MAX_WORDS } from "@pims/types/constants.ts";
 
-export interface PlainLanguageValidationOptions {
-  allowSubjectCounts?: boolean;
-  plainLanguageWaiver?: boolean;
+const NON_TERMINAL_ABBREVIATIONS = [
+  "art",
+  "art.",
+  "inc",
+  "inc.",
+  "dr",
+  "dr.",
+  "dra",
+  "dra.",
+  "sr",
+  "sr.",
+  "sra",
+  "sra.",
+  "lic",
+  "lic.",
+  "vs",
+  "vs.",
+  "etc",
+  "etc.",
+  "e.g",
+  "e.g.",
+  "i.e",
+  "i.e.",
+  "p. ej",
+  "p. ej.",
+  "p.ej",
+  "p.ej.",
+  "n.º",
+  "núm",
+  "núm.",
+  "ee. uu",
+  "ee. uu.",
+  "s.a",
+  "s.a.",
+  "s.l",
+  "s.l.",
+  "ud",
+  "ud.",
+  "uds",
+  "uds.",
+] as const;
+
+const NUMERIC_LITERAL_PATTERN =
+  "\\d{1,3}(?:[.,\\u00A0\\u202F ]\\d{3})+(?:[.,]\\d+)?|\\d+(?:[.,]\\d+)?";
+
+const TRAILING_PUNCTUATION = /[.!?]+$/;
+
+function endsWithNonTerminalAbbreviation(segment: string): boolean {
+  const normalized = segment.toLowerCase().replace(/\s+/g, " ").trimEnd();
+  return NON_TERMINAL_ABBREVIATIONS.some((abbreviation) => {
+    if (!normalized.endsWith(abbreviation)) {
+      return false;
+    }
+    const boundary = normalized.length - abbreviation.length;
+    return boundary === 0 || normalized[boundary - 1] === " ";
+  });
+}
+
+function findNumericLiterals(text: string): string[] {
+  const pattern = new RegExp(NUMERIC_LITERAL_PATTERN, "g");
+  return Array.from(text.matchAll(pattern), (match) =>
+    match[0].replace(/[\u00A0\u202F]/g, " "),
+  );
 }
 
 export class PlainLanguageValidator {
@@ -14,59 +77,88 @@ export class PlainLanguageValidator {
   ) {}
 
   validate(text: string, options?: PlainLanguageValidationOptions): void {
-    PlainLanguageValidator.validate(text, options ?? this.defaultOptions);
+    PlainLanguageValidator.validate(text, {
+      ...this.defaultOptions,
+      ...options,
+    });
   }
 
-  static splitSentences(text: string): string[] {
-    const DOT_PLACEHOLDER = "___PIMS_DOT___";
-    const protectedText = text
-      .replace(
-        /(?:\b(?:art|inc|dr|sra?|lic|vs|etc)\.|\b(?:e\.g|i\.e|p\.\s*ej)\.)/gi,
-        (match) => match.replace(/\./g, DOT_PLACEHOLDER),
-      )
-      .replace(/(\d)\.(\d)/g, `$1${DOT_PLACEHOLDER}$2`);
+  static splitSentences(text: string, locale: "es" | "en" = "es"): string[] {
+    const segmenter = new Intl.Segmenter(locale, { granularity: "sentence" });
+    const segments = Array.from(segmenter.segment(text), (part) =>
+      part.segment.trim(),
+    ).filter((segment) => segment.length > 0);
 
-    return protectedText
-      .split(/[.!?\r\n]+/)
-      .map((segment) =>
-        segment.replace(new RegExp(DOT_PLACEHOLDER, "g"), ".").trim(),
-      )
+    const merged: string[] = [];
+    for (const segment of segments) {
+      const previous = merged[merged.length - 1];
+      if (previous !== undefined && endsWithNonTerminalAbbreviation(previous)) {
+        merged[merged.length - 1] = `${previous} ${segment}`;
+        continue;
+      }
+      merged.push(segment);
+    }
+
+    return merged
+      .map((segment) => segment.replace(TRAILING_PUNCTUATION, "").trim())
       .filter((segment) => segment.length > 0);
   }
 
   static countWords(sentence: string): number {
-    const tokens = sentence.trim().split(/\s+/);
-    return tokens.filter((token) => token.length > 0).length;
+    const segmenter = new Intl.Segmenter(undefined, { granularity: "word" });
+    let count = 0;
+    for (const part of segmenter.segment(sentence)) {
+      if (part.isWordLike) {
+        count += 1;
+      }
+    }
+    return count;
   }
 
   static validate(
     text: string,
     options?: PlainLanguageValidationOptions,
   ): void {
-    const sentences = PlainLanguageValidator.splitSentences(text);
+    const opts = PlainLanguageValidationOptionsSchema.parse(options ?? {});
+    const maxWords = opts.maxWords ?? PLAIN_LANGUAGE_MAX_WORDS;
 
-    for (let i = 0; i < sentences.length; i++) {
-      const sentence = sentences[i];
-      if (!sentence) {
-        continue;
-      }
-      const wordCount = PlainLanguageValidator.countWords(sentence);
-      if (wordCount > 25 && !options?.plainLanguageWaiver) {
-        throw new PlainLanguageViolationError(i + 1, wordCount);
+    if (!opts.plainLanguageWaiver) {
+      const sentences = PlainLanguageValidator.splitSentences(
+        text,
+        opts.locale ?? "es",
+      );
+      for (let index = 0; index < sentences.length; index++) {
+        const sentence = sentences[index];
+        if (sentence === undefined || sentence.length === 0) {
+          continue;
+        }
+        const wordCount = PlainLanguageValidator.countWords(sentence);
+        if (wordCount > maxWords) {
+          throw new PlainLanguageViolationError(index + 1, wordCount, maxWords);
+        }
       }
     }
 
-    if (!options?.allowSubjectCounts) {
-      const forbiddenPatterns = [
-        /\b\d{1,3}(?:[.,]\d{3})*\s*(?:usuarios|personas|sujetos|individuos|titulares|afectados|víctimas|registros|cuentas|users|subjects|people|records|individuals|victims|accounts)\b/i,
-        /\b(?:usuarios|personas|sujetos|individuos|titulares|afectados|víctimas|registros|cuentas|users|subjects|people|records|individuals|victims|accounts)\s*(?:afectados|involucrados)?\s*[:=]?\s*\d{1,3}(?:[.,]\d{3})*\b/i,
-        /(?:afectó\s+a|involucra\s+a|affecting|involving)\s*\d+/i,
-      ];
-
-      for (const pattern of forbiddenPatterns) {
-        if (pattern.test(text)) {
-          throw new SubjectCountForbiddenError();
-        }
+    const occurrences = new Map<string, number>();
+    const literals = findNumericLiterals(text);
+    for (let index = 0; index < literals.length; index++) {
+      const value = literals[index];
+      if (value === undefined) {
+        continue;
+      }
+      const occurrence = occurrences.get(value) ?? 0;
+      occurrences.set(value, occurrence + 1);
+      const approved = opts.numericApprovals.some(
+        (approval) =>
+          approval.value === value && approval.occurrence === occurrence,
+      );
+      if (!approved) {
+        throw new SubjectCountForbiddenError(undefined, {
+          value,
+          occurrence,
+          index,
+          reason: "NUMERIC_CONTENT_UNAPPROVED",
+        });
       }
     }
   }

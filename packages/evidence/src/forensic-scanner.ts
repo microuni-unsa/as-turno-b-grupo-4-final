@@ -1,57 +1,92 @@
 import crypto from "node:crypto";
 import {
+  decodeUtf8,
+  extractIocs,
+  extractPii,
+} from "@pims/evidence/forensic-patterns.ts";
+import {
+  type AllowedAttachmentExtension,
+  assertAttachmentMeta,
+} from "@pims/types/attachments.ts";
+import {
+  ATTACHMENT_EXTENSIONS,
+  ATTACHMENT_TEXT_EXTENSIONS,
+  ATTACHMENT_VISUAL_EXTENSIONS,
+  ATTACHMENT_WORD_EXTENSIONS,
+  MAX_ATTACHMENT_SIZE_MB,
+} from "@pims/types/constants.ts";
+import {
   AttachmentHashMismatchError,
   AttachmentRejectedError,
 } from "@pims/types/errors.ts";
-import type { ForensicScanResult } from "@pims/types/evidence.ts";
-import type { ModelProvider } from "@pims/types/models.ts";
+import {
+  type ForensicScanResult,
+  ForensicScanResultSchema,
+} from "@pims/types/evidence.ts";
+import type { JsonObject, ModelProvider } from "@pims/types/models.ts";
+import { fileTypeFromBuffer } from "file-type";
+import mammoth from "mammoth";
+import WordExtractor from "word-extractor";
 
-export const ALLOWED_EXTENSIONS = [
-  "jpg",
-  "jpeg",
-  "png",
-  "tif",
-  "bmp",
-  "pdf",
-  "doc",
-  "docx",
-  "txt",
-] as const;
+const DOC_OLE_MAGIC = Buffer.from([
+  0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1,
+]);
 
-export type AllowedExtension = (typeof ALLOWED_EXTENSIONS)[number];
+const SIGNATURE_EXTENSIONS: Partial<
+  Record<AllowedAttachmentExtension, string>
+> = {
+  jpg: "jpg",
+  jpeg: "jpg",
+  png: "png",
+  tif: "tif",
+  bmp: "bmp",
+  pdf: "pdf",
+  doc: "doc",
+  docx: "docx",
+};
 
-const VISUAL_EXTENSIONS = new Set(["jpg", "jpeg", "png", "tif", "bmp", "pdf"]);
-const TEXT_DOC_EXTENSIONS = new Set(["doc", "docx", "txt"]);
+const MIME_BY_EXTENSION: Record<AllowedAttachmentExtension, string> = {
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  png: "image/png",
+  tif: "image/tiff",
+  bmp: "image/bmp",
+  pdf: "application/pdf",
+  doc: "application/msword",
+  docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  txt: "text/plain",
+};
 
-const IPV4_REGEX =
-  /\b(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\b/g;
-const DOMAIN_REGEX =
-  /\b(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}\b/g;
-const HASH_REGEX =
-  /\b[a-fA-F0-9]{64}\b|\b[a-fA-F0-9]{40}\b|\b[a-fA-F0-9]{32}\b/g;
-
-const EMAIL_REGEX = /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/g;
-const DNI_NIE_REGEX = /\b[XYZxyz]?\d{7,8}[A-Za-z]\b/g;
-const PHONE_REGEX =
-  /(?:\+?\d{1,3}[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}\b/g;
-const PII_TOKEN_REGEX = /\[(?:REPORTANTE|CONTACTO|ID|SISTEMA|DESCRIPCION)\]/g;
-
-const ENCRYPTION_PROOF_REGEX =
-  /\b(?:AES-256|AES-GCM|encryption_proof|encrypted_at_rest|cifrado)\b/i;
+const VISION_JSON_SCHEMA: JsonObject = {
+  type: "object",
+  properties: {
+    extracted_text_redacted: { type: "string" },
+    iocs: { type: "array", items: { type: "string" } },
+    pii_detected: { type: "array", items: { type: "string" } },
+    encryption_proof_verified: { type: "boolean" },
+    tamper_score: { type: "number" },
+    layout_hashes: { type: "array", items: { type: "string" } },
+  },
+  required: [
+    "extracted_text_redacted",
+    "iocs",
+    "pii_detected",
+    "encryption_proof_verified",
+    "tamper_score",
+    "layout_hashes",
+  ],
+  additionalProperties: false,
+};
 
 export class ForensicScanner {
-  readonly allowedExtensions = ALLOWED_EXTENSIONS;
+  readonly allowedExtensions = ATTACHMENT_EXTENSIONS;
 
-  validateAttachment(fileName: string, bytes: number, maxSizeMb = 10): void {
-    const ext = fileName.split(".").pop()?.toLowerCase() ?? "";
-    if (!ALLOWED_EXTENSIONS.includes(ext as AllowedExtension)) {
-      throw new AttachmentRejectedError(`disallowed_extension:${ext}`);
-    }
-
-    const maxBytes = maxSizeMb * 1024 * 1024;
-    if (bytes > maxBytes) {
-      throw new AttachmentRejectedError(`oversized:${bytes}`);
-    }
+  validateAttachment(
+    fileName: string,
+    bytes: number,
+    maxSizeMb = MAX_ATTACHMENT_SIZE_MB,
+  ): void {
+    assertAttachmentMeta(fileName, bytes, maxSizeMb);
   }
 
   computeSha256(data: Buffer): string {
@@ -63,106 +98,44 @@ export class ForensicScanner {
     data: Buffer,
     modelProvider?: ModelProvider,
   ): Promise<ForensicScanResult> {
-    const ext = fileName.split(".").pop()?.toLowerCase() ?? "";
+    const ext = assertAttachmentMeta(
+      fileName,
+      data.length,
+      MAX_ATTACHMENT_SIZE_MB,
+    );
 
-    if (VISUAL_EXTENSIONS.has(ext)) {
-      if (modelProvider) {
-        const imageBase64 = data.toString("base64");
-        const res = await (
-          modelProvider as unknown as {
-            vision_json: (
-              args: Record<string, unknown>,
-            ) => Promise<Record<string, unknown>>;
-          }
-        ).vision_json({
-          prompt: "Forensic scan: OCR, IOCs, visual PII, encryption proof",
-          image: imageBase64,
-          system:
-            "Forensic scanner: extract OCR, IOCs, visual PII, verify encryption proof",
-          image_or_pdf_ref: imageBase64,
-          json_schema: {
-            type: "object",
-            properties: {
-              ocr_text: { type: "string" },
-              iocs: { type: "array", items: { type: "string" } },
-              visual_pii: { type: "array", items: { type: "string" } },
-              encryption_proof_verified: { type: "boolean" },
-              tamper_score: { type: "number" },
-            },
-          },
-          max_tokens: 1000,
-          temperature: 0.1,
-        });
-
-        const ocrText =
-          typeof res.ocr_text === "string"
-            ? res.ocr_text
-            : typeof res.extracted_text_redacted === "string"
-              ? res.extracted_text_redacted
-              : "";
-
-        const iocs = Array.isArray(res.iocs) ? (res.iocs as string[]) : [];
-
-        const visualPii = Array.isArray(res.visual_pii)
-          ? (res.visual_pii as string[])
-          : Array.isArray(res.pii_detected)
-            ? (res.pii_detected as string[])
-            : [];
-
-        const encryptionProof = Boolean(res.encryption_proof_verified);
-        const tamperScore =
-          typeof res.tamper_score === "number" ? res.tamper_score : 0.0;
-
-        return {
-          ocr_text: ocrText,
-          iocs,
-          visual_pii: visualPii,
-          encryption_proof_verified: encryptionProof,
-          tamper_score: Math.min(1, Math.max(0, tamperScore)),
-        };
+    if (ATTACHMENT_VISUAL_EXTENSIONS.has(ext)) {
+      await this.assertContentSignature(ext, data);
+      if (modelProvider === undefined) {
+        throw new AttachmentRejectedError("vision_provider_required");
       }
+      const vision = await modelProvider.vision_json({
+        system:
+          "Forensic scanner: extract OCR, IOCs, visual PII and tamper indicators from the supplied evidence.",
+        image_or_pdf_ref: `data:${MIME_BY_EXTENSION[ext]};base64,${data.toString("base64")}`,
+        prompt: "Forensic scan: OCR, IOCs, visual PII, tamper score",
+        json_schema: VISION_JSON_SCHEMA,
+        max_tokens: 1000,
+        temperature: 0.1,
+      });
 
-      return {
-        ocr_text: "",
-        iocs: [],
-        visual_pii: [],
-        encryption_proof_verified: false,
-        tamper_score: 0.0,
-      };
+      return ForensicScanResultSchema.parse({
+        ocr_text: vision.extracted_text_redacted,
+        iocs: vision.iocs,
+        visual_pii: vision.pii_detected,
+        encryption_proof_signal: vision.encryption_proof_verified,
+        tamper_score: vision.tamper_score,
+      });
     }
 
-    if (TEXT_DOC_EXTENSIONS.has(ext)) {
-      const text = data.toString("utf8");
-
-      const ips = Array.from(text.match(IPV4_REGEX) ?? []);
-      const domains = Array.from(text.match(DOMAIN_REGEX) ?? []);
-      const hashes = Array.from(text.match(HASH_REGEX) ?? []);
-
-      const filteredDomains = domains.filter((d) => !IPV4_REGEX.test(d));
-
-      const iocs = Array.from(new Set([...ips, ...filteredDomains, ...hashes]));
-
-      const emails = Array.from(text.match(EMAIL_REGEX) ?? []);
-      const dnis = Array.from(text.match(DNI_NIE_REGEX) ?? []);
-      const phones = Array.from(text.match(PHONE_REGEX) ?? []);
-      const tokens = Array.from(text.match(PII_TOKEN_REGEX) ?? []);
-
-      const visualPii = Array.from(
-        new Set([...emails, ...dnis, ...phones, ...tokens]),
-      );
-
-      const encryptionProof = ENCRYPTION_PROOF_REGEX.test(text);
-
-      return {
-        ocr_text: text,
-        iocs,
-        visual_pii: visualPii,
-        encryption_proof_verified: encryptionProof,
-        tamper_score: 0.0,
-      };
-    }
-
-    throw new AttachmentRejectedError(`disallowed_extension:${ext}`);
+    const text = await this.extractText(ext, data);
+    return ForensicScanResultSchema.parse({
+      ocr_text: text,
+      iocs: extractIocs(text),
+      visual_pii: extractPii(text),
+      encryption_proof_signal: false,
+      tamper_score: 0,
+    });
   }
 
   verifyPostUploadHash(
@@ -170,9 +143,59 @@ export class ForensicScanner {
     downloadedBytes: Buffer,
   ): boolean {
     const downloadedSha256 = this.computeSha256(downloadedBytes);
-    if (downloadedSha256 !== preUploadSha256) {
+    if (downloadedSha256 !== preUploadSha256.toLowerCase()) {
       throw new AttachmentHashMismatchError();
     }
     return true;
+  }
+
+  private async assertContentSignature(
+    ext: AllowedAttachmentExtension,
+    data: Buffer,
+  ): Promise<void> {
+    const expected = SIGNATURE_EXTENSIONS[ext];
+    if (expected === undefined) {
+      throw new AttachmentRejectedError(`no_signature_rule:${ext}`);
+    }
+    if (expected === "doc") {
+      if (!data.subarray(0, DOC_OLE_MAGIC.length).equals(DOC_OLE_MAGIC)) {
+        throw new AttachmentRejectedError("content_type_mismatch:doc");
+      }
+      return;
+    }
+    const detected = await fileTypeFromBuffer(data);
+    if (detected === undefined || detected.ext !== expected) {
+      throw new AttachmentRejectedError(
+        `content_type_mismatch:${ext}:${detected?.ext ?? "unknown"}`,
+      );
+    }
+  }
+
+  private async extractText(
+    ext: AllowedAttachmentExtension,
+    data: Buffer,
+  ): Promise<string> {
+    if (ATTACHMENT_TEXT_EXTENSIONS.has(ext)) {
+      return decodeUtf8(data);
+    }
+    if (!ATTACHMENT_WORD_EXTENSIONS.has(ext)) {
+      throw new AttachmentRejectedError(`disallowed_extension:${ext}`);
+    }
+
+    await this.assertContentSignature(ext, data);
+
+    let text: string;
+    try {
+      text =
+        ext === "docx"
+          ? (await mammoth.extractRawText({ buffer: data })).value
+          : (await new WordExtractor().extract(data)).getBody();
+    } catch {
+      throw new AttachmentRejectedError(`no_extractable_text:${ext}`);
+    }
+    if (text.trim().length === 0) {
+      throw new AttachmentRejectedError(`no_extractable_text:${ext}`);
+    }
+    return text;
   }
 }

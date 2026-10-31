@@ -8,6 +8,7 @@ import {
   type PimsTestServerInstance,
 } from "@pims/pims-mock";
 import {
+  AttachmentRejectedError,
   NotifyNoRecipientsError,
   PimsNotFoundError,
   PimsValidationError,
@@ -17,7 +18,7 @@ import {
   PostgreSqlContainer,
   type StartedPostgreSqlContainer,
 } from "@testcontainers/postgresql";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 describe("PIMS Client Adapter & Reverse-Engineered DRF API Integration Suite", () => {
   let container: StartedPostgreSqlContainer;
@@ -214,6 +215,43 @@ describe("PIMS Client Adapter & Reverse-Engineered DRF API Integration Suite", (
       const uploaded = attachments.find((a) => a.file_name === "forensics.txt");
       expect(uploaded).toBeDefined();
       expect(uploaded?.uploaded_by_name).toBe("admin");
+    });
+
+    it("E12: rejects a disallowed extension before any HTTP request", async () => {
+      const fetchSpy = vi.spyOn(globalThis, "fetch");
+
+      await expect(
+        adapter.uploadIncidentAttachment(
+          createdIncidentId,
+          Buffer.from("MZ binary"),
+          "malware.exe",
+        ),
+      ).rejects.toThrow(AttachmentRejectedError);
+
+      expect(fetchSpy).not.toHaveBeenCalled();
+      fetchSpy.mockRestore();
+    });
+
+    it("E12: mock API rejects a disallowed extension with a field error", async () => {
+      const formData = new FormData();
+      formData.append(
+        "file",
+        new Blob([Buffer.from("MZ binary")]),
+        "malware.exe",
+      );
+
+      const res = await fetch(
+        `${serverInstance.url}/api/incidents/${createdIncidentId}/attachments/`,
+        {
+          method: "POST",
+          headers: { Authorization: `Bearer ${adapter.accessToken}` },
+          body: formData,
+        },
+      );
+
+      expect(res.status).toBe(400);
+      const body = (await res.json()) as { file?: string[] };
+      expect(body.file?.[0]).toContain("disallowed_extension");
     });
 
     it("E11: retrieves list of attachments for incident", async () => {

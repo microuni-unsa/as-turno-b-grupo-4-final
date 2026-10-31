@@ -1,3 +1,4 @@
+import type { JsonObject } from "@pims/types/models.ts";
 import {
   boolean,
   integer,
@@ -24,9 +25,9 @@ export const stagedAttachmentsTable = evidenceSchema.table(
     forensic_scan_encrypted: text("forensic_scan_encrypted"),
     storage_path: text("storage_path").notNull(),
     pims_attachment_id: integer("pims_attachment_id"),
-    uploader: varchar("uploader", { length: 128 }).default(
-      "evidence-collector",
-    ),
+    uploader: varchar("uploader", { length: 128 })
+      .notNull()
+      .default("evidence-collector"),
     created_at: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -74,9 +75,7 @@ export const timersTable = evidenceSchema.table("timers", {
   incident_code: varchar("incident_code", { length: 64 }).notNull(),
   timer_type: varchar("timer_type", { length: 64 }).notNull(),
   fire_at_utc: timestamp("fire_at_utc", { withTimezone: true }).notNull(),
-  payload_json: jsonb("payload_json")
-    .$type<Record<string, unknown>>()
-    .notNull(),
+  payload_json: jsonb("payload_json").$type<JsonObject>().notNull(),
   fired: boolean("fired").notNull().default(false),
   cancelled_reason: varchar("cancelled_reason", { length: 255 }),
 });
@@ -93,9 +92,7 @@ export const dedupeIndexTable = evidenceSchema.table("dedupe_index", {
 export const riskQueueTable = evidenceSchema.table("risk_queue", {
   id: serial("id").primaryKey(),
   incident_code: varchar("incident_code", { length: 64 }).notNull(),
-  signal_payload: jsonb("signal_payload")
-    .$type<Record<string, unknown>>()
-    .notNull(),
+  signal_payload: jsonb("signal_payload").$type<JsonObject>().notNull(),
   status: varchar("status", { length: 32 }).notNull().default("queued"),
   queued_at: timestamp("queued_at", { withTimezone: true })
     .notNull()
@@ -105,9 +102,7 @@ export const riskQueueTable = evidenceSchema.table("risk_queue", {
 export const indicatorSpoolTable = evidenceSchema.table("indicator_spool", {
   id: serial("id").primaryKey(),
   event_type: varchar("event_type", { length: 64 }).notNull(),
-  payload_json: jsonb("payload_json")
-    .$type<Record<string, unknown>>()
-    .notNull(),
+  payload_json: jsonb("payload_json").$type<JsonObject>().notNull(),
   created_at: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
@@ -119,9 +114,7 @@ export const toolLedgerTable = evidenceSchema.table("tool_ledger", {
   at_utc: timestamp("at_utc", { withTimezone: true }).notNull(),
   role: varchar("role", { length: 64 }).notNull(),
   tool: varchar("tool", { length: 64 }).notNull(),
-  args_redacted: jsonb("args_redacted")
-    .$type<Record<string, unknown>>()
-    .notNull(),
+  args_redacted: jsonb("args_redacted").$type<JsonObject>().notNull(),
   result_ref: varchar("result_ref", { length: 255 }).notNull(),
   idempotency_key: varchar("idempotency_key", { length: 128 }).notNull(),
 });

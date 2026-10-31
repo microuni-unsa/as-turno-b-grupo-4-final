@@ -35,6 +35,8 @@ export const ALL_AFFECTED_DATA_TYPES = [
   ...AFFECTED_DATA_TYPES_BUNDLE,
 ] as const;
 
+export type AffectedDataType = (typeof ALL_AFFECTED_DATA_TYPES)[number];
+
 export const SECURITY_MEASURES_ADOPTED_ES = [
   "cifrado_datos",
   "control_acceso",
@@ -74,6 +76,8 @@ export const AFFECTED_CID = ["C", "I", "D"] as const;
 export const INCIDENT_STATUSES = ["O", "P", "C"] as const;
 export const INCIDENT_SEVERITIES = ["L", "M", "H", "C"] as const;
 export const INCIDENT_IMPACTS = ["L", "M", "H", "V"] as const;
+export type IncidentSeverity = (typeof INCIDENT_SEVERITIES)[number];
+export type IncidentImpact = (typeof INCIDENT_IMPACTS)[number];
 export const INCIDENT_TYPES = [
   "UA",
   "DL",

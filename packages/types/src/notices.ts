@@ -1,3 +1,11 @@
+import {
+  ACTION_TYPES,
+  type AffectedDataType,
+  ALL_AFFECTED_DATA_TYPES,
+  ALL_SECURITY_MEASURES,
+  INCIDENT_IMPACTS,
+  INCIDENT_SEVERITIES,
+} from "@pims/types/pims.ts";
 import { z } from "zod";
 
 export const DpoContactSchema = z.object({
@@ -55,9 +63,52 @@ export const AuthorityNoticePackSchema = z.object({
 });
 export type AuthorityNoticePack = z.infer<typeof AuthorityNoticePackSchema>;
 
+export const SENSITIVE_AFFECTED_DATA_TYPES = [
+  "sensitive",
+  "health",
+  "biometric",
+  "minors",
+  "financial",
+  "credentials",
+  "categorias_especiales",
+  "economicos_financieros",
+  "datos_relativos_condenas_infracciones",
+] as const satisfies readonly AffectedDataType[];
+
+const SENSITIVE_AFFECTED_DATA_TYPE_SET: ReadonlySet<AffectedDataType> = new Set(
+  SENSITIVE_AFFECTED_DATA_TYPES,
+);
+
+export function isSensitiveAffectedDataType(value: AffectedDataType): boolean {
+  return SENSITIVE_AFFECTED_DATA_TYPE_SET.has(value);
+}
+
+export const HighRiskTriggerSchema = z.enum([
+  "severity:C",
+  "impact:V",
+  "sensitive_data_types",
+  "num_affected_subjects>=100",
+  "unencrypted_exfiltration",
+  "authority_ordered",
+]);
+export type HighRiskTrigger = z.infer<typeof HighRiskTriggerSchema>;
+
+export const HighRiskGateInputSchema = z
+  .object({
+    severity: z.enum(INCIDENT_SEVERITIES),
+    impact: z.enum(INCIDENT_IMPACTS),
+    affectedDataTypes: z.array(z.enum(ALL_AFFECTED_DATA_TYPES)),
+    numAffectedSubjects: z.number().int().nonnegative().nullable(),
+    unencryptedExfiltration: z.boolean(),
+    authorityOrdered: z.boolean(),
+    reviewer: z.string().min(1),
+  })
+  .strict();
+export type HighRiskGateInput = z.infer<typeof HighRiskGateInputSchema>;
+
 export const HighRiskGateResultSchema = z.object({
   verdict: z.boolean(),
-  triggers: z.array(z.string()),
+  triggers: z.array(HighRiskTriggerSchema),
   determined_at_utc: z.string().datetime(),
   reviewer: z.string().min(1),
 });
@@ -84,6 +135,125 @@ export const SubjectNoticeStateSchema = z.enum([
   "not_required",
 ]);
 export type SubjectNoticeState = z.infer<typeof SubjectNoticeStateSchema>;
+
+export const NoticeStateSchema = z.union([
+  AuthorityNoticeStateSchema,
+  SubjectNoticeStateSchema,
+]);
+export type NoticeState = z.infer<typeof NoticeStateSchema>;
+
+export const NumericApprovalSchema = z.object({
+  value: z.string().min(1),
+  occurrence: z.number().int().nonnegative(),
+  reason: z.string().min(1),
+  approval_id: z.string().uuid(),
+});
+export type NumericApproval = z.infer<typeof NumericApprovalSchema>;
+
+export const PlainLanguageWaiverSchema = z.object({
+  reason: z.string().min(1),
+  approval_id: z.string().uuid(),
+});
+export type PlainLanguageWaiver = z.infer<typeof PlainLanguageWaiverSchema>;
+
+export const PlainLanguageValidationOptionsSchema = z
+  .object({
+    maxWords: z.number().int().positive().optional(),
+    locale: z.enum(["es", "en"]).optional(),
+    plainLanguageWaiver: PlainLanguageWaiverSchema.optional(),
+    numericApprovals: z.array(NumericApprovalSchema).default([]),
+  })
+  .strict();
+export type PlainLanguageValidationOptions = z.input<
+  typeof PlainLanguageValidationOptionsSchema
+>;
+
+export const EncryptionProofAttestationSchema = z
+  .object({
+    incident_code: z.string().min(1),
+    source_file_sha256: z.string().length(64),
+    scope: z.enum(["encrypt_rest", "encrypt_transit"]),
+    algorithm: z.string().min(1),
+    key_management_ref: z.string().min(1),
+    applies_to_affected_data: z.boolean(),
+    evidence_refs: z.array(z.string().min(1)).min(1),
+    verified_by: z.string().min(1),
+    verified_at_utc: z.string().datetime(),
+    review_approval_id: z.string().uuid(),
+  })
+  .strict();
+export type EncryptionProofAttestation = z.infer<
+  typeof EncryptionProofAttestationSchema
+>;
+
+export const SubsequentMeasureSchema = z
+  .object({
+    action_type: z.enum(ACTION_TYPES),
+    description: z.string().min(1),
+    risk_eliminated: z.boolean(),
+    evidence_refs: z.array(z.string().min(1)).min(1),
+    review_approval_id: z.string().uuid(),
+  })
+  .strict();
+export type SubsequentMeasure = z.infer<typeof SubsequentMeasureSchema>;
+
+export const DisproportionateEffortSchema = z
+  .object({
+    analysis_ref: z.string().min(1),
+    public_artifact_ref: z.string().min(1).nullable(),
+    published_at_utc: z.string().datetime(),
+    review_approval_id: z.string().uuid(),
+  })
+  .strict();
+export type DisproportionateEffort = z.infer<
+  typeof DisproportionateEffortSchema
+>;
+
+export const AuthorityInstructionSchema = z
+  .object({
+    instruction_ref: z.string().min(1),
+    ordered_at_utc: z.string().datetime(),
+  })
+  .strict();
+export type AuthorityInstruction = z.infer<typeof AuthorityInstructionSchema>;
+
+export const ExemptionEvaluationInputSchema = z
+  .object({
+    incidentCode: z.string().min(1),
+    securityMeasuresAdopted: z.array(z.enum(ALL_SECURITY_MEASURES)),
+    encryptionProofs: z.array(EncryptionProofAttestationSchema),
+    subsequentMeasures: z.array(SubsequentMeasureSchema),
+    disproportionateEffort: DisproportionateEffortSchema.nullable(),
+    authorityInstruction: AuthorityInstructionSchema.nullable(),
+  })
+  .strict();
+export type ExemptionEvaluationInput = z.infer<
+  typeof ExemptionEvaluationInputSchema
+>;
+
+export const ExemptionEvaluationResultSchema = z.discriminatedUnion("kind", [
+  z.object({
+    kind: z.literal("authority_override"),
+    reason: z.literal("AUTHORITY_OVERRIDE"),
+    instruction_ref: z.string().min(1),
+  }),
+  z.object({
+    kind: z.literal("exempted"),
+    reason: z.enum([
+      "ENCRYPTION_VERIFIED",
+      "RISK_ELIMINATED",
+      "DISPROPORTIONATE_EFFORT",
+    ]),
+    exemption: Art34ExemptionSchema,
+  }),
+  z.object({
+    kind: z.literal("notice_required"),
+    reason: z.literal("NO_EXEMPTION_QUALIFIED"),
+  }),
+]);
+export type ExemptionEvaluationResult = z.infer<
+  typeof ExemptionEvaluationResultSchema
+>;
 
 export const SubjectNoticePackSchema = z.object({
   pack: z.literal("subject"),

@@ -16,12 +16,18 @@
   "dependencies": {
     "@hono/node-server": "^2.1.5",
     "@testcontainers/postgresql": "^10.18.0",
+    "canonicalize": "^5.1.0",
     "drizzle-orm": "^0.45.4",
+    "file-type": "^22.3.0",
     "hono": "^4.13.14",
+    "libphonenumber-js": "^1.13.15",
+    "mammoth": "^1.13.0",
     "pgvector": "^0.3.0",
     "postgres": "^3.4.5",
     "testcontainers": "^10.18.0",
+    "tldts": "^7.4.19",
     "unpdf": "^2.0.1",
+    "word-extractor": "^1.0.4",
     "zod": "^3.24.2"
   },
   "devDependencies": {

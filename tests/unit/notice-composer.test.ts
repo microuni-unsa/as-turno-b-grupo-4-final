@@ -1,9 +1,12 @@
 import { hashCanonicalContent, NoticeComposer } from "@pims/notices";
 import {
+  type AffectedDataType,
   ArtifactIncompleteError,
   AuthorityNoticePackSchema,
   type DpoContact,
+  type HighRiskGateInput,
   type HighRiskGateResult,
+  PimsValidationError,
   PlainLanguageViolationError,
   SubjectCountForbiddenError,
   SubjectNoticePackSchema,
@@ -11,6 +14,10 @@ import {
 import { describe, expect, it } from "vitest";
 
 describe("Notice Composer (GDPR Art 33 Authority Pack & Art 34 Subject Notice)", () => {
+  const fixedNow = new Date("2026-10-30T12:00:00.000Z");
+  const reviewApprovalId = "00000000-0000-0000-0000-000000000001";
+  const exemptionApprovalId = "00000000-0000-0000-0000-000000000002";
+
   const sampleDpoContact: DpoContact = {
     name: "Oficina del DPO",
     email: "dpo@example.com",
@@ -20,14 +27,14 @@ describe("Notice Composer (GDPR Art 33 Authority Pack & Art 34 Subject Notice)",
   const sampleHighRiskGatePass: HighRiskGateResult = {
     verdict: true,
     triggers: ["severity:C"],
-    determined_at_utc: "2026-10-30T12:00:00.000Z",
+    determined_at_utc: fixedNow.toISOString(),
     reviewer: "sec-auditor-1",
   };
 
   const sampleHighRiskGateFail: HighRiskGateResult = {
     verdict: false,
     triggers: [],
-    determined_at_utc: "2026-10-30T12:00:00.000Z",
+    determined_at_utc: fixedNow.toISOString(),
     reviewer: "sec-auditor-1",
   };
 
@@ -51,30 +58,35 @@ describe("Notice Composer (GDPR Art 33 Authority Pack & Art 34 Subject Notice)",
       item_d_measures_taken: ["Credentials revoked", "IP blacklisted"],
       item_d_measures_proposed: ["Mandatory 2FA rollout"],
       citations: ["Art. 33(3)(a)", "Art. 33(3)(b)"],
-      review_approval_id: "00000000-0000-0000-0000-000000000001",
+      review_approval_id: reviewApprovalId,
       state: "draft" as const,
     };
 
-    it("generates a valid pack matching AuthorityNoticePackSchema with pack='authority' and jurisdiction='EU_GDPR'", () => {
+    it("generates a valid pack matching AuthorityNoticePackSchema", () => {
       const composer = new NoticeComposer();
       const pack = composer.composeAuthorityPack(baseAuthorityParams);
 
       expect(pack.pack).toBe("authority");
       expect(pack.jurisdiction).toBe("EU_GDPR");
       expect(pack.pack_id).toBeDefined();
-
-      const parsed = AuthorityNoticePackSchema.safeParse(pack);
-      expect(parsed.success).toBe(true);
+      expect(AuthorityNoticePackSchema.safeParse(pack).success).toBe(true);
 
       const staticPack =
         NoticeComposer.composeAuthorityPack(baseAuthorityParams);
       expect(staticPack.incident_code).toBe(baseAuthorityParams.incident_code);
     });
 
-    it("throws ArtifactIncompleteError when item_a_unknown is non-empty but phased is false", () => {
+    it("keeps a caller-supplied pack_id", () => {
+      const pack = new NoticeComposer().composeAuthorityPack({
+        ...baseAuthorityParams,
+        pack_id: exemptionApprovalId,
+      });
+      expect(pack.pack_id).toBe(exemptionApprovalId);
+    });
+
+    it("requires phased=true when item_a_unknown is non-empty", () => {
       const paramsWithUnknown = {
         ...baseAuthorityParams,
-        phased: false,
         item_a_unknown: [
           {
             item: "approx_records",
@@ -83,13 +95,8 @@ describe("Notice Composer (GDPR Art 33 Authority Pack & Art 34 Subject Notice)",
         ],
       };
 
-      const composer = new NoticeComposer();
-      expect(() => composer.composeAuthorityPack(paramsWithUnknown)).toThrow(
-        ArtifactIncompleteError,
-      );
-
       try {
-        composer.composeAuthorityPack(paramsWithUnknown);
+        new NoticeComposer().composeAuthorityPack(paramsWithUnknown);
         expect.unreachable("Should have thrown ArtifactIncompleteError");
       } catch (err) {
         expect(err).toBeInstanceOf(ArtifactIncompleteError);
@@ -103,67 +110,67 @@ describe("Notice Composer (GDPR Art 33 Authority Pack & Art 34 Subject Notice)",
     });
 
     it("passes when item_a_unknown is non-empty and phased is true", () => {
-      const paramsPhased = {
+      const pack = NoticeComposer.composeAuthorityPack({
         ...baseAuthorityParams,
         phased: true,
         phases_planned: 2,
         item_a_unknown: [
-          {
-            item: "approx_records",
-            reason: "Forensic analysis in progress",
-          },
+          { item: "approx_records", reason: "Forensic analysis in progress" },
         ],
-      };
-
-      const pack = NoticeComposer.composeAuthorityPack(paramsPhased);
+      });
       expect(pack.phased).toBe(true);
       expect(pack.item_a_unknown).toHaveLength(1);
     });
 
-    it("throws ArtifactIncompleteError when submitted_at_utc > deadline_at_utc and delay_reasons is null or empty", () => {
+    it("requires delay_reasons when submitted after the deadline", () => {
       const lateParams = {
         ...baseAuthorityParams,
         deadline_at_utc: "2026-10-31T10:00:00.000Z",
         submitted_at_utc: "2026-11-01T14:00:00.000Z",
-        delay_reasons: null,
       };
 
-      const composer = new NoticeComposer();
-      expect(() => composer.composeAuthorityPack(lateParams)).toThrow(
-        ArtifactIncompleteError,
-      );
-
       try {
-        composer.composeAuthorityPack(lateParams);
+        new NoticeComposer().composeAuthorityPack(lateParams);
         expect.unreachable("Should have thrown ArtifactIncompleteError");
       } catch (err) {
         expect(err).toBeInstanceOf(ArtifactIncompleteError);
-        const error = err as ArtifactIncompleteError;
-        expect(error.artifact).toBe("authority");
-        expect(error.field).toBe("delay_reasons_required_when_late");
+        expect((err as ArtifactIncompleteError).field).toBe(
+          "delay_reasons_required_when_late",
+        );
       }
     });
 
-    it("passes validation when submitted_at_utc > deadline_at_utc with valid delay_reasons", () => {
-      const lateParamsWithReasons = {
+    it("passes when submitted late with factual delay_reasons", () => {
+      const pack = NoticeComposer.composeAuthorityPack({
         ...baseAuthorityParams,
         deadline_at_utc: "2026-10-31T10:00:00.000Z",
         submitted_at_utc: "2026-11-01T14:00:00.000Z",
         delay_reasons: {
           hours_late: 28,
-          reasons: [
-            "Forensic extraction from encrypted volumes required specialized cryptographic recovery.",
-          ],
+          reasons: ["Forensic extraction from encrypted volumes."],
         },
-      };
-
-      const pack = NoticeComposer.composeAuthorityPack(lateParamsWithReasons);
+      });
       expect(pack.delay_reasons?.hours_late).toBe(28);
-      expect(pack.delay_reasons?.reasons).toHaveLength(1);
+    });
+
+    it("fails fast on out-of-contract input", () => {
+      expect(() =>
+        NoticeComposer.composeAuthorityPack({
+          ...baseAuthorityParams,
+          item_a_approx_subjects: -1,
+        }),
+      ).toThrow(PimsValidationError);
+
+      expect(() =>
+        NoticeComposer.composeAuthorityPack({
+          ...baseAuthorityParams,
+          submitted_at_utc: "not-a-datetime",
+        }),
+      ).toThrow(PimsValidationError);
     });
   });
 
-  describe("Canonical Content Hashing (hashCanonicalContent)", () => {
+  describe("Canonical content hashing (hashCanonicalContent)", () => {
     const canonicalBasePack = {
       incident_code: "INC-2026-001",
       pack: "authority" as const,
@@ -171,134 +178,187 @@ describe("Notice Composer (GDPR Art 33 Authority Pack & Art 34 Subject Notice)",
       awareness_at_utc: "2026-10-30T10:00:00.000Z",
       deadline_at_utc: "2026-11-02T10:00:00.000Z",
       submitted_at_utc: "2026-10-31T08:00:00.000Z",
-      review_approval_id: "00000000-0000-0000-0000-000000000001",
+      review_approval_id: reviewApprovalId,
       state: "draft" as const,
       item_a_nature: "Base nature text",
     };
 
-    it("verifies envelope fields ('state', 'review_approval_id', 'submitted_at_utc') are ignored when calculating hash", () => {
+    it("ignores envelope fields when hashing", () => {
       const hash1 = hashCanonicalContent(canonicalBasePack);
-
-      const modifiedEnvelopePack = {
+      const hash2 = hashCanonicalContent({
         ...canonicalBasePack,
         state: "sent" as const,
-        review_approval_id: "11111111-1111-1111-1111-111111111111",
+        review_approval_id: exemptionApprovalId,
         submitted_at_utc: "2026-11-01T12:00:00.000Z",
-      };
-
-      const hash2 = hashCanonicalContent(modifiedEnvelopePack);
+      });
 
       expect(hash1).toBe(hash2);
     });
 
-    it("verifies substantive field changes alter the hash", () => {
+    it("changes when substantive fields change", () => {
       const hashOriginal = hashCanonicalContent(canonicalBasePack);
-
-      const substantiveChangePack = {
+      const hashModified = hashCanonicalContent({
         ...canonicalBasePack,
         item_a_nature: "Altered nature text reflecting new forensic scope",
-      };
-
-      const hashModified = hashCanonicalContent(substantiveChangePack);
+      });
 
       expect(hashOriginal).not.toBe(hashModified);
     });
   });
 
   describe("evaluateHighRiskGate", () => {
-    const baseGateParams = {
-      severity: "B",
+    const baseGateParams: HighRiskGateInput = {
+      severity: "M",
       impact: "M",
-      affectedDataTypes: ["email", "name"],
+      affectedDataTypes: ["email", "names"],
       numAffectedSubjects: 25,
       unencryptedExfiltration: false,
       authorityOrdered: false,
       reviewer: "dpo-officer",
     };
 
-    it("triggers 'severity:C' and returns verdict: true when severity is C", () => {
+    it("triggers 'severity:C' on the typed severity enum", () => {
       const result = NoticeComposer.evaluateHighRiskGate({
         ...baseGateParams,
         severity: "C",
       });
 
       expect(result.verdict).toBe(true);
-      expect(result.triggers).toContain("severity:C");
+      expect(result.triggers).toEqual(["severity:C"]);
     });
 
-    it("triggers 'impact:V' and returns verdict: true when impact is V", () => {
+    it("triggers 'impact:V' on the typed impact enum", () => {
       const result = NoticeComposer.evaluateHighRiskGate({
         ...baseGateParams,
         impact: "V",
       });
 
       expect(result.verdict).toBe(true);
-      expect(result.triggers).toContain("impact:V");
+      expect(result.triggers).toEqual(["impact:V"]);
     });
 
-    it("triggers 'sensitive_data_types' and returns verdict: true when sensitive data types are involved", () => {
-      const sensitiveCategories = [
+    it("recognises both the bundle and the ES sensitive catalogs", () => {
+      const sensitiveCodes: AffectedDataType[] = [
+        "sensitive",
         "health",
         "biometric",
         "financial",
         "credentials",
         "minors",
-        "sensitive",
+        "categorias_especiales",
+        "economicos_financieros",
+        "datos_relativos_condenas_infracciones",
       ];
-
-      for (const cat of sensitiveCategories) {
+      for (const dataType of sensitiveCodes) {
         const result = NoticeComposer.evaluateHighRiskGate({
           ...baseGateParams,
-          affectedDataTypes: [cat],
+          affectedDataTypes: [dataType],
         });
 
         expect(result.verdict).toBe(true);
-        expect(result.triggers).toContain("sensitive_data_types");
+        expect(result.triggers).toEqual(["sensitive_data_types"]);
       }
     });
 
-    it("triggers 'num_affected_subjects>=100' and returns verdict: true when subjects >= 100", () => {
+    it("does not trigger for non-sensitive catalog entries below the subject threshold", () => {
       const result = NoticeComposer.evaluateHighRiskGate({
         ...baseGateParams,
-        numAffectedSubjects: 100,
+        affectedDataTypes: ["identificativos", "contacto"],
+        numAffectedSubjects: 25,
       });
-
-      expect(result.verdict).toBe(true);
-      expect(result.triggers).toContain("num_affected_subjects>=100");
-    });
-
-    it("triggers 'unencrypted_exfiltration' and 'authority_ordered' flags appropriately", () => {
-      const resultExfil = NoticeComposer.evaluateHighRiskGate({
-        ...baseGateParams,
-        unencryptedExfiltration: true,
-      });
-      expect(resultExfil.verdict).toBe(true);
-      expect(resultExfil.triggers).toContain("unencrypted_exfiltration");
-
-      const resultAuth = NoticeComposer.evaluateHighRiskGate({
-        ...baseGateParams,
-        authorityOrdered: true,
-      });
-      expect(resultAuth.verdict).toBe(true);
-      expect(resultAuth.triggers).toContain("authority_ordered");
-    });
-
-    it("returns verdict: false when severity is low/medium and no high risk triggers exist", () => {
-      const result = NoticeComposer.evaluateHighRiskGate(baseGateParams);
 
       expect(result.verdict).toBe(false);
       expect(result.triggers).toHaveLength(0);
       expect(result.reviewer).toBe("dpo-officer");
-      expect(result.determined_at_utc).toBeDefined();
+    });
+
+    it("triggers 'num_affected_subjects>=100' at the threshold and skips null", () => {
+      const atThreshold = NoticeComposer.evaluateHighRiskGate({
+        ...baseGateParams,
+        numAffectedSubjects: 100,
+      });
+      expect(atThreshold.triggers).toContain("num_affected_subjects>=100");
+
+      const unknown = NoticeComposer.evaluateHighRiskGate({
+        ...baseGateParams,
+        numAffectedSubjects: null,
+      });
+      expect(unknown.verdict).toBe(false);
+
+      const below = NoticeComposer.evaluateHighRiskGate({
+        ...baseGateParams,
+        numAffectedSubjects: 99,
+      });
+      expect(below.triggers).toHaveLength(0);
+    });
+
+    it("triggers the boolean flags", () => {
+      const exfil = NoticeComposer.evaluateHighRiskGate({
+        ...baseGateParams,
+        unencryptedExfiltration: true,
+      });
+      expect(exfil.triggers).toEqual(["unencrypted_exfiltration"]);
+
+      const authority = NoticeComposer.evaluateHighRiskGate({
+        ...baseGateParams,
+        authorityOrdered: true,
+      });
+      expect(authority.triggers).toEqual(["authority_ordered"]);
+    });
+
+    it("orders multiple triggers deterministically", () => {
+      const result = NoticeComposer.evaluateHighRiskGate({
+        severity: "C",
+        impact: "V",
+        affectedDataTypes: ["health"],
+        numAffectedSubjects: 5000,
+        unencryptedExfiltration: true,
+        authorityOrdered: true,
+        reviewer: "dpo-officer",
+      });
+
+      expect(result.triggers).toEqual([
+        "severity:C",
+        "impact:V",
+        "sensitive_data_types",
+        "num_affected_subjects>=100",
+        "unencrypted_exfiltration",
+        "authority_ordered",
+      ]);
+    });
+
+    it("stamps determined_at_utc from the injected clock", () => {
+      const composer = new NoticeComposer({ now: () => fixedNow });
+      const result = composer.evaluateHighRiskGate(baseGateParams);
+
+      expect(result.determined_at_utc).toBe(fixedNow.toISOString());
+    });
+
+    it("rejects enum values outside the PIMS catalog", () => {
+      expect(() =>
+        NoticeComposer.evaluateHighRiskGate({
+          ...baseGateParams,
+          severity: "Z",
+        } as unknown as HighRiskGateInput),
+      ).toThrow(PimsValidationError);
+
+      expect(() =>
+        NoticeComposer.evaluateHighRiskGate({
+          ...baseGateParams,
+          affectedDataTypes: ["not_a_catalog_code"],
+        } as unknown as HighRiskGateInput),
+      ).toThrow(PimsValidationError);
     });
   });
 
   describe("composeSubjectNotice", () => {
+    const bodyPlain =
+      "Le comunicamos que hemos detectado un incidente de seguridad. Nuestro equipo ha restablecido los accesos. Le sugerimos cambiar su contraseña.";
+
     const baseSubjectNoticeParams = {
       incidentCode: "INC-2026-001",
       highRiskGate: sampleHighRiskGatePass,
-      bodyPlain:
-        "Le comunicamos que hemos detectado un incidente de seguridad. Nuestro equipo ha restablecido los accesos. Le sugerimos cambiar su contraseña.",
+      bodyPlain,
       contact: sampleDpoContact,
       consequences: "Riesgo de acceso a información de contacto.",
       measures: ["Contraseñas reseteadas", "Canal de soporte habilitado"],
@@ -306,7 +366,7 @@ describe("Notice Composer (GDPR Art 33 Authority Pack & Art 34 Subject Notice)",
       citations: ["Art. 34 RGPD"],
     };
 
-    it("returns notice with state: 'not_required' when highRiskGate.verdict is false", () => {
+    it("returns state 'not_required' when the gate verdict is false", () => {
       const pack = NoticeComposer.composeSubjectNotice({
         ...baseSubjectNoticeParams,
         highRiskGate: sampleHighRiskGateFail,
@@ -316,43 +376,132 @@ describe("Notice Composer (GDPR Art 33 Authority Pack & Art 34 Subject Notice)",
       expect(pack.pack).toBe("subject");
       expect(pack.body_plain).toBe("");
       expect(pack.exemption).toBeNull();
-
-      const parsed = SubjectNoticePackSchema.safeParse(pack);
-      expect(parsed.success).toBe(true);
+      expect(SubjectNoticePackSchema.safeParse(pack).success).toBe(true);
     });
 
-    it("returns notice with state: 'exempted' when exemption is provided", () => {
+    it("returns state 'exempted' from an exempted evaluation", () => {
       const exemption = {
         letter: "a" as const,
-        evidence_refs: ["config:encryption", "forensics:verified_proof"],
-        approval_id: "00000000-0000-0000-0000-000000000002",
+        evidence_refs: ["file:encryption-config-export.json"],
+        approval_id: exemptionApprovalId,
         public_artifact: null,
       };
 
       const pack = NoticeComposer.composeSubjectNotice({
         ...baseSubjectNoticeParams,
-        exemption,
+        exemptionEvaluation: {
+          kind: "exempted",
+          reason: "ENCRYPTION_VERIFIED",
+          exemption,
+        },
       });
 
       expect(pack.state).toBe("exempted");
       expect(pack.exemption).toEqual(exemption);
-
-      const parsed = SubjectNoticePackSchema.safeParse(pack);
-      expect(parsed.success).toBe(true);
+      expect(SubjectNoticePackSchema.safeParse(pack).success).toBe(true);
     });
 
-    it("validates body_plain with PlainLanguageValidator and returns state: 'draft' when high risk and not exempt", () => {
+    it("forces 'draft' with no exemption on an authority override", () => {
+      const pack = NoticeComposer.composeSubjectNotice({
+        ...baseSubjectNoticeParams,
+        state: "exempted",
+        exemptionEvaluation: {
+          kind: "authority_override",
+          reason: "AUTHORITY_OVERRIDE",
+          instruction_ref: "AEPD-ORDER-2026-77",
+        },
+      });
+
+      expect(pack.state).toBe("draft");
+      expect(pack.exemption).toBeNull();
+    });
+
+    it("validates body_plain and returns state 'draft' when high risk and not exempt", () => {
       const pack = NoticeComposer.composeSubjectNotice(baseSubjectNoticeParams);
 
       expect(pack.state).toBe("draft");
-      expect(pack.body_plain).toBe(baseSubjectNoticeParams.bodyPlain);
+      expect(pack.body_plain).toBe(bodyPlain);
       expect(pack.exemption).toBeNull();
-
-      const parsed = SubjectNoticePackSchema.safeParse(pack);
-      expect(parsed.success).toBe(true);
+      expect(SubjectNoticePackSchema.safeParse(pack).success).toBe(true);
     });
 
-    it("throws PlainLanguageViolationError if bodyPlain contains a sentence exceeding 25 words", () => {
+    it("throws when state 'exempted' has no exempted evaluation", () => {
+      try {
+        NoticeComposer.composeSubjectNotice({
+          ...baseSubjectNoticeParams,
+          state: "exempted",
+        });
+        expect.unreachable("Should have thrown ArtifactIncompleteError");
+      } catch (err) {
+        expect(err).toBeInstanceOf(ArtifactIncompleteError);
+        expect((err as ArtifactIncompleteError).field).toBe(
+          "state_inconsistent",
+        );
+      }
+    });
+
+    it("throws when the gate verdict disagrees with its triggers", () => {
+      try {
+        NoticeComposer.composeSubjectNotice({
+          ...baseSubjectNoticeParams,
+          highRiskGate: { ...sampleHighRiskGatePass, triggers: [] },
+        });
+        expect.unreachable("Should have thrown ArtifactIncompleteError");
+      } catch (err) {
+        expect(err).toBeInstanceOf(ArtifactIncompleteError);
+        expect((err as ArtifactIncompleteError).field).toBe(
+          "high_risk_gate_inconsistent",
+        );
+      }
+    });
+
+    it("requires a non-empty body_plain on the draft path", () => {
+      expect(() =>
+        NoticeComposer.composeSubjectNotice({
+          ...baseSubjectNoticeParams,
+          bodyPlain: "   ",
+        }),
+      ).toThrow(ArtifactIncompleteError);
+    });
+
+    it("requires the public artifact for a letter 'c' exemption", () => {
+      expect(() =>
+        NoticeComposer.composeSubjectNotice({
+          ...baseSubjectNoticeParams,
+          exemptionEvaluation: {
+            kind: "exempted",
+            reason: "DISPROPORTIONATE_EFFORT",
+            exemption: {
+              letter: "c",
+              evidence_refs: ["analysis:disproportionate-effort"],
+              approval_id: exemptionApprovalId,
+              public_artifact: null,
+            },
+          },
+        }),
+      ).toThrow(ArtifactIncompleteError);
+    });
+
+    it("rejects an exemption on a non-high-risk incident", () => {
+      expect(() =>
+        NoticeComposer.composeSubjectNotice({
+          ...baseSubjectNoticeParams,
+          highRiskGate: sampleHighRiskGateFail,
+          exemptionEvaluation: {
+            kind: "exempted",
+            reason: "ENCRYPTION_VERIFIED",
+            exemption: {
+              letter: "a",
+              evidence_refs: ["file:encryption-config-export.json"],
+              approval_id: exemptionApprovalId,
+              public_artifact: null,
+            },
+          },
+        }),
+      ).toThrow(ArtifactIncompleteError);
+    });
+
+    it("throws PlainLanguageViolationError for an over-long sentence", () => {
       const invalidBody =
         "Esta frase inicial es infinitamente larga y contiene una enorme cantidad de palabras innecesarias que superan claramente el umbral máximo de veinticinco palabras por frase previsto en las directrices de comunicación directa a interesados bajo el RGPD.";
 
@@ -364,33 +513,67 @@ describe("Notice Composer (GDPR Art 33 Authority Pack & Art 34 Subject Notice)",
       ).toThrow(PlainLanguageViolationError);
     });
 
-    it("throws SubjectCountForbiddenError if bodyPlain includes subject counts", () => {
-      const invalidBody =
-        "La brecha afectó a 500 personas en su totalidad. Por favor renueve sus credenciales.";
+    it("honours the composer maxWords override", () => {
+      const composer = new NoticeComposer({ maxWords: 3 });
+      try {
+        composer.composeSubjectNotice(baseSubjectNoticeParams);
+        expect.unreachable("Should have thrown PlainLanguageViolationError");
+      } catch (err) {
+        expect(err).toBeInstanceOf(PlainLanguageViolationError);
+        expect((err as PlainLanguageViolationError).maxWords).toBe(3);
+      }
+    });
 
+    it("throws SubjectCountForbiddenError for an unapproved numeric literal", () => {
       expect(() =>
         NoticeComposer.composeSubjectNotice({
           ...baseSubjectNoticeParams,
-          bodyPlain: invalidBody,
+          bodyPlain:
+            "La brecha afectó a 500 personas en su totalidad. Renueve sus credenciales.",
         }),
       ).toThrow(SubjectCountForbiddenError);
     });
 
-    it("passes validation when waivers are specified", () => {
+    it("accepts an approved numeric literal together with a waiver", () => {
       const longBodyWithSubjects =
         "El incidente técnico afectó a 500 personas según las comprobaciones preliminares realizadas por los analistas forenses durante la madrugada tras detectarse la vulnerabilidad en el repositorio central de usuarios.";
 
       const pack = NoticeComposer.composeSubjectNotice({
         ...baseSubjectNoticeParams,
         bodyPlain: longBodyWithSubjects,
+        reviewApprovalId,
         waivers: {
-          plainLanguageWaiver: true,
-          allowSubjectCounts: true,
+          plainLanguageWaiver: {
+            reason: "technical incident wording",
+            approval_id: reviewApprovalId,
+          },
+          numericApprovals: [
+            {
+              value: "500",
+              occurrence: 0,
+              reason: "reviewed context",
+              approval_id: reviewApprovalId,
+            },
+          ],
         },
       });
 
       expect(pack.state).toBe("draft");
       expect(pack.body_plain).toBe(longBodyWithSubjects);
+    });
+
+    it("requires a review approval id when waivers are requested", () => {
+      expect(() =>
+        NoticeComposer.composeSubjectNotice({
+          ...baseSubjectNoticeParams,
+          waivers: {
+            plainLanguageWaiver: {
+              reason: "technical incident wording",
+              approval_id: reviewApprovalId,
+            },
+          },
+        }),
+      ).toThrow(ArtifactIncompleteError);
     });
   });
 });

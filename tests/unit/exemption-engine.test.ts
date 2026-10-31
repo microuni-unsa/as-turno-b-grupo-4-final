@@ -1,81 +1,108 @@
 import { ExemptionEngine } from "@pims/notices";
-import { ExemptionUngroundedError } from "@pims/types";
+import type { ExemptionEvaluationInput } from "@pims/types";
+import { ExemptionUngroundedError, PimsValidationError } from "@pims/types";
 import { describe, expect, it } from "vitest";
 
 describe("GDPR Article 34(3) Statutory Exemption Engine", () => {
-  describe("Art 34(4) Supervisory Authority Override", () => {
-    it("returns { exempted: false, exemption: null, reason: 'AUTHORITY_OVERRIDE' } when authorityOrdered is true, even if encryption measures are verified", () => {
-      const input = {
+  const reviewApprovalId = "00000000-0000-0000-0000-000000000002";
+  const sourceFileSha256 = "a".repeat(64);
+  const verifiedAtUtc = "2026-10-30T12:00:00.000Z";
+
+  const emptyInput: ExemptionEvaluationInput = {
+    incidentCode: "INC-2026-001",
+    securityMeasuresAdopted: [],
+    encryptionProofs: [],
+    subsequentMeasures: [],
+    disproportionateEffort: null,
+    authorityInstruction: null,
+  };
+
+  const encryptionProof = {
+    incident_code: "INC-2026-001",
+    source_file_sha256: sourceFileSha256,
+    scope: "encrypt_rest" as const,
+    algorithm: "AES-256-GCM",
+    key_management_ref: "kms:evidence/2026",
+    applies_to_affected_data: true,
+    evidence_refs: ["file:encryption-config-export.json"],
+    verified_by: "security-reviewer-1",
+    verified_at_utc: verifiedAtUtc,
+    review_approval_id: reviewApprovalId,
+  };
+
+  describe("Art 34(4) supervisory authority override", () => {
+    it("returns authority_override before any exemption is considered", () => {
+      const result = ExemptionEngine.evaluate({
+        ...emptyInput,
         securityMeasuresAdopted: ["encrypt_rest"],
-        encryptionProofVerified: true,
-        authorityOrdered: true,
-      };
+        encryptionProofs: [encryptionProof],
+        authorityInstruction: {
+          instruction_ref: "AEPD-ORDER-2026-77",
+          ordered_at_utc: verifiedAtUtc,
+        },
+      });
 
-      const result = ExemptionEngine.evaluate(input);
+      expect(result).toEqual({
+        kind: "authority_override",
+        reason: "AUTHORITY_OVERRIDE",
+        instruction_ref: "AEPD-ORDER-2026-77",
+      });
 
-      expect(result.exempted).toBe(false);
-      expect(result.exemption).toBeNull();
-      expect(result.reason).toBe("AUTHORITY_OVERRIDE");
-
-      const engine = new ExemptionEngine();
-      const instanceResult = engine.evaluate(input);
-      expect(instanceResult.exempted).toBe(false);
-      expect(instanceResult.reason).toBe("AUTHORITY_OVERRIDE");
+      const instanceResult = new ExemptionEngine().evaluate({
+        ...emptyInput,
+        authorityInstruction: {
+          instruction_ref: "AEPD-ORDER-2026-77",
+          ordered_at_utc: verifiedAtUtc,
+        },
+      });
+      expect(instanceResult.kind).toBe("authority_override");
     });
   });
 
-  describe("Article 34(3)(a) Exemption: Unintelligibility / Technical Protection", () => {
-    it("returns letter 'a' exemption with approval_id when security measures contain 'encrypt_rest' and encryption proof is verified", () => {
-      const input = {
+  describe("Article 34(3)(a): encryption renders data unintelligible", () => {
+    it("grounds letter 'a' in the attestation's own evidence refs and approval id", () => {
+      const result = ExemptionEngine.evaluate({
+        ...emptyInput,
         securityMeasuresAdopted: ["encrypt_rest"],
-        encryptionProofVerified: true,
-      };
+        encryptionProofs: [encryptionProof],
+      });
 
-      const result = ExemptionEngine.evaluate(input);
-
-      expect(result.exempted).toBe(true);
-      expect(result.exemption).not.toBeNull();
-      expect(result.exemption?.letter).toBe("a");
-      expect(result.exemption?.approval_id).toBeDefined();
-      expect(result.exemption?.public_artifact).toBeNull();
-      expect(result.exemption?.evidence_refs).toEqual([
-        "config:encryption",
-        "forensics:verified_proof",
-      ]);
+      expect(result).toEqual({
+        kind: "exempted",
+        reason: "ENCRYPTION_VERIFIED",
+        exemption: {
+          letter: "a",
+          evidence_refs: ["file:encryption-config-export.json"],
+          approval_id: reviewApprovalId,
+          public_artifact: null,
+        },
+      });
     });
 
-    it("returns letter 'a' exemption when 'encrypt_transit' is adopted with verified proof", () => {
-      const input = {
-        securityMeasuresAdopted: ["encrypt_transit"],
-        encryptionProofVerified: true,
-      };
-
-      const result = ExemptionEngine.evaluate(input);
-
-      expect(result.exempted).toBe(true);
-      expect(result.exemption?.letter).toBe("a");
-    });
-
-    it("throws ExemptionUngroundedError with letter 'a' when 'encrypt_rest' is claimed but encryptionProofVerified is false or missing", () => {
-      const unverifiedInputs = [
+    it("throws when an encryption measure is adopted without a matching attestation", () => {
+      const ungroundedInputs: ExemptionEvaluationInput[] = [
+        { ...emptyInput, securityMeasuresAdopted: ["encrypt_rest"] },
         {
+          ...emptyInput,
           securityMeasuresAdopted: ["encrypt_rest"],
-          encryptionProofVerified: false,
+          encryptionProofs: [{ ...encryptionProof, scope: "encrypt_transit" }],
         },
         {
-          securityMeasuresAdopted: ["encrypt_rest"],
-        },
-        {
+          ...emptyInput,
           securityMeasuresAdopted: ["encrypt_transit"],
-          encryptionProofVerified: undefined,
+          encryptionProofs: [
+            { ...encryptionProof, incident_code: "INC-OTHER" },
+          ],
+        },
+        {
+          ...emptyInput,
+          securityMeasuresAdopted: ["encrypt_rest"],
+          encryptionProofs: [
+            { ...encryptionProof, applies_to_affected_data: false },
+          ],
         },
       ];
-
-      for (const input of unverifiedInputs) {
-        expect(() => ExemptionEngine.evaluate(input)).toThrow(
-          ExemptionUngroundedError,
-        );
-
+      for (const input of ungroundedInputs) {
         try {
           ExemptionEngine.evaluate(input);
           expect.unreachable("Should have thrown ExemptionUngroundedError");
@@ -84,108 +111,153 @@ describe("GDPR Article 34(3) Statutory Exemption Engine", () => {
           const error = err as ExemptionUngroundedError;
           expect(error.letter).toBe("a");
           expect(error.reason).toBe("encryption_proof_missing_or_unverified");
-          expect(error.code).toBe(
-            "EXEMPTION_UNGROUNDED:a:encryption_proof_missing_or_unverified",
-          );
         }
       }
     });
   });
 
-  describe("Article 34(3)(b) Exemption: Subsequent Mitigation Measures", () => {
-    it("returns letter 'b' exemption when subsequentResolutionActions contains resolution measures", () => {
-      const input = {
-        securityMeasuresAdopted: [],
-        subsequentResolutionActions: [
-          "action:remote_wipe_performed",
-          "action:stolen_token_revoked_at_idp",
+  describe("Article 34(3)(b): subsequent measures eliminate the risk", () => {
+    it("grants letter 'b' only for a risk-eliminating remediation action", () => {
+      const result = ExemptionEngine.evaluate({
+        ...emptyInput,
+        subsequentMeasures: [
+          {
+            action_type: "R",
+            description: "Rotated all exposed credentials and revoked sessions",
+            risk_eliminated: true,
+            evidence_refs: ["action:R:credential-rotation"],
+            review_approval_id: reviewApprovalId,
+          },
         ],
-      };
+      });
 
-      const result = ExemptionEngine.evaluate(input);
+      expect(result).toEqual({
+        kind: "exempted",
+        reason: "RISK_ELIMINATED",
+        exemption: {
+          letter: "b",
+          evidence_refs: ["action:R:credential-rotation"],
+          approval_id: reviewApprovalId,
+          public_artifact: null,
+        },
+      });
+    });
 
-      expect(result.exempted).toBe(true);
-      expect(result.exemption).not.toBeNull();
-      expect(result.exemption?.letter).toBe("b");
-      expect(result.exemption?.approval_id).toBeDefined();
-      expect(result.exemption?.public_artifact).toBeNull();
-      expect(result.exemption?.evidence_refs).toEqual([
-        "action:remote_wipe_performed",
-        "action:stolen_token_revoked_at_idp",
-      ]);
+    it("does not grant letter 'b' for non-remediation or non-eliminating measures", () => {
+      for (const action_type of ["C", "A"] as const) {
+        const result = ExemptionEngine.evaluate({
+          ...emptyInput,
+          subsequentMeasures: [
+            {
+              action_type,
+              description: "Containment action",
+              risk_eliminated: true,
+              evidence_refs: ["action:containment"],
+              review_approval_id: reviewApprovalId,
+            },
+          ],
+        });
+        expect(result.kind).toBe("notice_required");
+      }
+
+      const notEliminated = ExemptionEngine.evaluate({
+        ...emptyInput,
+        subsequentMeasures: [
+          {
+            action_type: "R",
+            description: "Partial remediation",
+            risk_eliminated: false,
+            evidence_refs: ["action:partial"],
+            review_approval_id: reviewApprovalId,
+          },
+        ],
+      });
+      expect(notEliminated.kind).toBe("notice_required");
     });
   });
 
-  describe("Article 34(3)(c) Exemption: Disproportionate Effort & Public Notice", () => {
-    it("throws ExemptionUngroundedError with letter 'c' when disproportionate effort analysis is present but public communication artifact is not attached", () => {
-      const invalidInputs = [
-        {
-          securityMeasuresAdopted: [],
-          disproportionateEffortAnalysis:
-            "Individual notification would involve contacting 2,000,000 unregistered pseudonymous app visitors.",
-          publicCommunicationArtifactAttached: false,
-        },
-        {
-          securityMeasuresAdopted: [],
-          disproportionateEffortAnalysis:
-            "Disproportionate cost and lack of contact details.",
-        },
-      ];
-
-      for (const input of invalidInputs) {
-        expect(() => ExemptionEngine.evaluate(input)).toThrow(
-          ExemptionUngroundedError,
+  describe("Article 34(3)(c): disproportionate effort", () => {
+    it("throws when no public communication artifact is attached", () => {
+      try {
+        ExemptionEngine.evaluate({
+          ...emptyInput,
+          disproportionateEffort: {
+            analysis_ref: "analysis:disproportionate-effort",
+            public_artifact_ref: null,
+            published_at_utc: verifiedAtUtc,
+            review_approval_id: reviewApprovalId,
+          },
+        });
+        expect.unreachable("Should have thrown ExemptionUngroundedError");
+      } catch (err) {
+        expect(err).toBeInstanceOf(ExemptionUngroundedError);
+        const error = err as ExemptionUngroundedError;
+        expect(error.letter).toBe("c");
+        expect(error.reason).toBe("public_communication_artifact_required");
+        expect(error.code).toBe(
+          "EXEMPTION_UNGROUNDED:c:public_communication_artifact_required",
         );
-
-        try {
-          ExemptionEngine.evaluate(input);
-          expect.unreachable("Should have thrown ExemptionUngroundedError");
-        } catch (err) {
-          expect(err).toBeInstanceOf(ExemptionUngroundedError);
-          const error = err as ExemptionUngroundedError;
-          expect(error.letter).toBe("c");
-          expect(error.reason).toBe("public_communication_artifact_required");
-          expect(error.code).toBe(
-            "EXEMPTION_UNGROUNDED:c:public_communication_artifact_required",
-          );
-        }
       }
     });
 
-    it("returns letter 'c' exemption with public_artifact when publicCommunicationArtifactAttached is true", () => {
-      const input = {
-        securityMeasuresAdopted: [],
-        disproportionateEffortAnalysis:
-          "High effort due to legacy archived data lacking email contacts.",
-        publicCommunicationArtifactAttached: true,
-      };
+    it("grants letter 'c' with the published artifact reference", () => {
+      const result = ExemptionEngine.evaluate({
+        ...emptyInput,
+        disproportionateEffort: {
+          analysis_ref: "analysis:disproportionate-effort",
+          public_artifact_ref: "file:public-notice-2026-10-30.pdf",
+          published_at_utc: verifiedAtUtc,
+          review_approval_id: reviewApprovalId,
+        },
+      });
 
-      const result = ExemptionEngine.evaluate(input);
-
-      expect(result.exempted).toBe(true);
-      expect(result.exemption).not.toBeNull();
-      expect(result.exemption?.letter).toBe("c");
-      expect(result.exemption?.approval_id).toBeDefined();
-      expect(result.exemption?.public_artifact).toBe("public-notice.txt");
-      expect(result.exemption?.evidence_refs).toEqual([
-        "analysis:disproportionate_effort",
-      ]);
+      expect(result).toEqual({
+        kind: "exempted",
+        reason: "DISPROPORTIONATE_EFFORT",
+        exemption: {
+          letter: "c",
+          evidence_refs: ["analysis:disproportionate-effort"],
+          approval_id: reviewApprovalId,
+          public_artifact: "file:public-notice-2026-10-30.pdf",
+        },
+      });
     });
   });
 
-  describe("Default / No Exemption Qualified", () => {
-    it("returns { exempted: false, exemption: null } when no statutory exemption conditions are met", () => {
-      const nonExemptInput = {
-        securityMeasuresAdopted: [],
-        subsequentResolutionActions: [],
-        disproportionateEffortAnalysis: "",
-        publicCommunicationArtifactAttached: false,
+  describe("Determinism and validation", () => {
+    it("produces identical output for identical input (no random approval ids)", () => {
+      const input: ExemptionEvaluationInput = {
+        ...emptyInput,
+        securityMeasuresAdopted: ["encrypt_rest"],
+        encryptionProofs: [encryptionProof],
       };
 
-      const result = ExemptionEngine.evaluate(nonExemptInput);
+      expect(ExemptionEngine.evaluate(input)).toEqual(
+        ExemptionEngine.evaluate(input),
+      );
+    });
 
-      expect(result.exempted).toBe(false);
-      expect(result.exemption).toBeNull();
+    it("returns notice_required when no exemption qualifies", () => {
+      expect(ExemptionEngine.evaluate(emptyInput)).toEqual({
+        kind: "notice_required",
+        reason: "NO_EXEMPTION_QUALIFIED",
+      });
+    });
+
+    it("rejects inputs outside the typed contract", () => {
+      expect(() =>
+        ExemptionEngine.evaluate({
+          ...emptyInput,
+          securityMeasuresAdopted: ["totally_unknown_measure"],
+        } as unknown as ExemptionEvaluationInput),
+      ).toThrow(PimsValidationError);
+
+      expect(() =>
+        ExemptionEngine.evaluate({
+          ...emptyInput,
+          encryptionProofVerified: true,
+        } as unknown as ExemptionEvaluationInput),
+      ).toThrow(PimsValidationError);
     });
   });
 });

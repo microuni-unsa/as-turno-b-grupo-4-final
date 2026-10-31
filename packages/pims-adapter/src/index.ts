@@ -1,9 +1,11 @@
 import { execFileSync } from "node:child_process";
+import { assertAttachmentMeta } from "@pims/types/attachments.ts";
 import {
   DEFAULT_IDEMPOTENCY_KEY_PREFIX,
   DEFAULT_PIMS_MAX_RETRIES,
   DEFAULT_PIMS_TIMEOUT_MS,
   DEFAULT_RETRY_BACKOFF_MS,
+  MAX_ATTACHMENT_SIZE_MB,
 } from "@pims/types/constants.ts";
 import {
   NotifyNoRecipientsError,
@@ -355,6 +357,9 @@ export class PimsAdapter {
     file: Blob | Buffer | Uint8Array,
     fileName: string,
   ): Promise<PimsIncidentAttachment[]> {
+    const byteLength = file instanceof Blob ? file.size : file.byteLength;
+    assertAttachmentMeta(fileName, byteLength, MAX_ATTACHMENT_SIZE_MB);
+
     const formData = new FormData();
     const blob =
       file instanceof Blob ? file : new Blob([Buffer.from(file as Uint8Array)]);

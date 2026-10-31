@@ -15,7 +15,7 @@ export type JsonValue =
 export const JsonValueSchema: z.ZodType<JsonValue> = z.lazy(() =>
   z.union([
     z.string(),
-    z.number(),
+    z.number().finite(),
     z.boolean(),
     z.null(),
     z.record(z.string(), JsonValueSchema),
@@ -84,7 +84,7 @@ export const VisionJsonResponseSchema = z.object({
   iocs: z.array(z.string()),
   pii_detected: z.array(z.string()),
   encryption_proof_verified: z.boolean(),
-  tamper_score: z.number(),
+  tamper_score: z.number().min(0).max(1),
   layout_hashes: z.array(z.string()),
 });
 export type VisionJsonResponse = z.infer<typeof VisionJsonResponseSchema>;

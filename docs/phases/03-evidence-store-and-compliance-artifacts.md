@@ -10,8 +10,9 @@ Implement the PostgreSQL + Drizzle ORM encrypted evidence store, forensic attach
   - Storage of SHA-256 hashes, multimodal scan results, draft packs, reviewer approvals, active leases, deduplication indexes, and queued risk signals.
   - Automatic retention pruning based on `RETENTION_NOTICE_YEARS`.
 - **Multimodal Forensic Inspection (`packages/evidence/src/forensic-scanner.ts`)**:
-  - Attachment allowlist validation (types `jpg,jpeg,png,tif,bmp,pdf,doc,docx,txt`, size ≤ 10 MB).
-  - Integration with `VISION_MODEL` for visual and PDF forensic analysis (OCR, IOC extraction, visual PII detection, encryption verification for Art 34(3)(a)).
+  - Attachment metadata validation through the shared `assertAttachmentMeta` rule (`jpg,jpeg,png,tif,bmp,pdf,doc,docx,txt`, size ≤ 10 MB) plus content-signature verification with `file-type` (OLE2 magic for `.doc`).
+  - Integration with `VISION_MODEL` for visual and PDF forensic analysis (OCR, IOC extraction, visual PII detection, tamper score). The scan result exposes `encryption_proof_signal` only; Art 34(3)(a) requires a separate structured `EncryptionProofAttestation`.
+  - Parser-validated extraction for text and Word attachments (`Intl`/`TextDecoder` UTF-8 for `.txt`, `mammoth` for `.docx`, `word-extractor` for `.doc`); no binary-as-UTF-8 fallback. IOC and PII candidates are parser-validated (`net.isIP`, `tldts`, `libphonenumber-js` E.164, Spanish DNI/NIE checksum).
   - Computing SHA-256 pre-upload, post-upload re-download verification, and alerting on `ATTACHMENT_HASH_MISMATCH`.
 - **Notice Composer (`packages/notices/src/notice-composer.ts`)**:
   - GDPR Article 33 Authority Pack:
@@ -24,7 +25,7 @@ Implement the PostgreSQL + Drizzle ORM encrypted evidence store, forensic attach
       - (a) Unintelligibility / Encryption (`encrypt_rest` + key safety).
       - (b) Subsequent mitigation ensuring high risk is no longer likely.
       - (c) Disproportionate effort (requiring public communication artifact).
-    - Clear, plain-language body generator (≤25 words per sentence, items (b)–(d) only; subject counts strictly excluded).
+    - Clear, plain-language body generator (≤25 words per sentence via `Intl.Segmenter`, items (b)–(d) only). Every numeric literal needs a per-token `NumericApproval`; there is no blanket subject-count flag.
 - **Compliance Artifact Packaging (`packages/evidence/src/bundle-sealer.ts`)**:
   - Generation of Evidence Bundle manifests (§10.3).
   - Audit trail export format (§10.4).

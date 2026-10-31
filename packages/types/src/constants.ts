@@ -9,6 +9,40 @@ export const DEFAULT_RETRY_BACKOFF_MS = [1000, 5000, 30000] as const;
 export const MAX_ATTACHMENT_SIZE_MB = 10;
 export const MAX_INCIDENT_DESCRIPTION_LENGTH = 1000;
 
+export const ATTACHMENT_EXTENSIONS = [
+  "jpg",
+  "jpeg",
+  "png",
+  "tif",
+  "bmp",
+  "pdf",
+  "doc",
+  "docx",
+  "txt",
+] as const;
+
+export const ATTACHMENT_VISUAL_EXTENSIONS: ReadonlySet<string> = new Set([
+  "jpg",
+  "jpeg",
+  "png",
+  "tif",
+  "bmp",
+  "pdf",
+]);
+export const ATTACHMENT_TEXT_EXTENSIONS: ReadonlySet<string> = new Set(["txt"]);
+export const ATTACHMENT_WORD_EXTENSIONS: ReadonlySet<string> = new Set([
+  "doc",
+  "docx",
+]);
+
+export const HIGH_RISK_SUBJECT_THRESHOLD = 100;
+export const PLAIN_LANGUAGE_MAX_WORDS = 25;
+export const PII_PHONE_REGIONS = ["ES", "PE", "US", "GB"] as const;
+export const AUDIT_TRAIL_ALLOWED_ARG_KEYS = [
+  "incident_code",
+  "status",
+] as const;
+
 export const EVENT_TYPE_LABELS: Record<EventType, string> = {
   created: "Creado",
   updated: "Actualizado",

@@ -19,8 +19,8 @@
   - `@pims/rag`: Ingestion, Tri-Modal Hybrid Index (Vector + MiniSearch BM25 + Knowledge Graph), and CRAG retrieval pipeline.
   - `@pims/pims-mock`: Reverse-engineered PIMS test API server using Hono and Drizzle ORM.
   - `@pims/pims-adapter`: Production PIMS HTTP client adapter (endpoints E01–E26).
-  - `@pims/evidence`: Local PostgreSQL + Drizzle ORM evidence store, AES-256-GCM encryption at rest, blob staging, forensic scanner, and bundle sealer.
-  - `@pims/notices`: GDPR Art 33 authority pack composer, Art 34 subject notice composer, plain-language validator, and Art 34(3) statutory exemption engine.
+  - `@pims/evidence`: Local PostgreSQL + Drizzle ORM evidence store, AES-256-GCM encryption at rest, blob staging with root-confined storage paths, parser-validated forensic extraction (`file-type` signatures, `mammoth`/`word-extractor` text, `tldts`/`libphonenumber-js` candidate validation), and canonical-JSON bundle sealer.
+  - `@pims/notices`: GDPR Art 33 authority pack composer, Art 34 subject notice composer, `Intl.Segmenter` plain-language validator with per-token numeric approvals, and Art 34(3) statutory exemption engine driven by structured reviewer attestations (`EncryptionProofAttestation`, `SubsequentMeasure`, `DisproportionateEffort`).
 - **Path Imports**: Follow `biome.json` strictly: relative imports (`./` or `../`) are forbidden. Always use `@pims/*` package imports.
 - **Type Rigor & Zod Validation**: Loose types (such as `(string & {})`, `unknown`, `any`, and arbitrary `Record<string, unknown>`) are strictly forbidden in public contracts. Every domain model and API request/response shape must have a dedicated Zod schema and inferred TypeScript type.
 - **Exhaustive Branching & Explicit State**: Every `if/else`, `switch`, or pattern match must explicitly manage state or raise a defined error. No silent `pass`, empty blocks, or warning-only logging.

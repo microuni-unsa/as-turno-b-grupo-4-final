@@ -32,6 +32,12 @@ import {
   PimsIncidentUpdateSchema,
   PimsRiskEvaluationCreateSchema,
 } from "@pims/types";
+import { assertAttachmentMeta } from "@pims/types/attachments.ts";
+import { MAX_ATTACHMENT_SIZE_MB } from "@pims/types/constants.ts";
+import {
+  AttachmentRejectedError,
+  PathEscapeError,
+} from "@pims/types/errors.ts";
 import { and, desc, eq, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
@@ -748,8 +754,24 @@ export function buildPimsApp(
     }
 
     const formData = await c.req.formData().catch(() => null);
-    const file = formData?.get("file") as File | null;
-    const fileName = file?.name || "attachment.bin";
+    const file = formData?.get("file");
+    if (!(file instanceof File)) {
+      return c.json({ file: ["Archivo requerido"] }, 400);
+    }
+
+    try {
+      assertAttachmentMeta(file.name, file.size, MAX_ATTACHMENT_SIZE_MB);
+    } catch (error) {
+      if (
+        error instanceof AttachmentRejectedError ||
+        error instanceof PathEscapeError
+      ) {
+        return c.json({ file: [error.message] }, 400);
+      }
+      throw error;
+    }
+
+    const fileName = file.name;
 
     const inserted = await db
       .insert(coreIncidentAttachment)

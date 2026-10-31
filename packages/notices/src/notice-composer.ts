@@ -1,43 +1,47 @@
 import crypto from "node:crypto";
-import {
-  type PlainLanguageValidationOptions,
-  PlainLanguageValidator,
-} from "@pims/notices/plain-language.ts";
+import { PlainLanguageValidator } from "@pims/notices/plain-language.ts";
 import {
   type Art34Exemption,
-  ArtifactIncompleteError,
+  Art34ExemptionSchema,
   type AuthorityNoticePack,
   AuthorityNoticePackSchema,
   type DpoContact,
+  type ExemptionEvaluationResult,
+  type HighRiskGateInput,
+  HighRiskGateInputSchema,
   type HighRiskGateResult,
   HighRiskGateResultSchema,
+  isSensitiveAffectedDataType,
+  type PlainLanguageValidationOptions,
   type SubjectNoticePack,
   SubjectNoticePackSchema,
   type SubjectNoticeState,
 } from "@pims/types";
+import {
+  HIGH_RISK_SUBJECT_THRESHOLD,
+  PLAIN_LANGUAGE_MAX_WORDS,
+} from "@pims/types/constants.ts";
+import {
+  ArtifactIncompleteError,
+  PimsValidationError,
+} from "@pims/types/errors.ts";
+import { zodIssuesToDetails } from "@pims/types/validation.ts";
+import { z } from "zod";
 
-export type ComposeAuthorityPackParams = Omit<
-  AuthorityNoticePack,
-  "pack" | "pack_id" | "jurisdiction"
-> & {
-  pack_id?: string;
-};
+const AuthorityPackInputSchema = AuthorityNoticePackSchema.omit({
+  pack: true,
+  jurisdiction: true,
+}).extend({ pack_id: z.string().uuid().optional() });
 
-export interface EvaluateHighRiskGateParams {
-  severity: string;
-  impact: string;
-  affectedDataTypes: string[];
-  numAffectedSubjects: number;
-  unencryptedExfiltration: boolean;
-  authorityOrdered: boolean;
-  reviewer: string;
-}
+export type ComposeAuthorityPackParams = z.input<
+  typeof AuthorityPackInputSchema
+>;
 
 export interface ComposeSubjectNoticeParams {
   incidentCode: string;
   lang?: "es" | "en";
   highRiskGate: HighRiskGateResult;
-  exemption?: Art34Exemption | null;
+  exemptionEvaluation?: ExemptionEvaluationResult | null;
   bodyPlain: string;
   contact: DpoContact;
   consequences: string;
@@ -50,28 +54,45 @@ export interface ComposeSubjectNoticeParams {
   packId?: string;
 }
 
+export interface NoticeComposerOptions {
+  now?: () => Date;
+  maxWords?: number;
+}
+
 export class NoticeComposer {
+  private readonly now: () => Date;
+  private readonly maxWords: number;
+
+  constructor(options: NoticeComposerOptions = {}) {
+    this.now = options.now ?? (() => new Date());
+    this.maxWords = options.maxWords ?? PLAIN_LANGUAGE_MAX_WORDS;
+  }
+
   composeAuthorityPack(
     params: ComposeAuthorityPackParams,
   ): AuthorityNoticePack {
-    if (params.item_a_unknown.length > 0 && params.phased === false) {
+    const parsedInput = AuthorityPackInputSchema.safeParse(params);
+    if (!parsedInput.success) {
+      throw new PimsValidationError(
+        "authority_pack",
+        "Invalid authority notice pack input",
+        { issues: zodIssuesToDetails(parsedInput.error) },
+      );
+    }
+    const input = parsedInput.data;
+
+    if (input.item_a_unknown.length > 0 && !input.phased) {
       throw new ArtifactIncompleteError(
         "authority",
         "phased_required_when_unknown",
       );
     }
 
-    if (
-      params.submitted_at_utc !== null &&
-      params.submitted_at_utc !== undefined
-    ) {
-      const submitted = new Date(params.submitted_at_utc).getTime();
-      const deadline = new Date(params.deadline_at_utc).getTime();
+    if (input.submitted_at_utc !== null) {
+      const submitted = new Date(input.submitted_at_utc).getTime();
+      const deadline = new Date(input.deadline_at_utc).getTime();
       if (submitted > deadline) {
-        if (
-          !params.delay_reasons ||
-          params.delay_reasons.reasons.length === 0
-        ) {
+        if (input.delay_reasons === null) {
           throw new ArtifactIncompleteError(
             "authority",
             "delay_reasons_required_when_late",
@@ -81,69 +102,97 @@ export class NoticeComposer {
     }
 
     const pack: AuthorityNoticePack = {
-      ...params,
+      ...input,
       pack: "authority",
       jurisdiction: "EU_GDPR",
-      pack_id: params.pack_id ?? crypto.randomUUID(),
+      pack_id: input.pack_id ?? crypto.randomUUID(),
     };
 
     return AuthorityNoticePackSchema.parse(pack);
   }
 
-  evaluateHighRiskGate(params: EvaluateHighRiskGateParams): HighRiskGateResult {
-    const triggers: string[] = [];
+  evaluateHighRiskGate(params: HighRiskGateInput): HighRiskGateResult {
+    const parsed = HighRiskGateInputSchema.safeParse(params);
+    if (!parsed.success) {
+      throw new PimsValidationError(
+        "high_risk_gate",
+        "Invalid high risk gate input",
+        { issues: zodIssuesToDetails(parsed.error) },
+      );
+    }
+    const input = parsed.data;
 
-    if (params.severity === "C") {
+    const triggers: HighRiskGateResult["triggers"] = [];
+    if (input.severity === "C") {
       triggers.push("severity:C");
     }
-    if (params.impact === "V") {
+    if (input.impact === "V") {
       triggers.push("impact:V");
     }
-    if (params.numAffectedSubjects >= 100) {
+    if (input.affectedDataTypes.some(isSensitiveAffectedDataType)) {
+      triggers.push("sensitive_data_types");
+    }
+    if (
+      input.numAffectedSubjects !== null &&
+      input.numAffectedSubjects >= HIGH_RISK_SUBJECT_THRESHOLD
+    ) {
       triggers.push("num_affected_subjects>=100");
     }
-    if (params.unencryptedExfiltration === true) {
+    if (input.unencryptedExfiltration) {
       triggers.push("unencrypted_exfiltration");
     }
-    if (params.authorityOrdered === true) {
+    if (input.authorityOrdered) {
       triggers.push("authority_ordered");
     }
 
-    const sensitiveDataTypes = new Set([
-      "sensitive",
-      "health",
-      "biometric",
-      "minors",
-      "financial",
-      "credentials",
-    ]);
-
-    const hasSensitive = params.affectedDataTypes.some((dataType) =>
-      sensitiveDataTypes.has(dataType.toLowerCase()),
-    );
-    if (hasSensitive) {
-      triggers.push("sensitive_data_types");
-    }
-
-    const verdict = triggers.length > 0;
     const result: HighRiskGateResult = {
-      verdict,
+      verdict: triggers.length > 0,
       triggers,
-      determined_at_utc: new Date().toISOString(),
-      reviewer: params.reviewer,
+      determined_at_utc: this.now().toISOString(),
+      reviewer: input.reviewer,
     };
 
     return HighRiskGateResultSchema.parse(result);
   }
 
   composeSubjectNotice(params: ComposeSubjectNoticeParams): SubjectNoticePack {
-    if (!params.highRiskGate.verdict) {
+    const gate = HighRiskGateResultSchema.parse(params.highRiskGate);
+    if (gate.verdict !== gate.triggers.length > 0) {
+      throw new ArtifactIncompleteError(
+        "subject",
+        "high_risk_gate_inconsistent",
+      );
+    }
+
+    const evaluation = params.exemptionEvaluation ?? null;
+    const reviewApprovalId = params.reviewApprovalId ?? null;
+    const lang = params.lang ?? "es";
+    const packId = params.packId ?? crypto.randomUUID();
+
+    if (!gate.verdict && evaluation?.kind === "exempted") {
+      throw new ArtifactIncompleteError(
+        "subject",
+        "exemption_without_high_risk",
+      );
+    }
+
+    if (params.waivers !== undefined && reviewApprovalId === null) {
+      throw new ArtifactIncompleteError(
+        "subject",
+        "review_approval_required_for_waiver",
+      );
+    }
+
+    if (!gate.verdict) {
+      if (params.state !== undefined && params.state !== "not_required") {
+        throw new ArtifactIncompleteError("subject", "state_inconsistent");
+      }
       const notRequiredPack: SubjectNoticePack = {
         pack: "subject",
-        pack_id: params.packId ?? crypto.randomUUID(),
+        pack_id: packId,
         incident_code: params.incidentCode,
-        lang: params.lang ?? "es",
-        high_risk_gate: params.highRiskGate,
+        lang,
+        high_risk_gate: gate,
         exemption: null,
         body_plain: "",
         item_b_contact: params.contact,
@@ -151,49 +200,75 @@ export class NoticeComposer {
         item_d_measures: [],
         recommendations: [],
         citations: [],
-        review_approval_id: params.reviewApprovalId ?? null,
+        review_approval_id: reviewApprovalId,
         state: "not_required",
       };
       return SubjectNoticePackSchema.parse(notRequiredPack);
     }
 
-    if (params.exemption) {
-      const exemptedPack: SubjectNoticePack = {
-        pack: "subject",
-        pack_id: params.packId ?? crypto.randomUUID(),
-        incident_code: params.incidentCode,
-        lang: params.lang ?? "es",
-        high_risk_gate: params.highRiskGate,
-        exemption: params.exemption,
-        body_plain: params.bodyPlain,
-        item_b_contact: params.contact,
-        item_c_consequences: params.consequences,
-        item_d_measures: params.measures,
-        recommendations: params.recommendations,
-        citations: params.citations,
-        review_approval_id: params.reviewApprovalId ?? null,
-        state: "exempted",
-      };
-      return SubjectNoticePackSchema.parse(exemptedPack);
+    let exemption: Art34Exemption | null = null;
+    let state: SubjectNoticeState;
+
+    if (evaluation?.kind === "authority_override") {
+      state = "draft";
+    } else if (evaluation?.kind === "exempted") {
+      const parsedExemption = Art34ExemptionSchema.safeParse(
+        evaluation.exemption,
+      );
+      if (!parsedExemption.success) {
+        throw new PimsValidationError(
+          "subject.exemption",
+          "Invalid Article 34(3) exemption",
+          { issues: zodIssuesToDetails(parsedExemption.error) },
+        );
+      }
+      const candidate = parsedExemption.data;
+      if (candidate.letter === "c" && candidate.public_artifact === null) {
+        throw new ArtifactIncompleteError(
+          "subject",
+          "exemption_public_artifact_required",
+        );
+      }
+      if (candidate.letter !== "c" && candidate.public_artifact !== null) {
+        throw new ArtifactIncompleteError(
+          "subject",
+          "exemption_public_artifact_forbidden",
+        );
+      }
+      exemption = candidate;
+      state = "exempted";
+    } else {
+      state = params.state ?? "draft";
+      if (state === "exempted" || state === "not_required") {
+        throw new ArtifactIncompleteError("subject", "state_inconsistent");
+      }
     }
 
-    PlainLanguageValidator.validate(params.bodyPlain, params.waivers);
+    if (state !== "exempted" && params.bodyPlain.trim().length === 0) {
+      throw new ArtifactIncompleteError("subject", "body_plain_required");
+    }
+
+    PlainLanguageValidator.validate(params.bodyPlain, {
+      ...params.waivers,
+      locale: lang,
+      maxWords: this.maxWords,
+    });
 
     const pack: SubjectNoticePack = {
       pack: "subject",
-      pack_id: params.packId ?? crypto.randomUUID(),
+      pack_id: packId,
       incident_code: params.incidentCode,
-      lang: params.lang ?? "es",
-      high_risk_gate: params.highRiskGate,
-      exemption: null,
+      lang,
+      high_risk_gate: gate,
+      exemption,
       body_plain: params.bodyPlain,
       item_b_contact: params.contact,
       item_c_consequences: params.consequences,
       item_d_measures: params.measures,
       recommendations: params.recommendations,
       citations: params.citations,
-      review_approval_id: params.reviewApprovalId ?? null,
-      state: params.state ?? "draft",
+      review_approval_id: reviewApprovalId,
+      state,
     };
 
     return SubjectNoticePackSchema.parse(pack);
@@ -205,9 +280,7 @@ export class NoticeComposer {
     return new NoticeComposer().composeAuthorityPack(params);
   }
 
-  static evaluateHighRiskGate(
-    params: EvaluateHighRiskGateParams,
-  ): HighRiskGateResult {
+  static evaluateHighRiskGate(params: HighRiskGateInput): HighRiskGateResult {
     return new NoticeComposer().evaluateHighRiskGate(params);
   }
 

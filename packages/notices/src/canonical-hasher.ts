@@ -1,4 +1,9 @@
 import crypto from "node:crypto";
+import { canonicalizeJson } from "@pims/types/canonical.ts";
+import { CanonicalizationError } from "@pims/types/errors.ts";
+import { type JsonValue, JsonValueSchema } from "@pims/types/models.ts";
+import { zodIssuesToDetails } from "@pims/types/validation.ts";
+import { z } from "zod";
 
 const ENVELOPE_KEYS_TO_STRIP = new Set([
   "state",
@@ -6,41 +11,26 @@ const ENVELOPE_KEYS_TO_STRIP = new Set([
   "submitted_at_utc",
 ]);
 
-function cleanAndSort(val: unknown): unknown {
-  if (val === null || typeof val !== "object") {
-    return val;
-  }
-
-  if (val instanceof Date) {
-    return val.toISOString();
-  }
-
-  if (Array.isArray(val)) {
-    return val.map((item) => cleanAndSort(item));
-  }
-
-  const record = val as Record<string, unknown>;
-  const sortedKeys = Object.keys(record)
-    .filter((key) => !ENVELOPE_KEYS_TO_STRIP.has(key))
-    .sort();
-
-  const sortedObj: Record<string, unknown> = {};
-  for (const key of sortedKeys) {
-    const propValue = record[key];
-    if (propValue !== undefined) {
-      sortedObj[key] = cleanAndSort(propValue);
-    }
-  }
-
-  return sortedObj;
-}
-
-export function canonicalizeJson(obj: unknown): string {
-  const normalized = cleanAndSort(obj);
-  return JSON.stringify(normalized) ?? "null";
-}
+const NoticeEnvelopeSchema = z.record(z.string(), JsonValueSchema);
 
 export function hashCanonicalContent(obj: unknown): string {
-  const canonicalStr = canonicalizeJson(obj);
-  return crypto.createHash("sha256").update(canonicalStr, "utf8").digest("hex");
+  const parsed = NoticeEnvelopeSchema.safeParse(obj);
+  if (!parsed.success) {
+    throw new CanonicalizationError("Notice pack is not JSON-safe", {
+      issues: zodIssuesToDetails(parsed.error),
+    });
+  }
+
+  const projected: Record<string, JsonValue> = {};
+  for (const [key, value] of Object.entries(parsed.data)) {
+    if (ENVELOPE_KEYS_TO_STRIP.has(key)) {
+      continue;
+    }
+    projected[key] = value;
+  }
+
+  return crypto
+    .createHash("sha256")
+    .update(canonicalizeJson(projected), "utf8")
+    .digest("hex");
 }

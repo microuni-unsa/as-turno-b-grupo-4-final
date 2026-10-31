@@ -1,10 +1,11 @@
+import { JsonObjectSchema } from "@pims/types/models.ts";
 import { z } from "zod";
 
 export const ForensicScanResultSchema = z.object({
   ocr_text: z.string(),
   iocs: z.array(z.string()),
   visual_pii: z.array(z.string()),
-  encryption_proof_verified: z.boolean(),
+  encryption_proof_signal: z.boolean(),
   tamper_score: z.number().min(0).max(1),
 });
 export type ForensicScanResult = z.infer<typeof ForensicScanResultSchema>;
@@ -80,7 +81,7 @@ export const AuditTrailLedgerEntrySchema = z.object({
   at_utc: z.string().datetime(),
   role: z.string().min(1),
   tool: z.string().min(1),
-  args_redacted: z.record(z.unknown()),
+  args_redacted: JsonObjectSchema,
   result_ref: z.string().min(1),
   idempotency_key: z.string().min(1),
 });
@@ -90,9 +91,9 @@ export const AuditTrailExportSchema = z.object({
   export_version: z.literal("1.0"),
   incident_code: z.string().min(1),
   exported_at_utc: z.string().datetime(),
-  timeline: z.array(z.record(z.unknown())),
+  timeline: z.array(JsonObjectSchema),
   tool_ledger: z.array(AuditTrailLedgerEntrySchema),
-  timer_ledger: z.array(z.record(z.unknown())),
+  timer_ledger: z.array(JsonObjectSchema),
 });
 export type AuditTrailExport = z.infer<typeof AuditTrailExportSchema>;
 
@@ -109,7 +110,7 @@ export const TimerRecordSchema = z.object({
   incident_code: z.string().min(1),
   timer_type: z.string().min(1),
   fire_at_utc: z.string().datetime(),
-  payload: z.record(z.unknown()),
+  payload: JsonObjectSchema,
   fired: z.boolean(),
   cancelled_reason: z.string().nullable(),
 });
@@ -128,7 +129,7 @@ export type DedupeIndexRecord = z.infer<typeof DedupeIndexRecordSchema>;
 export const RiskQueueRecordSchema = z.object({
   id: z.number().int().positive(),
   incident_code: z.string().min(1),
-  signal_payload: z.record(z.unknown()),
+  signal_payload: JsonObjectSchema,
   status: z.enum(["queued", "sent", "failed"]),
   queued_at_utc: z.string().datetime(),
 });
@@ -137,7 +138,7 @@ export type RiskQueueRecord = z.infer<typeof RiskQueueRecordSchema>;
 export const IndicatorSpoolRecordSchema = z.object({
   id: z.number().int().positive(),
   event_type: z.string().min(1),
-  payload: z.record(z.unknown()),
+  payload: JsonObjectSchema,
   created_at_utc: z.string().datetime(),
 });
 export type IndicatorSpoolRecord = z.infer<typeof IndicatorSpoolRecordSchema>;

@@ -4,8 +4,9 @@
   "type": "module",
   "main": "src/index.ts",
   "dependencies": {
-    "@pims/types": "workspace:*",
     "@pims/config": "workspace:*",
-    "@pims/models": "workspace:*"
+    "@pims/models": "workspace:*",
+    "@pims/types": "workspace:*",
+    "zod": "^3.24.2"
   }
 }

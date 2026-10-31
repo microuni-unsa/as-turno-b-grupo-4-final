@@ -1,93 +1,104 @@
-import crypto from "node:crypto";
-import type { Art34Exemption } from "@pims/types";
-import { ExemptionUngroundedError } from "@pims/types";
+import {
+  type ExemptionEvaluationInput,
+  ExemptionEvaluationInputSchema,
+  type ExemptionEvaluationResult,
+  ExemptionEvaluationResultSchema,
+  ExemptionUngroundedError,
+  PimsValidationError,
+} from "@pims/types";
+import { zodIssuesToDetails } from "@pims/types/validation.ts";
 
-export interface ExemptionEvaluationInput {
-  securityMeasuresAdopted: string[];
-  encryptionProofVerified?: boolean;
-  subsequentResolutionActions?: string[];
-  disproportionateEffortAnalysis?: string;
-  publicCommunicationArtifactAttached?: boolean;
-  authorityOrdered?: boolean;
-}
-
-export interface ExemptionEvaluationResult {
-  exempted: boolean;
-  exemption: Art34Exemption | null;
-  reason?: string;
-}
+const ENCRYPTION_SCOPES = ["encrypt_rest", "encrypt_transit"] as const;
 
 export class ExemptionEngine {
   evaluate(input: ExemptionEvaluationInput): ExemptionEvaluationResult {
-    if (input.authorityOrdered === true) {
-      return {
-        exempted: false,
-        exemption: null,
+    const parsed = ExemptionEvaluationInputSchema.safeParse(input);
+    if (!parsed.success) {
+      throw new PimsValidationError(
+        "exemption_input",
+        "Invalid exemption evaluation input",
+        { issues: zodIssuesToDetails(parsed.error) },
+      );
+    }
+    const data = parsed.data;
+
+    if (data.authorityInstruction !== null) {
+      return ExemptionEvaluationResultSchema.parse({
+        kind: "authority_override",
         reason: "AUTHORITY_OVERRIDE",
-      };
+        instruction_ref: data.authorityInstruction.instruction_ref,
+      });
     }
 
-    if (
-      input.securityMeasuresAdopted.includes("encrypt_rest") ||
-      input.securityMeasuresAdopted.includes("encrypt_transit")
-    ) {
-      if (input.encryptionProofVerified !== true) {
+    const adoptedEncryptionScopes = ENCRYPTION_SCOPES.filter((scope) =>
+      data.securityMeasuresAdopted.includes(scope),
+    );
+
+    if (adoptedEncryptionScopes.length > 0) {
+      const matchedProof = data.encryptionProofs.find(
+        (proof) =>
+          proof.incident_code === data.incidentCode &&
+          proof.applies_to_affected_data &&
+          adoptedEncryptionScopes.includes(proof.scope),
+      );
+      if (matchedProof === undefined) {
         throw new ExemptionUngroundedError(
           "a",
           "encryption_proof_missing_or_unverified",
         );
       }
-      return {
-        exempted: true,
+      return ExemptionEvaluationResultSchema.parse({
+        kind: "exempted",
+        reason: "ENCRYPTION_VERIFIED",
         exemption: {
           letter: "a",
-          evidence_refs: ["config:encryption", "forensics:verified_proof"],
-          approval_id: crypto.randomUUID(),
+          evidence_refs: matchedProof.evidence_refs,
+          approval_id: matchedProof.review_approval_id,
           public_artifact: null,
         },
-      };
+      });
     }
 
-    if (
-      input.subsequentResolutionActions &&
-      input.subsequentResolutionActions.length > 0
-    ) {
-      return {
-        exempted: true,
+    const riskEliminatingMeasure = data.subsequentMeasures.find(
+      (measure) => measure.action_type === "R" && measure.risk_eliminated,
+    );
+    if (riskEliminatingMeasure !== undefined) {
+      return ExemptionEvaluationResultSchema.parse({
+        kind: "exempted",
+        reason: "RISK_ELIMINATED",
         exemption: {
           letter: "b",
-          evidence_refs: input.subsequentResolutionActions,
-          approval_id: crypto.randomUUID(),
+          evidence_refs: riskEliminatingMeasure.evidence_refs,
+          approval_id: riskEliminatingMeasure.review_approval_id,
           public_artifact: null,
         },
-      };
+      });
     }
 
-    if (
-      input.disproportionateEffortAnalysis &&
-      input.disproportionateEffortAnalysis.trim().length > 0
-    ) {
-      if (input.publicCommunicationArtifactAttached !== true) {
+    if (data.disproportionateEffort !== null) {
+      const effort = data.disproportionateEffort;
+      if (effort.public_artifact_ref === null) {
         throw new ExemptionUngroundedError(
           "c",
           "public_communication_artifact_required",
         );
       }
-      return {
-        exempted: true,
+      return ExemptionEvaluationResultSchema.parse({
+        kind: "exempted",
+        reason: "DISPROPORTIONATE_EFFORT",
         exemption: {
           letter: "c",
-          evidence_refs: ["analysis:disproportionate_effort"],
-          approval_id: crypto.randomUUID(),
-          public_artifact: "public-notice.txt",
+          evidence_refs: [effort.analysis_ref],
+          approval_id: effort.review_approval_id,
+          public_artifact: effort.public_artifact_ref,
         },
-      };
+      });
     }
 
-    return {
-      exempted: false,
-      exemption: null,
-    };
+    return ExemptionEvaluationResultSchema.parse({
+      kind: "notice_required",
+      reason: "NO_EXEMPTION_QUALIFIED",
+    });
   }
 
   static evaluate(input: ExemptionEvaluationInput): ExemptionEvaluationResult {
