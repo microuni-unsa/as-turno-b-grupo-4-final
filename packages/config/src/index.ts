@@ -1,5 +1,3 @@
-import childProcess from "node:child_process";
-import fs from "node:fs";
 import {
   DEFAULT_IDEMPOTENCY_KEY_PREFIX,
   DEFAULT_PIMS_BASE_URL,
@@ -38,43 +36,27 @@ export interface AgentConfig {
   PIMS_TIMEOUT_MS: number;
   PIMS_MAX_RETRIES: number;
   PIMS_PAGE_SIZE: { default: number; max: number };
+  PIMS_EXTRA_HEADERS_JSON?: string;
+  PIMS_COOKIES_JSON?: string;
   IDEMPOTENCY_KEY_PREFIX: string;
   JURISDICTION_DEADLINES_JSON: JurisdictionDeadlines;
   SUBJECT_NOTICE_POLICY: "high_risk_only";
   HUMAN_VETO_WINDOW_MIN: number;
   ASSIGNEES: string[];
-  VOICE_PRIMARY_LANG: string;
-  VOICE_FALLBACK_LANG: string;
-  STT_PROVIDER?: string;
-  STT_MODEL?: string;
-  STT_AUTH_ENV?: string;
-  TTS_PROVIDER?: string;
-  TTS_MODEL?: string;
-  TTS_VOICE?: string;
-  TTS_AUTH_ENV?: string;
-  VOICE_RETENTION_DAYS: number;
-  VOICE_MAX_AUDIO_MB: number;
-  VOICE_MIN_CONFIDENCE: number;
-  VOICE_LANG_CONFIDENCE: number;
-  VOICE_SPOOF_THRESHOLD: number;
   REASONING_MODEL: ModelConfig;
   FAST_MODEL: ModelConfig;
-  VISION_MODEL: ModelConfig;
+  VISION_MODEL?: ModelConfig;
   EMBEDDINGS_MODEL: ModelConfig;
   RERANKER_MODEL: ModelConfig;
   TEMP_CLASSIFIER: number;
   TEMP_REASONING: number;
-  TOT_BRANCH_FACTOR: number;
   MAX_REVIEW_CYCLES: number;
-  NLI_ENTAILMENT_MIN: number;
   PLAIN_LANG_MAX_WORDS: number;
-  MAX_SEMANTIC_ENTROPY: number;
   DEDUPE_TRIGRAM_THRESHOLD: number;
   DEDUPE_COSINE_THRESHOLD: number;
   SLA_PROCESSOR_H: number;
   SLA_SUBJECT_H: number;
   SLA_REVIEW_H: number;
-  SLA_HAZARD_WARN_THRESHOLD: number;
   CORRECTIVE_DEFAULT_DUE_DAYS: number;
   CIRCUIT_BREAKER_FAILS: number;
   CIRCUIT_BREAKER_WINDOW_S: number;
@@ -104,64 +86,23 @@ export interface AgentConfig {
   DEPLOY_DATA_DIR: string;
 }
 
-export function decryptSopsFile(filePath: string): Record<string, string> {
-  if (!filePath || filePath.trim() === "") {
-    throw new ConfigError(
-      "SOPS file path cannot be empty",
-      "CONFIG_SOPS_PATH_EMPTY",
-    );
-  }
-  if (!fs.existsSync(filePath)) {
-    throw new ConfigError(
-      `SOPS file does not exist: ${filePath}`,
-      "CONFIG_SOPS_NOT_FOUND",
-    );
-  }
-
-  try {
-    const output = childProcess.execFileSync("sops", ["-d", filePath], {
-      encoding: "utf-8",
-      stdio: ["ignore", "pipe", "pipe"],
-    });
-    const parsed = JSON.parse(output) as unknown;
-    if (
-      typeof parsed !== "object" ||
-      parsed === null ||
-      Array.isArray(parsed)
-    ) {
-      throw new Error("Decrypted SOPS content is not a key-value object");
-    }
-    const result: Record<string, string> = {};
-    for (const [k, v] of Object.entries(parsed)) {
-      result[k] = typeof v === "string" ? v : JSON.stringify(v);
-    }
-    return result;
-  } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : String(err);
-    throw new ConfigError(
-      `Failed to decrypt SOPS file ${filePath}: ${msg}`,
-      "CONFIG_SOPS_DECRYPT_FAILED",
-    );
-  }
-}
-
-export function loadModelProviderOptions(decrypted: Record<string, string>): {
+export function loadModelProviderOptions(credentials: Record<string, string>): {
   apiKey: string;
   cohereApiKey?: string;
   baseURL?: string;
 } {
-  const apiKey = decrypted.OPENAI_API_KEY;
+  const apiKey = credentials.OPENAI_API_KEY;
   if (!apiKey || apiKey.trim() === "")
     throw new ConfigError(
-      "OPENAI_API_KEY is missing or empty in SOPS credentials",
+      "OPENAI_API_KEY is missing or empty in credentials",
       "CONFIG_MISSING:OPENAI_API_KEY",
     );
   const out: { apiKey: string; cohereApiKey?: string; baseURL?: string } = {
     apiKey,
   };
-  const cohere = decrypted.COHERE_API_KEY;
+  const cohere = credentials.COHERE_API_KEY;
   if (cohere !== undefined && cohere !== "") out.cohereApiKey = cohere;
-  const base = decrypted.OPENAI_BASE_URL;
+  const base = credentials.OPENAI_BASE_URL;
   if (base !== undefined && base !== "") out.baseURL = base;
   return out;
 }
@@ -261,9 +202,9 @@ function parseModelConfig(
 }
 
 export function loadConfig(
-  customEnv?: Record<string, string | undefined>,
+  envOverride?: Record<string, string | undefined>,
 ): AgentConfig {
-  const env = customEnv ?? process.env;
+  const env = envOverride ?? process.env;
 
   if (
     env.LOG_PII !== undefined &&
@@ -325,12 +266,6 @@ export function loadConfig(
       "CONFIG_MISSING:FAST_MODEL",
     );
   }
-  if (!env.VISION_MODEL) {
-    throw new ConfigError(
-      "VISION_MODEL is required",
-      "CONFIG_MISSING:VISION_MODEL",
-    );
-  }
   if (!env.EMBEDDINGS_MODEL) {
     throw new ConfigError(
       "EMBEDDINGS_MODEL is required",
@@ -350,7 +285,10 @@ export function loadConfig(
     env,
   );
   const fastModel = parseModelConfig(env.FAST_MODEL, "FAST_MODEL", env);
-  const visionModel = parseModelConfig(env.VISION_MODEL, "VISION_MODEL", env);
+  const visionModel =
+    env.VISION_MODEL === undefined
+      ? undefined
+      : parseModelConfig(env.VISION_MODEL, "VISION_MODEL", env);
   const embeddingsModel = parseModelConfig(
     env.EMBEDDINGS_MODEL,
     "EMBEDDINGS_MODEL",
@@ -456,6 +394,50 @@ export function loadConfig(
     }
   }
 
+  const extraHeadersRaw = env.PIMS_EXTRA_HEADERS_JSON;
+  if (extraHeadersRaw !== undefined && extraHeadersRaw.trim() !== "") {
+    try {
+      const parsed = JSON.parse(extraHeadersRaw);
+      if (
+        typeof parsed !== "object" ||
+        parsed === null ||
+        Array.isArray(parsed)
+      ) {
+        throw new Error();
+      }
+      if (Object.values(parsed).some((value) => typeof value !== "string")) {
+        throw new Error();
+      }
+    } catch {
+      throw new ConfigError(
+        "PIMS_EXTRA_HEADERS_JSON must be a valid JSON object string",
+        "CONFIG_TYPE:PIMS_EXTRA_HEADERS_JSON",
+      );
+    }
+  }
+
+  const cookiesRaw = env.PIMS_COOKIES_JSON;
+  if (cookiesRaw !== undefined && cookiesRaw.trim() !== "") {
+    try {
+      const parsed = JSON.parse(cookiesRaw);
+      if (
+        typeof parsed !== "object" ||
+        parsed === null ||
+        Array.isArray(parsed)
+      ) {
+        throw new Error();
+      }
+      if (Object.values(parsed).some((value) => typeof value !== "string")) {
+        throw new Error();
+      }
+    } catch {
+      throw new ConfigError(
+        "PIMS_COOKIES_JSON must be a valid JSON object string",
+        "CONFIG_TYPE:PIMS_COOKIES_JSON",
+      );
+    }
+  }
+
   return {
     PIMS_BASE_URL: pimsBaseUrl,
     PIMS_SCHEMA: pimsSchema,
@@ -463,6 +445,8 @@ export function loadConfig(
     PIMS_TIMEOUT_MS: pimsTimeoutMs,
     PIMS_MAX_RETRIES: pimsMaxRetries,
     PIMS_PAGE_SIZE: pimsPageSize,
+    PIMS_EXTRA_HEADERS_JSON: extraHeadersRaw,
+    PIMS_COOKIES_JSON: cookiesRaw,
     IDEMPOTENCY_KEY_PREFIX:
       env.IDEMPOTENCY_KEY_PREFIX ?? DEFAULT_IDEMPOTENCY_KEY_PREFIX,
     JURISDICTION_DEADLINES_JSON: jurisdictionDeadlines,
@@ -471,30 +455,6 @@ export function loadConfig(
       ? Number.parseInt(env.HUMAN_VETO_WINDOW_MIN, 10)
       : 0,
     ASSIGNEES: assignees,
-    VOICE_PRIMARY_LANG: env.VOICE_PRIMARY_LANG ?? "es-PE",
-    VOICE_FALLBACK_LANG: env.VOICE_FALLBACK_LANG ?? "en",
-    STT_PROVIDER: env.STT_PROVIDER,
-    STT_MODEL: env.STT_MODEL,
-    STT_AUTH_ENV: env.STT_AUTH_ENV ?? "STT_API_KEY",
-    TTS_PROVIDER: env.TTS_PROVIDER,
-    TTS_MODEL: env.TTS_MODEL,
-    TTS_VOICE: env.TTS_VOICE,
-    TTS_AUTH_ENV: env.TTS_AUTH_ENV ?? "TTS_API_KEY",
-    VOICE_RETENTION_DAYS: env.VOICE_RETENTION_DAYS
-      ? Number.parseInt(env.VOICE_RETENTION_DAYS, 10)
-      : 30,
-    VOICE_MAX_AUDIO_MB: env.VOICE_MAX_AUDIO_MB
-      ? Number.parseInt(env.VOICE_MAX_AUDIO_MB, 10)
-      : 25,
-    VOICE_MIN_CONFIDENCE: env.VOICE_MIN_CONFIDENCE
-      ? Number.parseFloat(env.VOICE_MIN_CONFIDENCE)
-      : 0.5,
-    VOICE_LANG_CONFIDENCE: env.VOICE_LANG_CONFIDENCE
-      ? Number.parseFloat(env.VOICE_LANG_CONFIDENCE)
-      : 0.7,
-    VOICE_SPOOF_THRESHOLD: env.VOICE_SPOOF_THRESHOLD
-      ? Number.parseFloat(env.VOICE_SPOOF_THRESHOLD)
-      : 0.8,
     REASONING_MODEL: reasoningModel,
     FAST_MODEL: fastModel,
     VISION_MODEL: visionModel,
@@ -506,21 +466,12 @@ export function loadConfig(
     TEMP_REASONING: env.TEMP_REASONING
       ? Number.parseFloat(env.TEMP_REASONING)
       : 0.2,
-    TOT_BRANCH_FACTOR: env.TOT_BRANCH_FACTOR
-      ? Number.parseInt(env.TOT_BRANCH_FACTOR, 10)
-      : 3,
     MAX_REVIEW_CYCLES: env.MAX_REVIEW_CYCLES
       ? Number.parseInt(env.MAX_REVIEW_CYCLES, 10)
       : 3,
-    NLI_ENTAILMENT_MIN: env.NLI_ENTAILMENT_MIN
-      ? Number.parseFloat(env.NLI_ENTAILMENT_MIN)
-      : 0.85,
     PLAIN_LANG_MAX_WORDS: env.PLAIN_LANG_MAX_WORDS
       ? Number.parseInt(env.PLAIN_LANG_MAX_WORDS, 10)
       : 25,
-    MAX_SEMANTIC_ENTROPY: env.MAX_SEMANTIC_ENTROPY
-      ? Number.parseFloat(env.MAX_SEMANTIC_ENTROPY)
-      : 0.65,
     DEDUPE_TRIGRAM_THRESHOLD: env.DEDUPE_TRIGRAM_THRESHOLD
       ? Number.parseFloat(env.DEDUPE_TRIGRAM_THRESHOLD)
       : 0.85,
@@ -534,9 +485,6 @@ export function loadConfig(
       ? Number.parseInt(env.SLA_SUBJECT_H, 10)
       : 4,
     SLA_REVIEW_H: env.SLA_REVIEW_H ? Number.parseInt(env.SLA_REVIEW_H, 10) : 4,
-    SLA_HAZARD_WARN_THRESHOLD: env.SLA_HAZARD_WARN_THRESHOLD
-      ? Number.parseFloat(env.SLA_HAZARD_WARN_THRESHOLD)
-      : 0.75,
     CORRECTIVE_DEFAULT_DUE_DAYS: env.CORRECTIVE_DEFAULT_DUE_DAYS
       ? Number.parseInt(env.CORRECTIVE_DEFAULT_DUE_DAYS, 10)
       : 30,

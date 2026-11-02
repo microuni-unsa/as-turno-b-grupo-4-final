@@ -7,7 +7,7 @@ import {
 } from "@pims/agent/orchestrator/scheduler.ts";
 import type { AgentConfig } from "@pims/config";
 import { EvidenceStore } from "@pims/evidence";
-import type { JsonObject, TimerKind } from "@pims/types";
+import type { JsonObject, PageAlert, TimerKind } from "@pims/types";
 import { PimsBaseError } from "@pims/types";
 import {
   PostgreSqlContainer,
@@ -26,12 +26,6 @@ import {
 
 const INCIDENT_PREFIX = "INC-SCHED";
 
-interface PageAlert {
-  incident_code: string;
-  kind: TimerKind;
-  reason: string;
-}
-
 interface PayloadRecord {
   incident_code: string;
   payload: JsonObject;
@@ -39,7 +33,6 @@ interface PayloadRecord {
 
 const config = {
   SCHEDULER_MAX_TIMERS: 3,
-  SLA_HAZARD_WARN_THRESHOLD: 0.75,
 } as unknown as AgentConfig;
 
 const storageDir = fs.mkdtempSync(

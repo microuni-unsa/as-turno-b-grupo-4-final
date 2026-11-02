@@ -69,6 +69,8 @@ export interface PimsAdapterConfig {
   tokenCmd?: string[];
   username?: string;
   password?: string;
+  extraHeaders?: Record<string, string>;
+  cookies?: Record<string, string>;
 }
 
 export interface PimsRequestOverrides {
@@ -82,6 +84,8 @@ export class PimsAdapter {
   readonly timeoutMs: number;
   readonly maxRetries: number;
   readonly idempotencyKeyPrefix: string;
+  readonly extraHeaders?: Record<string, string>;
+  readonly cookies?: Record<string, string>;
   private readonly tokenCmd?: string[];
   private username?: string;
   private password?: string;
@@ -98,6 +102,8 @@ export class PimsAdapter {
     this.maxRetries = config.maxRetries ?? DEFAULT_PIMS_MAX_RETRIES;
     this.idempotencyKeyPrefix =
       config.idempotencyKeyPrefix ?? DEFAULT_IDEMPOTENCY_KEY_PREFIX;
+    this.extraHeaders = config.extraHeaders;
+    this.cookies = config.cookies;
     this.tokenCmd = config.tokenCmd;
     this.username = config.username;
     this.password = config.password;
@@ -927,8 +933,16 @@ export class PimsAdapter {
 
     const headers: Record<string, string> = {
       Accept: "application/json",
-      "X-PIMS-Schema": this.schema,
+      ...(this.extraHeaders ?? {}),
     };
+
+    if (this.cookies && Object.keys(this.cookies).length > 0) {
+      headers.Cookie = Object.entries(this.cookies)
+        .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
+        .join("; ");
+    }
+
+    headers["X-PIMS-Schema"] = this.schema;
 
     if (!options.isPublic) {
       if (!this.accessToken) {

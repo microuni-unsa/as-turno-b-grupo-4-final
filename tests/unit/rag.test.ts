@@ -3,13 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import type { AgentConfig } from "@pims/config";
 import { OpenAIModelProvider } from "@pims/models";
-import {
-  CorpusLoader,
-  chunkSections,
-  NormativeKnowledgeGraph,
-  RAGService,
-  RagIndexer,
-} from "@pims/rag";
+import { CorpusLoader, chunkSections, RAGService, RagIndexer } from "@pims/rag";
 import {
   CitationFabricatedError,
   CitationInvalidError,
@@ -173,46 +167,6 @@ Notify the designated Incident Commander within 30 minutes.
       }
     });
 
-    it("links chunks into knowledge graph by embedding similarity", async () => {
-      const kg = new NormativeKnowledgeGraph();
-      const nodeIds = kg.getNodeIds();
-      vi.spyOn(dummyProvider, "embed").mockResolvedValueOnce({
-        vectors: nodeIds.map((id) => (id === "gdpr:art33.1" ? [1, 0] : [0, 1])),
-      });
-      await kg.indexNodeEmbeddings(dummyProvider);
-
-      const mkChunk = (chunkId: string, text: string) => ({
-        chunk_id: chunkId,
-        doc_id: "t",
-        article_or_clause: "Test clause",
-        lines: "1-1",
-        text,
-        normative: true,
-        header: "[DOC:t | CLAUSE:Test clause | NORMATIVE:true]",
-        token_count: 1,
-      });
-      const chunks = [
-        mkChunk("t:0001", "notification to supervisory authority 72 hours"),
-        mkChunk("t:0002", "unrelated content about logging"),
-      ];
-      vi.spyOn(dummyProvider, "embed").mockResolvedValueOnce({
-        vectors: [
-          [1, 0],
-          [Math.SQRT1_2, Math.SQRT1_2],
-        ],
-      });
-
-      await kg.linkChunks(chunks, dummyProvider, {
-        minSimilarity: 0.99,
-        topK: 1,
-      });
-
-      const ppr = kg.computePersonalizedPageRank(["gdpr:art33.1"]);
-      const chunkScores = kg.getChunkScoresFromPPR(ppr);
-      expect(chunkScores.has("t:0001")).toBe(true);
-      expect(chunkScores.has("t:0002")).toBe(false);
-    });
-
     it("splits oversized sections and numbers chunks sequentially", async () => {
       const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "pims-rag-test-"));
       try {
@@ -299,55 +253,6 @@ Notify the designated Incident Commander within 30 minutes.
     });
   });
 
-  describe("Normative Knowledge Graph & Personalized PageRank", () => {
-    it("initializes default nodes and computes Personalized PageRank with Graphology", () => {
-      const kg = new NormativeKnowledgeGraph();
-
-      expect(kg.getNode("gdpr:art33.1")).toBeDefined();
-      expect(kg.getNode("iso:b.3.12")).toBeDefined();
-      expect(kg.getNode("cat:dl")).toBeDefined();
-
-      expect(() => kg.findAnchorsByVector([1, 0, 0])).toThrow(RagIndexError);
-
-      const anchors = ["gdpr:art33.1"];
-      const ppr = kg.computePersonalizedPageRank(anchors);
-      expect(ppr.size).toBeGreaterThan(0);
-      expect(ppr.get("gdpr:art33.1")).toBeGreaterThan(0);
-
-      const chunkScores = kg.getChunkScoresFromPPR(ppr);
-      expect(chunkScores.size).toBe(0);
-    });
-
-    it("performs dense bi-encoder anchor resolution using pre-embedded vectors", async () => {
-      const kg = new NormativeKnowledgeGraph();
-      const nodeIds = kg.getNodeIds();
-      const fakeVectors = nodeIds.map((_, i) => [
-        i === 0 ? 1 : 0,
-        i === 1 ? 1 : 0,
-        i > 1 ? 1 : 0,
-      ]);
-
-      vi.spyOn(dummyProvider, "embed").mockResolvedValueOnce({
-        vectors: fakeVectors,
-      });
-
-      await kg.indexNodeEmbeddings(dummyProvider);
-
-      const matchingAnchors = kg.findAnchorsByVector([1, 0, 0], 0.5, 3);
-      expect(matchingAnchors.length).toBeGreaterThan(0);
-
-      vi.spyOn(dummyProvider, "embed").mockResolvedValueOnce({
-        vectors: [[1, 0, 0]],
-      });
-      const resolved = await kg.findAnchorsInQuery(
-        "Art 33(1) authority deadline 72 hours",
-        dummyProvider,
-        { minSimilarity: 0.5, topK: 3 },
-      );
-      expect(resolved.length).toBeGreaterThan(0);
-    });
-  });
-
   describe("MiniSearch BM25 Lexical Index", () => {
     it("indexes chunks and performs BM25 lexical ranking", () => {
       const indexer = new RagIndexer({
@@ -411,11 +316,9 @@ Notify the designated Incident Commander within 30 minutes.
         "v1",
       );
 
-      const kg = new NormativeKnowledgeGraph();
       const ragService = new RAGService({
         modelProvider: dummyProvider,
         indexer,
-        knowledgeGraph: kg,
         config: testRagConfig,
       });
 
@@ -446,21 +349,6 @@ Notify the designated Incident Commander within 30 minutes.
         modelProvider: dummyProvider,
         pgClient: sqlStub as unknown as postgres.Sql,
       });
-      const kg = new NormativeKnowledgeGraph();
-
-      vi.spyOn(dummyProvider, "embed").mockResolvedValueOnce({
-        vectors: Array.from({ length: 60 }, () => [0.1, 0.2, 0.3]),
-      });
-      await kg.indexNodeEmbeddings(dummyProvider);
-
-      vi.spyOn(dummyProvider, "chat_json").mockResolvedValueOnce({
-        content: {
-          sub_queries: ["unrelated question"],
-          hyde_clause: "unrelated hypothetical clause",
-          graph_anchors: [],
-        },
-        citations_requested: false,
-      });
 
       vi.spyOn(dummyProvider, "embed").mockResolvedValueOnce({
         vectors: [[0.1, 0.2, 0.3]],
@@ -484,7 +372,6 @@ Notify the designated Incident Commander within 30 minutes.
       const ragService = new RAGService({
         modelProvider: dummyProvider,
         indexer,
-        knowledgeGraph: kg,
         config: testRagConfig,
       });
 

@@ -9,11 +9,10 @@ import {
   createAgent,
   DRAFT_AUTHORITY_SYSTEM,
   DRAFT_SUBJECT_SYSTEM,
-  JUDGE_NLI_SYSTEM,
-  PROSECUTOR_SYSTEM,
   RESOLUTION_SYSTEM,
+  REVIEW_CHALLENGE_SYSTEM,
   RISK_CATALOG_SYSTEM,
-  TOT_SYSTEM,
+  ROOT_CAUSE_SYSTEM,
   TRIAGE_SYSTEM,
 } from "@pims/agent";
 import { type AgentConfig, loadConfig } from "@pims/config";
@@ -26,21 +25,15 @@ import {
   type MockDatabaseClient,
   type PimsTestServerInstance,
 } from "@pims/pims-mock";
-import {
-  CorpusLoader,
-  NormativeKnowledgeGraph,
-  RAGService,
-  RagIndexer,
-} from "@pims/rag";
+import { CorpusLoader, RAGService, RagIndexer } from "@pims/rag";
+import { ModelSchemaViolationError } from "@pims/types";
 import {
   type AgentRole,
+  CLOSE_CHECKLIST_ITEMS,
   type IntakePayload,
   IntakePayloadSchema,
 } from "@pims/types/agent.ts";
-import {
-  DEFAULT_RAG_DECOMPOSITION_PROMPT,
-  PIMS_TEST_SEED_PASSWORD,
-} from "@pims/types/constants.ts";
+import { PIMS_TEST_SEED_PASSWORD } from "@pims/types/constants.ts";
 import type { IndicatorSpoolRecord } from "@pims/types/evidence.ts";
 import type { JsonObject, RankedPassage } from "@pims/types/models.ts";
 import {
@@ -121,6 +114,7 @@ describe("Phase 4 autonomous lifecycle loop (§6, §9, §14.2)", {
   let config: AgentConfig;
   let authorityCitation: string;
   let storageDir: string;
+  let reviewChallengePayload: JsonObject = { challenges: [] };
   const now = new Date("2026-10-01T20:00:00.000Z");
 
   beforeAll(async () => {
@@ -211,11 +205,9 @@ describe("Phase 4 autonomous lifecycle loop (§6, §9, §14.2)", {
     const corpus = await loader.loadAll();
     buildGdprTextAxes(corpus.chunks);
 
-    const knowledgeGraph = new NormativeKnowledgeGraph();
     const indexer = new RagIndexer({
       modelProvider: provider,
       pgClient: dbClient.sql,
-      knowledgeGraph,
     });
     await indexer.indexCorpus(corpus.chunks, corpus.version, 25);
 
@@ -229,7 +221,6 @@ describe("Phase 4 autonomous lifecycle loop (§6, §9, §14.2)", {
     ragService = new RAGService({
       modelProvider: provider,
       indexer,
-      knowledgeGraph,
       config: {
         RAG_TOP_K: 24,
         RAG_RERANK_K: 6,
@@ -248,13 +239,6 @@ describe("Phase 4 autonomous lifecycle loop (§6, §9, §14.2)", {
       const prompt = args.messages[0]?.content ?? "";
       const isNonPii = prompt.includes("Port scan");
 
-      if (args.system === DEFAULT_RAG_DECOMPOSITION_PROMPT) {
-        return respond({
-          sub_queries: ["GDPR incident notification"],
-          hyde_clause: "GDPR incident notification",
-          graph_anchors: ["gdpr:art33.1", "gdpr:art34.1"],
-        });
-      }
       if (args.system === TRIAGE_SYSTEM) {
         return respond({
           incident_type: isNonPii ? "OT" : "DL",
@@ -290,64 +274,17 @@ describe("Phase 4 autonomous lifecycle loop (§6, §9, §14.2)", {
           citations: [authorityCitation],
         });
       }
-      if (args.system === TOT_SYSTEM) {
-        const rootCause = isNonPii
-          ? "unnecessary management port"
-          : "stale service credential";
+      if (args.system === ROOT_CAUSE_SYSTEM) {
         return respond({
           method: "5-whys",
-          hypotheses: [
-            {
-              id: "h1",
-              claim: isNonPii
-                ? "Edge router exposes an unnecessary management port"
-                : "Stale service credential allowed bulk export",
-              prior: 0.6,
-              likelihood: 0.9,
-              evidence_refs: ["file:containment.txt:deadbeef"],
-              ioc_refs: [],
-              causes: [{ cause: rootCause, control_codes: ["encrypt_rest"] }],
-            },
-            {
-              id: "h2",
-              claim: "Missing egress monitoring",
-              prior: 0.3,
-              likelihood: 0.5,
-              evidence_refs: [],
-              ioc_refs: [],
-              causes: [{ cause: "no egress monitoring", control_codes: [] }],
-            },
-            {
-              id: "h3",
-              claim: "Weak change review",
-              prior: 0.1,
-              likelihood: 0.2,
-              evidence_refs: [],
-              ioc_refs: [],
-              causes: [{ cause: "weak change review", control_codes: [] }],
-            },
-          ],
-          five_whys: {
-            levels: [1, 2, 3, 4, 5].map((level) => ({
-              level,
-              claim: `why level ${level}`,
-              evidence_ref:
-                level === 5 ? null : "file:containment.txt:deadbeef",
-            })),
-          },
-          fishbone: null,
-          fault_tree: null,
+          cause: isNonPii
+            ? "Edge router exposes an unnecessary management port"
+            : "Stale service credential allowed bulk export",
+          evidence_refs: ["file:containment.txt:deadbeef"],
           systemic: !isNonPii,
           remediation:
             "Rotate the service credential and enforce least privilege on the export endpoint.",
-          counterfactual_mapping: [
-            {
-              control_code: "encrypt_rest",
-              basic_event_ids: [rootCause],
-              rationale: "Encryption at rest removes the cut-set element.",
-            },
-          ],
-          citations: [authorityCitation],
+          root_cause_unproven: false,
         });
       }
       if (args.system === RISK_CATALOG_SYSTEM) {
@@ -398,24 +335,8 @@ describe("Phase 4 autonomous lifecycle loop (§6, §9, §14.2)", {
           citations: [authorityCitation],
         });
       }
-      if (args.system === PROSECUTOR_SYSTEM) {
-        return respond({ challenges: [] });
-      }
-      if (args.system === JUDGE_NLI_SYSTEM) {
-        const parsed = JSON.parse(prompt) as {
-          citations?: Array<{ citation?: string }>;
-        };
-        const citations = (parsed.citations ?? [])
-          .map((row) => row.citation)
-          .filter((value): value is string => typeof value === "string");
-        return respond({
-          entailment: citations.map((citation) => ({
-            citation,
-            score: 0.95,
-            entailed: true,
-            unsupported_claims: [],
-          })),
-        });
+      if (args.system === REVIEW_CHALLENGE_SYSTEM) {
+        return respond(reviewChallengePayload);
       }
       throw new Error(
         `Unrouted chat_json system prompt: ${args.system.slice(0, 60)}`,
@@ -443,7 +364,6 @@ describe("Phase 4 autonomous lifecycle loop (§6, §9, §14.2)", {
       RAG_RERANK_K: "6",
       RAG_MIN_SCORE: "0.35",
       RAG_TIMEOUT_MS: "30000",
-      TOT_BRANCH_FACTOR: "3",
       MAX_REVIEW_CYCLES: "3",
       SCHEDULER_MAX_TIMERS: "100",
     });
@@ -515,6 +435,10 @@ describe("Phase 4 autonomous lifecycle loop (§6, §9, §14.2)", {
     }
   }
 
+  async function freshReviewIncident(title: string) {
+    return (await agent.orchestrator.intake({ ...FIXTURE, title })).incident;
+  }
+
   const spool = (): Promise<IndicatorSpoolRecord[]> =>
     store.listIndicatorSpool();
 
@@ -559,7 +483,9 @@ describe("Phase 4 autonomous lifecycle loop (§6, §9, §14.2)", {
       "A",
       "A",
     ]);
-    expect(investigation.rootCause.tot_posterior).toBeCloseTo(0.54 / 0.71, 6);
+    expect(investigation.rootCause.cause).toBe(
+      "Stale service credential allowed bulk export",
+    );
     expect(investigation.auditLink).not.toBeNull();
     expect(investigation.riskSignal).not.toBeNull();
 
@@ -655,8 +581,7 @@ describe("Phase 4 autonomous lifecycle loop (§6, §9, §14.2)", {
     expect(attrs.mttd_hours).toBeCloseTo(10, 6);
 
     expect(await store.listActiveTimers(code)).toHaveLength(0);
-    const outcomes = await store.listIncidentOutcomes();
-    expect(outcomes.some((row) => row.incident_code === code)).toBe(true);
+    expect(closed.incident.evidence_refs ?? "").toContain("CLOSE_APPROVED:");
   });
 
   it("A05: blocks notify with zero recipients, keeps the pack approved and resumes", async () => {
@@ -868,5 +793,154 @@ describe("Phase 4 autonomous lifecycle loop (§6, §9, §14.2)", {
       expect(entry.idempotency_key.length).toBeGreaterThan(0);
       expect(entry.result_ref).toContain(":");
     }
+  });
+
+  it("reviewer: blocks approval on a high-severity model challenge", async () => {
+    const incident = await freshReviewIncident("Reviewer high challenge");
+    reviewChallengePayload = {
+      challenges: [
+        {
+          target: "item_a_nature",
+          challenge: "Nature omits the storage location",
+          severity: "high",
+          evidence_required: "Hosting location evidence",
+        },
+      ],
+    };
+
+    const result = await agent.reviewer.review(
+      {
+        incident_code: incident.incident_code,
+        pack_type: "authority",
+        content_sha256: "a".repeat(64),
+        body_text:
+          "We detected a breach and notified the supervisory authority.",
+        citations: [authorityCitation],
+        numeric_approvals: [],
+        plain_language_waiver: null,
+        checklist: null,
+      },
+      incident,
+    );
+
+    expect(result.approved).toBe(false);
+    expect(result.rejection?.item).toBe("item_a_nature");
+    expect(result.challenges[0]?.severity).toBe("high");
+  });
+
+  it("reviewer: rejects a malformed challenge response instead of approving", async () => {
+    const incident = await freshReviewIncident("Reviewer malformed challenge");
+    reviewChallengePayload = {};
+
+    await expect(
+      agent.reviewer.review(
+        {
+          incident_code: incident.incident_code,
+          pack_type: "authority",
+          content_sha256: "a".repeat(64),
+          body_text:
+            "We detected a breach and notified the supervisory authority.",
+          citations: [authorityCitation],
+          numeric_approvals: [],
+          plain_language_waiver: null,
+          checklist: null,
+        },
+        incident,
+      ),
+    ).rejects.toBeInstanceOf(ModelSchemaViolationError);
+  });
+
+  it("reviewer: rejects unredacted PII without echoing the value", async () => {
+    const incident = await freshReviewIncident("Reviewer pii leakage");
+    reviewChallengePayload = { challenges: [] };
+
+    const result = await agent.reviewer.review(
+      {
+        incident_code: incident.incident_code,
+        pack_type: "authority",
+        content_sha256: "a".repeat(64),
+        body_text: "We emailed the applicant at juan@example.test.",
+        citations: [authorityCitation],
+        numeric_approvals: [],
+        plain_language_waiver: null,
+        checklist: null,
+      },
+      incident,
+    );
+
+    expect(result.approved).toBe(false);
+    expect(result.rejection?.item).toBe("pii_leakage");
+    expect(result.rejection?.required_fix).not.toContain("juan@example.test");
+  });
+
+  it("reviewer: rejects an authority pack without DPO contact data", async () => {
+    const incident = {
+      ...(await freshReviewIncident("Reviewer dpo gap")),
+      dpo_contact_name: null,
+    };
+    reviewChallengePayload = { challenges: [] };
+
+    const result = await agent.reviewer.review(
+      {
+        incident_code: incident.incident_code,
+        pack_type: "authority",
+        content_sha256: "a".repeat(64),
+        body_text:
+          "We detected a breach and notified the supervisory authority.",
+        citations: [authorityCitation],
+        numeric_approvals: [],
+        plain_language_waiver: null,
+        checklist: null,
+      },
+      incident,
+    );
+
+    expect(result.approved).toBe(false);
+    expect(result.rejection?.item).toBe("dpo_contact_name");
+  });
+
+  it("reviewer: rejects a resolution without the full close checklist", async () => {
+    const incident = await freshReviewIncident("Reviewer checklist gap");
+    reviewChallengePayload = { challenges: [] };
+
+    const result = await agent.reviewer.reviewResolution(
+      {
+        incident_code: incident.incident_code,
+        pack_type: "resolution",
+        content_sha256: "a".repeat(64),
+        body_text: "",
+        citations: [],
+        numeric_approvals: [],
+        plain_language_waiver: null,
+        checklist: ["analysis_action"],
+      },
+      incident,
+    );
+
+    expect(result.approved).toBe(false);
+    expect(result.rejection?.item).toBe("resolution_action_or_considered");
+  });
+
+  it("reviewer: enforces plain language on a resolution with a full checklist", async () => {
+    const incident = await freshReviewIncident("Reviewer plain language");
+    reviewChallengePayload = { challenges: [] };
+
+    const result = await agent.reviewer.reviewResolution(
+      {
+        incident_code: incident.incident_code,
+        pack_type: "resolution",
+        content_sha256: "a".repeat(64),
+        body_text:
+          "We have reviewed every action taken during this incident and we confirm that all containment measures remain in place across every affected production system and every related backup system without exception.",
+        citations: [],
+        numeric_approvals: [],
+        plain_language_waiver: null,
+        checklist: [...CLOSE_CHECKLIST_ITEMS],
+      },
+      incident,
+    );
+
+    expect(result.approved).toBe(false);
+    expect(result.rejection?.item).toBe("PLAIN_LANGUAGE_VIOLATION");
   });
 });

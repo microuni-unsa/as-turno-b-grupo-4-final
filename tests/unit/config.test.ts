@@ -1,10 +1,4 @@
-import childProcess from "node:child_process";
-import fs from "node:fs";
-import {
-  decryptSopsFile,
-  loadConfig,
-  loadModelProviderOptions,
-} from "@pims/config";
+import { loadConfig, loadModelProviderOptions } from "@pims/config";
 import { ConfigError } from "@pims/types";
 import { describe, expect, it, vi } from "vitest";
 
@@ -36,7 +30,6 @@ describe("Configuration Manager", () => {
     expect(config.IDEMPOTENCY_KEY_PREFIX).toBe("agi1");
     expect(config.SUBJECT_NOTICE_POLICY).toBe("high_risk_only");
     expect(config.HUMAN_VETO_WINDOW_MIN).toBe(0);
-    expect(config.VOICE_PRIMARY_LANG).toBe("es-PE");
     expect(config.LOG_PII).toBe(false);
     expect(config.ATTACHMENT_MAX_MB).toBe(10);
     expect(config.EVIDENCE_HASH).toBe("sha256");
@@ -132,6 +125,39 @@ describe("Configuration Manager", () => {
     }
   });
 
+  it("treats an omitted VISION_MODEL as undefined", () => {
+    const env = { ...baseValidEnv };
+    delete env.VISION_MODEL;
+    expect(loadConfig(env).VISION_MODEL).toBeUndefined();
+  });
+
+  it("rejects a malformed VISION_MODEL", () => {
+    const env = { ...baseValidEnv, VISION_MODEL: "not-a-model-config" };
+    expect(() => loadConfig(env)).toThrow(ConfigError);
+    try {
+      loadConfig(env);
+    } catch (err) {
+      expect((err as ConfigError).code).toBe("CONFIG_TYPE:VISION_MODEL");
+    }
+  });
+
+  it("ignores ambient process.env for optional extras", () => {
+    vi.stubEnv("PIMS_EXTRA_HEADERS_JSON", '{"FromEnv":"1"}');
+    vi.stubEnv(
+      "VISION_MODEL",
+      "mistral,pixtral-12b-2409,https://api.mistral.ai,MISTRAL_API_KEY,20000,3,fallback:none",
+    );
+    try {
+      const env = { ...baseValidEnv };
+      delete env.VISION_MODEL;
+      const config = loadConfig(env);
+      expect(config.PIMS_EXTRA_HEADERS_JSON).toBeUndefined();
+      expect(config.VISION_MODEL).toBeUndefined();
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
   it("validates PIMS_BASE_URL type format", () => {
     const env = { ...baseValidEnv, PIMS_BASE_URL: "not-a-valid-url" };
     expect(() => loadConfig(env)).toThrow(ConfigError);
@@ -157,32 +183,127 @@ describe("Configuration Manager", () => {
     }
   });
 
-  describe("SOPS Decryption", () => {
-    it("fails fast when SOPS file does not exist", () => {
-      vi.spyOn(fs, "existsSync").mockReturnValue(false);
-      expect(() => decryptSopsFile("secrets/missing.enc.json")).toThrow(
-        ConfigError,
+  describe("PIMS_EXTRA_HEADERS_JSON and PIMS_COOKIES_JSON", () => {
+    it("successfully parses valid JSON object string for PIMS_EXTRA_HEADERS_JSON and PIMS_COOKIES_JSON", () => {
+      const config = loadConfig({
+        ...baseValidEnv,
+        PIMS_EXTRA_HEADERS_JSON: '{"X-Custom-Header":"test-val"}',
+        PIMS_COOKIES_JSON: '{"session":"sess_abc"}',
+      });
+      expect(config.PIMS_EXTRA_HEADERS_JSON).toBe(
+        '{"X-Custom-Header":"test-val"}',
       );
+      expect(config.PIMS_COOKIES_JSON).toBe('{"session":"sess_abc"}');
+    });
+
+    it("throws ConfigError with code CONFIG_TYPE:PIMS_EXTRA_HEADERS_JSON when PIMS_EXTRA_HEADERS_JSON is invalid JSON", () => {
+      expect(() =>
+        loadConfig({
+          ...baseValidEnv,
+          PIMS_EXTRA_HEADERS_JSON: "{invalid",
+        }),
+      ).toThrow(ConfigError);
       try {
-        decryptSopsFile("secrets/missing.enc.json");
+        loadConfig({
+          ...baseValidEnv,
+          PIMS_EXTRA_HEADERS_JSON: "{invalid",
+        });
       } catch (err) {
-        expect((err as ConfigError).code).toBe("CONFIG_SOPS_NOT_FOUND");
+        expect((err as ConfigError).code).toBe(
+          "CONFIG_TYPE:PIMS_EXTRA_HEADERS_JSON",
+        );
       }
-      vi.restoreAllMocks();
+
+      expect(() =>
+        loadConfig({
+          ...baseValidEnv,
+          PIMS_EXTRA_HEADERS_JSON: "123",
+        }),
+      ).toThrow(ConfigError);
+      try {
+        loadConfig({
+          ...baseValidEnv,
+          PIMS_EXTRA_HEADERS_JSON: "123",
+        });
+      } catch (err) {
+        expect((err as ConfigError).code).toBe(
+          "CONFIG_TYPE:PIMS_EXTRA_HEADERS_JSON",
+        );
+      }
+
+      expect(() =>
+        loadConfig({
+          ...baseValidEnv,
+          PIMS_EXTRA_HEADERS_JSON: '{"X-Num":1}',
+        }),
+      ).toThrow(ConfigError);
+      try {
+        loadConfig({
+          ...baseValidEnv,
+          PIMS_EXTRA_HEADERS_JSON: '{"X-Num":1}',
+        });
+      } catch (err) {
+        expect((err as ConfigError).code).toBe(
+          "CONFIG_TYPE:PIMS_EXTRA_HEADERS_JSON",
+        );
+      }
     });
 
-    it("decrypts SOPS file with mocked execFileSync", () => {
-      vi.spyOn(fs, "existsSync").mockReturnValue(true);
-      vi.spyOn(childProcess, "execFileSync").mockReturnValue(
-        JSON.stringify({ SECRET_TOKEN: "decrypted_secret_val" }),
-      );
+    it("throws ConfigError with code CONFIG_TYPE:PIMS_COOKIES_JSON when PIMS_COOKIES_JSON is invalid JSON", () => {
+      expect(() =>
+        loadConfig({
+          ...baseValidEnv,
+          PIMS_COOKIES_JSON: "{invalid",
+        }),
+      ).toThrow(ConfigError);
+      try {
+        loadConfig({
+          ...baseValidEnv,
+          PIMS_COOKIES_JSON: "{invalid",
+        });
+      } catch (err) {
+        expect((err as ConfigError).code).toBe("CONFIG_TYPE:PIMS_COOKIES_JSON");
+      }
 
-      const secrets = decryptSopsFile("secrets/dev.enc.json");
-      expect(secrets.SECRET_TOKEN).toBe("decrypted_secret_val");
-      vi.restoreAllMocks();
+      expect(() =>
+        loadConfig({
+          ...baseValidEnv,
+          PIMS_COOKIES_JSON: "123",
+        }),
+      ).toThrow(ConfigError);
+      try {
+        loadConfig({
+          ...baseValidEnv,
+          PIMS_COOKIES_JSON: "123",
+        });
+      } catch (err) {
+        expect((err as ConfigError).code).toBe("CONFIG_TYPE:PIMS_COOKIES_JSON");
+      }
+
+      expect(() =>
+        loadConfig({
+          ...baseValidEnv,
+          PIMS_COOKIES_JSON: '{"n":1}',
+        }),
+      ).toThrow(ConfigError);
+      try {
+        loadConfig({
+          ...baseValidEnv,
+          PIMS_COOKIES_JSON: '{"n":1}',
+        });
+      } catch (err) {
+        expect((err as ConfigError).code).toBe("CONFIG_TYPE:PIMS_COOKIES_JSON");
+      }
     });
+  });
 
-    it("builds provider options from decrypted SOPS credentials", () => {
+  describe("loadModelProviderOptions", () => {
+    it("builds provider options from credentials", () => {
+      const opts = loadModelProviderOptions({
+        OPENAI_API_KEY: "sk-test-key",
+      });
+      expect(opts).toEqual({ apiKey: "sk-test-key" });
+
       expect(
         loadModelProviderOptions({
           OPENAI_API_KEY: "k",

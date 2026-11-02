@@ -1,10 +1,10 @@
-import type { NormativeKnowledgeGraph } from "@pims/rag/knowledge-graph.ts";
 import {
   DEFAULT_EMBEDDING_DIM,
   MODEL_ROUTE_RAG,
+  RAG_BM25_K,
+  RAG_DENSE_K,
   RAG_EMBED_BATCH_SIZE,
   RAG_EMBED_CONCURRENCY,
-  RAG_REWRITE_BM25_K,
 } from "@pims/types/constants.ts";
 import {
   ModelUnavailableError,
@@ -20,13 +20,11 @@ export interface IndexerOptions {
   // Runtime-DI exemption: class instances; no serializable config member
   modelProvider: ModelProvider;
   pgClient?: postgres.Sql;
-  knowledgeGraph?: NormativeKnowledgeGraph;
 }
 
 export class RagIndexer {
   private readonly modelProvider: ModelProvider;
   private readonly pgClient?: postgres.Sql;
-  private readonly knowledgeGraph?: NormativeKnowledgeGraph;
   private isIngesting = false;
   private corpusVersion = "";
   private indexedChunks: Map<string, CorpusChunk> = new Map();
@@ -35,7 +33,6 @@ export class RagIndexer {
   constructor(options: IndexerOptions) {
     this.modelProvider = options.modelProvider;
     this.pgClient = options.pgClient;
-    this.knowledgeGraph = options.knowledgeGraph;
     this.miniSearch = new MiniSearch<CorpusChunk>({
       idField: "chunk_id",
       fields: ["text", "article_or_clause"],
@@ -97,11 +94,6 @@ export class RagIndexer {
       this.miniSearch.removeAll();
       this.miniSearch.addAll(chunks);
 
-      if (this.knowledgeGraph) {
-        await this.knowledgeGraph.indexNodeEmbeddings(this.modelProvider);
-        await this.knowledgeGraph.linkChunks(chunks, this.modelProvider);
-      }
-
       if (this.pgClient) {
         await this.initPgvector();
         await this.pgClient`DELETE FROM rag_corpus_chunks;`;
@@ -147,7 +139,7 @@ export class RagIndexer {
 
   searchBM25(
     query: string,
-    limit = RAG_REWRITE_BM25_K,
+    limit = RAG_BM25_K,
   ): Array<{ chunk_id: string; score: number }> {
     const results = this.miniSearch.search(query);
     return results.slice(0, limit).map((r) => ({
@@ -158,7 +150,7 @@ export class RagIndexer {
 
   async searchPgvector(
     vector: number[],
-    limit = RAG_REWRITE_BM25_K,
+    limit = RAG_DENSE_K,
   ): Promise<Array<{ chunk_id: string; score: number }>> {
     if (!this.pgClient) {
       throw new ModelUnavailableError(

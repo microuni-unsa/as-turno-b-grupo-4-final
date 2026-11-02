@@ -7,24 +7,21 @@ import {
   bundleManifestsTable,
   dedupeIndexTable,
   draftPacksTable,
-  incidentOutcomesTable,
   indicatorSpoolTable,
   leasesTable,
   reviewApprovalsTable,
   riskQueueTable,
+  rootCausesTable,
   stagedAttachmentsTable,
   timersTable,
   toolLedgerTable,
-  totAnalysesTable,
   triageCalibrationTable,
 } from "@pims/evidence/schema.ts";
 import {
-  type IncidentOutcome,
-  IncidentOutcomeSchema,
   type ReviewApproval,
   ReviewApprovalSchema,
-  type TotAnalysis,
-  TotAnalysisSchema,
+  type RootCause,
+  RootCauseSchema,
   type TriageCalibration,
   TriageCalibrationSchema,
 } from "@pims/types/agent.ts";
@@ -295,15 +292,6 @@ export class EvidenceStore {
         note TEXT NOT NULL
       );
 
-      CREATE TABLE IF NOT EXISTS evidence.incident_outcomes (
-        incident_code VARCHAR(64) PRIMARY KEY,
-        awareness_at_utc TIMESTAMPTZ NOT NULL,
-        closed_at_utc TIMESTAMPTZ NOT NULL,
-        severity VARCHAR(1) NOT NULL,
-        review_cycles INTEGER NOT NULL,
-        sla_72h_met BOOLEAN NOT NULL,
-        recorded_at_utc TIMESTAMPTZ NOT NULL
-      );
 
       CREATE TABLE IF NOT EXISTS evidence.triage_calibration (
         id SERIAL PRIMARY KEY,
@@ -313,7 +301,7 @@ export class EvidenceStore {
         recorded_at_utc TIMESTAMPTZ NOT NULL
       );
 
-      CREATE TABLE IF NOT EXISTS evidence.tot_analyses (
+      CREATE TABLE IF NOT EXISTS evidence.root_causes (
         incident_code VARCHAR(64) PRIMARY KEY,
         analysis_json JSONB NOT NULL,
         created_at_utc TIMESTAMPTZ NOT NULL
@@ -1162,26 +1150,26 @@ export class EvidenceStore {
     }
   }
 
-  async saveTotAnalysis(
+  async saveRootCause(
     incidentCode: string,
-    analysis: TotAnalysis,
+    rootCause: RootCause,
   ): Promise<void> {
-    const parsed = TotAnalysisSchema.safeParse(analysis);
+    const parsed = RootCauseSchema.safeParse(rootCause);
     if (!parsed.success) {
-      throw new EvidenceStoreWriteError("Invalid ToT analysis", {
+      throw new EvidenceStoreWriteError("Invalid root cause", {
         issues: zodIssuesToDetails(parsed.error),
       });
     }
     const now = new Date();
     await this.db
-      .insert(totAnalysesTable)
+      .insert(rootCausesTable)
       .values({
         incident_code: incidentCode,
         analysis_json: parsed.data,
         created_at_utc: now,
       })
       .onConflictDoUpdate({
-        target: totAnalysesTable.incident_code,
+        target: rootCausesTable.incident_code,
         set: {
           analysis_json: parsed.data,
           created_at_utc: now,
@@ -1189,20 +1177,20 @@ export class EvidenceStore {
       });
   }
 
-  async getTotAnalysis(incidentCode: string): Promise<TotAnalysis | null> {
+  async getRootCause(incidentCode: string): Promise<RootCause | null> {
     const rows = await this.db
       .select()
-      .from(totAnalysesTable)
-      .where(eq(totAnalysesTable.incident_code, incidentCode))
+      .from(rootCausesTable)
+      .where(eq(rootCausesTable.incident_code, incidentCode))
       .limit(1);
 
     if (rows.length === 0 || !rows[0]) {
       return null;
     }
 
-    const parsed = TotAnalysisSchema.safeParse(rows[0].analysis_json);
+    const parsed = RootCauseSchema.safeParse(rows[0].analysis_json);
     if (!parsed.success) {
-      throw new EvidenceStoreWriteError("Invalid stored ToT analysis", {
+      throw new EvidenceStoreWriteError("Invalid stored root cause", {
         issues: zodIssuesToDetails(parsed.error),
       });
     }
@@ -1569,58 +1557,6 @@ export class EvidenceStore {
       embedding_vector: r.embedding_vector,
       is_deleted: r.is_deleted,
     }));
-  }
-
-  async recordIncidentOutcome(outcome: IncidentOutcome): Promise<void> {
-    const parsed = IncidentOutcomeSchema.safeParse(outcome);
-    if (!parsed.success) {
-      throw new EvidenceStoreWriteError("Invalid incident outcome", {
-        issues: zodIssuesToDetails(parsed.error),
-      });
-    }
-    const data = parsed.data;
-    const values = {
-      incident_code: data.incident_code,
-      awareness_at_utc: new Date(data.awareness_at_utc),
-      closed_at_utc: new Date(data.closed_at_utc),
-      severity: data.severity,
-      review_cycles: data.review_cycles,
-      sla_72h_met: data.sla_72h_met,
-      recorded_at_utc: new Date(data.recorded_at_utc),
-    };
-
-    await this.db
-      .insert(incidentOutcomesTable)
-      .values(values)
-      .onConflictDoUpdate({
-        target: incidentOutcomesTable.incident_code,
-        set: values,
-      });
-  }
-
-  async listIncidentOutcomes(): Promise<IncidentOutcome[]> {
-    const rows = await this.db
-      .select()
-      .from(incidentOutcomesTable)
-      .orderBy(asc(incidentOutcomesTable.closed_at_utc));
-
-    return rows.map((row) => {
-      const parsed = IncidentOutcomeSchema.safeParse({
-        incident_code: row.incident_code,
-        awareness_at_utc: row.awareness_at_utc.toISOString(),
-        closed_at_utc: row.closed_at_utc.toISOString(),
-        severity: row.severity,
-        review_cycles: row.review_cycles,
-        sla_72h_met: row.sla_72h_met,
-        recorded_at_utc: row.recorded_at_utc.toISOString(),
-      });
-      if (!parsed.success) {
-        throw new EvidenceStoreWriteError("Invalid incident outcome row", {
-          issues: zodIssuesToDetails(parsed.error),
-        });
-      }
-      return parsed.data;
-    });
   }
 
   async saveTriageCalibration(sample: TriageCalibration): Promise<void> {

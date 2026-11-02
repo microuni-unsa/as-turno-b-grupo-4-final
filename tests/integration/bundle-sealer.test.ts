@@ -89,18 +89,10 @@ describe("BundleSealer Integration Suite (Testcontainers PostgreSQL)", {
 
   const rootCause: EvidenceBundleRootCause = {
     method: "5-whys",
-    tot_posterior: 0.94,
-    summary: "Unsanitized user input concatenation in legacy search query",
+    cause: "Unsanitized user input concatenation in legacy search query",
     systemic: false,
-    counterfactuals: [
-      {
-        control_code: "APP-SEC-INJ-01",
-        blocks_cut_set: true,
-        residual_probability_delta: -0.9,
-        proof_rationale:
-          "Parameterized queries with ORM strictly prevent arbitrary SQL execution",
-      },
-    ],
+    remediation:
+      "Parameterized queries with ORM strictly prevent arbitrary SQL execution",
   };
 
   describe("Evidence bundle assembly and sealing", () => {

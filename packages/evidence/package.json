@@ -9,12 +9,9 @@
     "@pims/pims-adapter": "workspace:*",
     "@pims/types": "workspace:*",
     "drizzle-orm": "^0.45.4",
-    "file-type": "^22.3.0",
     "libphonenumber-js": "^1.13.15",
-    "mammoth": "^1.13.0",
     "postgres": "^4.0.0",
     "tldts": "^7.4.19",
-    "word-extractor": "^1.0.4",
     "zod": "^3.24.2"
   }
 }

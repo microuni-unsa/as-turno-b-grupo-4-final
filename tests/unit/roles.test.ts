@@ -99,10 +99,10 @@ describe("Phase 4 role registry (§5.1–§5.4)", () => {
     expect(handle.promptSha256).toMatch(HEX64);
   });
 
-  it("exposes the eleven skills with resolvable tool names", () => {
+  it("exposes the ten skills with resolvable tool names", () => {
     const skills = registry.listSkills();
-    expect(AGENT_SKILLS).toHaveLength(11);
-    expect(skills).toHaveLength(11);
+    expect(AGENT_SKILLS).toHaveLength(10);
+    expect(skills).toHaveLength(10);
 
     const knownTools = new Set<ToolName>(AGENT_TOOL_NAMES);
     for (const skill of skills) {
@@ -128,13 +128,7 @@ describe("Phase 4 role registry (§5.1–§5.4)", () => {
         "scheduler_cancel",
         "indicator_emit",
       ],
-      intake: [
-        "pims_list_incidents",
-        "pims_create_incident",
-        "rag_query",
-        "stt_transcribe",
-        "tts_synthesize",
-      ],
+      intake: ["pims_list_incidents", "pims_create_incident", "rag_query"],
       triage: [
         "pims_get_incident",
         "pims_list_incidents",
@@ -172,7 +166,6 @@ describe("Phase 4 role registry (§5.1–§5.4)", () => {
         "pims_list_incidents",
         "pims_update_incident",
         "pims_transition_status",
-        "tts_synthesize",
         "indicator_emit",
       ],
     };

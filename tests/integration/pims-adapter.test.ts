@@ -14,6 +14,7 @@ import {
   PimsValidationError,
 } from "@pims/types";
 import { PIMS_TEST_SEED_PASSWORD } from "@pims/types/constants.ts";
+import { PimsGateBlockedError } from "@pims/types/errors.ts";
 import {
   PostgreSqlContainer,
   type StartedPostgreSqlContainer,
@@ -505,6 +506,22 @@ describe("PIMS Client Adapter & Reverse-Engineered DRF API Integration Suite", (
         },
       });
       expect(res.status).toBe(403);
+    });
+
+    it("passes extraHeaders and cookies through to the PIMS endpoint", async () => {
+      const testAdapter = new PimsAdapter({
+        baseUrl: adapter.baseUrl,
+        schema: adapter.schema,
+        tokenCmd: (adapter as unknown as { tokenCmd?: string[] }).tokenCmd ?? [
+          "echo",
+          "tok",
+        ],
+        extraHeaders: { "X-Simulate-Error": "403_LICENSE" },
+        cookies: { session: "sess_123" },
+      });
+      await expect(testAdapter.listIncidents()).rejects.toThrow(
+        PimsGateBlockedError,
+      );
     });
   });
 

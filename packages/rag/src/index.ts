@@ -1,6 +1,5 @@
 export * from "@pims/rag/corpus-loader.ts";
 export * from "@pims/rag/indexer.ts";
-export * from "@pims/rag/knowledge-graph.ts";
 export * from "@pims/rag/loaders/chunker.ts";
 export * from "@pims/rag/loaders/markdown.ts";
 export * from "@pims/rag/loaders/pdf.ts";

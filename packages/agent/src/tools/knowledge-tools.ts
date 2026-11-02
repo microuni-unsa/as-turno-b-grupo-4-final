@@ -3,7 +3,6 @@ import type {
   ToolDependencies,
   ToolHandler,
 } from "@pims/agent/tools/registry.ts";
-import { extractPii } from "@pims/evidence/forensic-patterns.ts";
 import {
   type IndicatorEmitArgs,
   IndicatorEmitArgsSchema,
@@ -13,47 +12,11 @@ import {
   SchedulerArmArgsSchema,
   type SchedulerCancelArgs,
   SchedulerCancelArgsSchema,
-  type SttTranscribeArgs,
-  SttTranscribeArgsSchema,
-  SttTranscribeResultSchema,
-  type TtsSynthesizeArgs,
-  TtsSynthesizeArgsSchema,
-  TtsSynthesizeResultSchema,
 } from "@pims/types/agent.ts";
-import { PII_PHONE_REGIONS } from "@pims/types/constants.ts";
 import {
   RagNoEvidenceError,
   SchedulerPastDueError,
-  TtsPiiLeakBlockedError,
 } from "@pims/types/errors.ts";
-import { findPhoneNumbersInText } from "libphonenumber-js";
-
-const EMAIL_PATTERN = /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/g;
-const DNI_PATTERN = /(?<!\d)\d{8}(?!\d)/g;
-const RUC_PATTERN = /(?<!\d)(?:10|15|17|20)\d{9}(?!\d)/g;
-
-function detectTtsPii(text: string): string[] {
-  const found = new Set<string>(extractPii(text));
-
-  for (const match of text.matchAll(EMAIL_PATTERN)) {
-    found.add(match[0]);
-  }
-  for (const match of text.matchAll(RUC_PATTERN)) {
-    found.add(match[0]);
-  }
-  for (const match of text.matchAll(DNI_PATTERN)) {
-    found.add(match[0]);
-  }
-  for (const region of PII_PHONE_REGIONS) {
-    for (const match of findPhoneNumbersInText(text, region)) {
-      if (match.number.isValid()) {
-        found.add(match.number.number);
-      }
-    }
-  }
-
-  return Array.from(found);
-}
 
 export function createKnowledgeToolHandlers(
   deps: ToolDependencies,
@@ -81,35 +44,8 @@ export function createKnowledgeToolHandlers(
         query: result.query,
         passages,
         citations: result.citations,
-        crag_grade: result.crag_grade,
-        eval: result.crag_grade === "supported",
+        eval: passages.length > 0,
       });
-    },
-
-    stt_transcribe: async (_ctx, rawArgs) => {
-      const args = SttTranscribeArgsSchema.parse(rawArgs) as SttTranscribeArgs;
-      const result = await deps.voice.transcribe({
-        audio_ref: args.audio_ref,
-        lang: args.lang,
-      });
-      return toJsonObject(SttTranscribeResultSchema.parse(result));
-    },
-
-    tts_synthesize: async (_ctx, rawArgs) => {
-      const args = TtsSynthesizeArgsSchema.parse(rawArgs) as TtsSynthesizeArgs;
-      const leaks = detectTtsPii(args.text);
-      if (leaks.length > 0) {
-        throw new TtsPiiLeakBlockedError(
-          "TTS text still contains PII patterns; apply the §8.5 redaction map first",
-          { patterns: leaks.length },
-        );
-      }
-      const result = await deps.voice.synthesize({
-        text: args.text,
-        voice: args.voice,
-        lang: args.lang,
-      });
-      return toJsonObject(TtsSynthesizeResultSchema.parse(result));
     },
 
     scheduler_arm: async (_ctx, rawArgs) => {

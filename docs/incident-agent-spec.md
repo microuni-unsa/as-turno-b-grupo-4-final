@@ -24,11 +24,11 @@ In scope (MUST implement all):
 
 1. Incident lifecycle on `core_incident` and its children (`core_incidentaction`, `core_incidentattachment`, `core_incidenthistory`, `core_incidentrecipient`), statuses `O/P/C`, via the §3 REST contract only.
 2. GDPR Article 33 authority notification packs and Article 34 data-subject communications, including the Article 34(3) exemption evaluation, per §2.
-3. Neuro-symbolic root-cause analysis with Tree-of-Thoughts (ToT) Bayesian hypothesis scoring, method selection (5-whys / fishbone / fault-tree), symbolic minimal cut-set counterfactual control simulation, multimodal forensic attachment inspection, evidence collection with SHA-256 hashing, and action sequencing `C*→A+→R`.
+3. Root-cause analysis with single-prompt method selection (5-whys / fishbone / fault-tree), evidence collection with SHA-256 hashing, and action sequencing `C*→A+→R`.
 4. Corrective-action linkage: auto-create or link `core_auditfinding` (`classification=N`) plus `core_auditactionplan` rows for qualifying incidents.
 5. Risk feedback: emit `core_riskevaluation` drafts (risk signals) into the open risk period for systemic root causes.
-6. Deadline scheduling with Weibull survival hazard forecasting: 72-hour authority clock, processor immediacy, high-risk subject immediacy, expedited internal review SLA, provisional Peru 48-hour clock.
-7. Multi-role orchestration with adversarial red-team constitutional multi-judge review, semantic-entropy hallucination gating, and split-conformal triage calibration (§5), autonomous loop (§6), Tri-Modal Agentic GraphRAG with HyDE, Personalized PageRank (PPR), and CRAG citations (§7), streaming voice intake with speaker diarization, acoustic anti-spoofing, paralinguistic urgency tagging, and dual-pass NER+regex redaction (§8).
+6. Deadline scheduling with countdown timers: 72-hour authority clock, processor immediacy, high-risk subject immediacy, expedited internal review SLA, provisional Peru 48-hour clock.
+7. Multi-role orchestration with adversarial challenge review and deterministic verification (§5), autonomous loop (§6), Dual-Modal RAG with Reciprocal Rank Fusion (RRF) and cross-encoder rerank citations (§7).
 8. Compliance artifacts (§10), security/privacy/safety (§11), reliability/observability/deployment (§12), configuration (§13), acceptance (§14).
 
 Out of scope in one line: this agent MUST NOT write risk treatments, audit checklists, assets, documents, consents, ARCO-P cases, trainings, catalogs, licenses, users, or platform AI settings; it reads the first four as context and ignores the rest.
@@ -155,7 +155,7 @@ Course rule (`data/class1.txt:22-150`): columns cláusulas / controles / agente,
 
 | Clauses / controls | Owner | Handoff |
 |---|---|---|
-| A.3.11, A.3.12 (both `unverified — confirm first` per §2.5), B.3.11, B.3.12, 10.2 incident rows, 9.2/9.3 incident rows | Agente de Incidentes (this spec) | — |
+| A.3.11, A.3.12 (provisional per §2.5), B.3.11, B.3.12, 10.2 incident rows, 9.2/9.3 incident rows | Agente de Incidentes (this spec) | — |
 | 6.1.3 risk treatment rows, `core_riskevaluation` lifecycle | Agente de Riesgos | This agent emits risk-signal drafts via §9.4; Riesgos owns scoring, treatment, verification |
 | 9.2 audit programme rows, `core_audit` / `core_auditfinding` lifecycle | Agente de Auditoría | This agent creates `N` findings linked to its incidents; Auditoría owns audits, checklists, audit closure |
 | 10.2 corrective-action rows, `core_auditactionplan` execution | Agente de Acciones Correctivas | This agent creates the action plan rows; Correctivas owns execution tracking and effectiveness review |
@@ -370,7 +370,6 @@ Required by: B.3.11 (define and communicate incident management processes, roles
 ```mermaid
 flowchart LR
     subgraph CH["Channels (untrusted)"]
-        VOICE[Voice calls / audio]
         FORM[Web intake form]
         APIIN[External signals<br/>SIEM / processor notice]
         CONSOLE[Operator console]
@@ -379,7 +378,6 @@ flowchart LR
         ORCH[orchestrator<br/>loop + policy + scheduler]
         ADAPT[pims-adapter<br/>§3 contract + idempotency]
         RAG[rag-service<br/>ingest / retrieve / cite]
-        VG[voice-gateway<br/>STT / TTS + redaction]
         NC[notice-composer<br/>Art 33/34 packs + exemptions]
         EV[evidence-store<br/>attachments + hashes + bundles]
         IE[indicator-emitter<br/>metric events]
@@ -389,13 +387,11 @@ flowchart LR
         HIST[(core_incidenthistory<br/>+ core_securitylog)]
     end
     MP[ModelProvider<br/>configurable cloud LLM<br/>§4.3]
-    VOICE <--> VG
     FORM --> ORCH
     APIIN --> ORCH
     CONSOLE <--> ORCH
     ORCH <--> ADAPT
     ORCH <--> RAG
-    ORCH <--> VG
     ORCH <--> NC
     ORCH <--> EV
     ORCH --> IE
@@ -411,14 +407,13 @@ flowchart LR
 |---|---|---|
 | `orchestrator` | Owns the §6 loop, policy evaluation, scheduler, leases, and all role dispatch. Sole component that calls tools. | Trusted core. MUST validate every tool result against §5 schemas; invalid result → `TOOL_RESULT_INVALID:<tool>` fail the step, never coerce. |
 | `pims-adapter` | Exclusive PIMS gateway: auth/session (§3.3), endpoint calls (§3.1 E01–E26), error map (§3.6), idempotency keys, read-modify-write for nested REPLACE arrays, logical-delete restore logic, live E22/E23/E24/E26 catalog and asset resolution. | Trust boundary PIMS↔agent. MUST NOT accept PIMS data without schema validation; unknown code → `PIMS_UNKNOWN_CODE`. |
-| `rag-service` | Corpus ingest with SHA-256 versioning, contextual chunk headers, Tri-Modal GraphRAG (Dense + BM25 + Normative Knowledge Graph), HyDE query expansion, CRAG self-grading, rerank, citation formatting, and the 10-query eval gate. | Trusted for retrieval; UNTRUSTED for content — every passage carries `doc_id:chunk:lines` and a non-normative flag where applicable; legal content without citation is rejected (§6.5). |
-| `voice-gateway` | Streaming STT/TTS provider calls, VAD barge-in, paralinguistic stress/urgency prosody scoring, language handling (`es-PE` primary, `en` fallback), dual-pass NER+regex PII redaction before synthesis, audio-ref retention. | Untrusted input (audio). Transcript confidence <`VOICE_MIN_CONFIDENCE` → `VOICE_LOW_CONFIDENCE`. Raw audio MUST NOT enter prompts or logs. |
-| `notice-composer` | Builds Art 33/34 packs from validated incident fields + RAG citations; runs the exemption decision tables and constitutional rubric pre-checks; produces drafts ONLY (never sends). | Trusted builder; output is inert until `compliance_reviewer` approves. |
-| `evidence-store` | PostgreSQL with Drizzle ORM + blob staging: attachment bytes pre-upload, multimodal forensic scan reports, SHA-256 hashes, PII tags, bundle manifests, draft packs, leases, dedupe index, queued signals. | Trusted staging; MUST encrypt at rest (AES-256-GCM, key via env) and purge per retention (§13). |
+| `rag-service` | Corpus ingest with SHA-256 versioning, contextual chunk headers, Dual-Modal (Dense + BM25) retrieval with Reciprocal Rank Fusion (RRF) and cross-encoder rerank, citation formatting, and the 10-query eval gate. | Trusted for retrieval; UNTRUSTED for content — every passage carries `doc_id:chunk:lines` and a non-normative flag where applicable; legal content without citation is rejected (§6.5). |
+| `notice-composer` | Builds Art 33/34 packs from validated incident fields + RAG citations; runs the exemption decision tables; produces drafts ONLY (never sends). | Trusted builder; output is inert until `compliance_reviewer` approves. |
+| `evidence-store` | PostgreSQL with Drizzle ORM + blob staging: attachment bytes pre-upload, SHA-256 hash integrity verification, PII tags, bundle manifests, draft packs, leases, dedupe index, queued signals. | Trusted staging; MUST encrypt at rest (AES-256-GCM, key via env) and purge per retention (§13). |
 | `indicator-emitter` | Emits metric events per §10.6 on every state change; feeds Agente de Indicadores and 9.3.2(d) inputs. | Fire-and-forget with local spool; emission failure → `INDICATOR_SPOOL_FULL` (spool 10k events, then oldest dropped with counter — the single allowed lossy path, counters preserved). |
 | `operator-console` | Read-mostly UI: queue, incident timeline, drafts pending veto, audit trail view, kill-switch, grant/revoke recipient activation, capture re-run buttons. | Authenticated operators only (§11.1). Console actions are synchronous calls into `orchestrator`; console MUST NOT call PIMS directly. |
 
-Strict data flow: `channel → orchestrator → tools → pims-adapter/evidence-store → history/securitylog`. The LLM (via `ModelProvider`) NEVER touches PIMS, the evidence bytes, or raw audio; it receives redacted context (§11.3) and returns structured tool calls / drafts that the orchestrator validates before any effect.
+Strict data flow: `channel → orchestrator → tools → pims-adapter/evidence-store → history/securitylog`. The LLM (via `ModelProvider`) NEVER touches PIMS or the evidence bytes; it receives redacted context (§11.3) and returns structured tool calls / drafts that the orchestrator validates before any effect.
 
 Runtime: Bun + TypeScript reference (only toolchain pin in `flake.nix`). All contracts in §§5/7/8/10/13 are language-agnostic JSON/HTTP; a Python runtime swaps only this chapter and §12 packaging.
 
@@ -453,32 +448,30 @@ Routing table (concrete values live ONLY in §13; this table fixes the routing R
 
 | Route | Used by | Rule |
 |---|---|---|
-| `REASONING_MODEL` | ToT investigation, symbolic cut-set simulation, drafting, adversarial constitutional review | Complex reasoning; temperature `TEMP_REASONING` (§13); `logprobs` + semantic-entropy gate (`MAX_SEMANTIC_ENTROPY`) + JSON-schema enforced |
-| `FAST_MODEL` | classification, extraction, split-conformal triage, HyDE/CRAG | Latency-sensitive; temperature `TEMP_CLASSIFIER` (§13); `logprobs` + JSON-schema enforced |
-| `VISION_MODEL` | multimodal forensic attachment inspection (`investigator`) | Multimodal OCR + visual PII bounding-box detection + ELA/metadata tamper score + Art 34(3)(a) proof check; temperature `TEMP_CLASSIFIER` (§13); local pre-redaction crop |
+| `REASONING_MODEL` | single-prompt investigation, drafting, and adversarial challenge review | Complex reasoning; temperature `TEMP_REASONING` (§13); JSON-schema enforced |
+| `FAST_MODEL` | classification, extraction, split-conformal triage | Latency-sensitive; temperature `TEMP_CLASSIFIER` (§13); JSON-schema enforced |
+| `VISION_MODEL` | reserved provider capability (`vision_json`); no current caller after forensic-scanner removal | Optional (Required: No); temperature `TEMP_CLASSIFIER` (§13) |
 | `EMBEDDINGS_MODEL` | RAG ingest + query | Single model per corpus version; changing it REQUIRES full re-ingest (new corpus version) |
- | `RERANKER_MODEL` | RAG rerank stage | Cross-encoder or LLM-rank; score threshold §7.4 |
- | `chat_json` route selection | classification/HyDE/CRAG/decomposition vs ToT/drafting/review | `route` arg (`FAST_MODEL` = classification/HyDE/CRAG/decomposition; `REASONING_MODEL` = ToT/drafting/review); caller-supplied, never inferred from temperature |
- | `RERANKER_MODEL` provider `cohere` | RAG rerank stage via native API | `POST {endpoint}/v2/rerank` (`{query, documents, top_n}`, `top_n` bounded); explicit endpoint+model required in `RERANKER_MODEL`, missing → `MODEL_UNAVAILABLE:RERANKER_MODEL` |
-| `STT_PROVIDER`/`STT_MODEL` | voice intake | Streaming-capable; word timestamps REQUIRED for slot-fill audit |
-| `TTS_PROVIDER`/`TTS_MODEL`/`TTS_VOICE` | readback + prompts | `es-PE` voice default; redacted text only |
+| `RERANKER_MODEL` | RAG rerank stage | Cross-encoder or LLM-rank; score threshold §7.4 |
+| `chat_json` route selection | classification/extraction/triage vs investigation/drafting/review | `route` arg (`FAST_MODEL` = classification/extraction/triage; `REASONING_MODEL` = investigation/drafting/review); caller-supplied, never inferred from temperature |
+| `RERANKER_MODEL` provider `cohere` | RAG rerank stage via native API | `POST {endpoint}/v2/rerank` (`{query, documents, top_n}`, `top_n` bounded); explicit endpoint+model required in `RERANKER_MODEL`, missing → `MODEL_UNAVAILABLE:RERANKER_MODEL` |
 
-Zero-fallback rule: no silent provider/model downgrade, no temperature change, no retry-with-different-model. Provider error (5xx, quota, timeout, schema violation twice) → `MODEL_UNAVAILABLE:<route>:<reason>`: the orchestrator parks the affected incident state with deadlines preserved (§6.6) and pages the operator. Text intake continues when only voice routes fail (§8.6).
+Zero-fallback rule: no silent provider/model downgrade, no temperature change, no retry-with-different-model. Provider error (5xx, quota, timeout, schema violation twice) → `MODEL_UNAVAILABLE:<route>:<reason>`: the orchestrator parks the affected incident state with deadlines preserved (§6.6) and pages the operator.
 
 ### 4.4 Reference repository layout and runtime entrypoints
 
 The Bun + TypeScript implementation follows this exact layout (zero unmapped files):
 
-- `src/index.ts` — HTTP/WS server (`Bun.serve` on `DEPLOY_PORT`) managing `core_incident` intake and console workflows: `GET /healthz`, `GET /readyz`, `GET /metrics`, `POST /webhooks/intake` (HMAC `WEBHOOK_INGEST_SECRET_ENV` or bearer token; body: `{channel:"form"|"siem"|"processor", payload:object, idempotency_key:string}` → `202 {run_id, incident_code|null}`), `WS /voice/stream` (binary PCM16/Opus 16kHz frames + JSON control frames `{type:"barge_in"|"slot_state"|"redacted_tts", ...}`), and `/console/*` (`POST /console/halt`, `POST /console/resume`, `POST /console/veto`, `POST /console/recipients` — authenticated via PIMS operator JWT per §11.1).
+- `src/index.ts` — HTTP/WS server (`Bun.serve` on `DEPLOY_PORT`) managing `core_incident` intake and console workflows: `GET /healthz`, `GET /readyz`, `GET /metrics`, `POST /webhooks/intake` (HMAC `WEBHOOK_INGEST_SECRET_ENV` or bearer token; body: `{channel:"form"|"siem"|"processor_notice", payload:object, idempotency_key:string}` → `202 {run_id, incident_code|null}`), and `/console/*` (`POST /console/halt`, `POST /console/resume`, `POST /console/veto`, `POST /console/recipients` — authenticated via PIMS operator JWT per §11.1).
 - `src/config.ts` — Strict §13 config loader + constant verifier (`LOG_PII===false` enforcement).
 - `src/orchestrator/loop.ts` — Deterministic §6 state machine, step dispatcher, §6.5 post-step invariant verifier, lease manager.
 - `src/orchestrator/scheduler.ts` — Persistent timer wheel (`T72_AUTHORITY`, `T_PROCESSOR`, `T_SUBJECT`, `T_REVIEW_SLA`, `T_PERU_ADVISORY`, `T_PHASE_FOLLOWUP`, `T_RETRY`).
 - `src/orchestrator/roles.ts` — The 8 role definitions, SHA-256 prompt pin verifier, and §5.4 capability-handle factory.
 - `src/adapter/pims-adapter.ts` — §3.1 E01–E26 client, startup `NESTED_PROBE` runner, idempotency reconciler, soft-delete restore handler.
- - `src/rag/rag-service.ts` — Contextual chunker, MiniSearch BM25 + pgvector vector index + normative knowledge graph, HyDE + 3-way RRF + CRAG grader + §7.6 eval runner.
-- `src/voice/voice-gateway.ts` — WebSocket audio streamer, VAD barge-in, prosody urgency extractor, dual-pass NER+regex redactor, STT/TTS client.
-- `src/composer/notice-composer.ts` — Art 33/34 pack builder, canonical content hasher, 4-judge constitutional rubric evaluator.
-- `src/evidence/evidence-store.ts` — AES-256-GCM encrypted PostgreSQL + Drizzle ORM store (`timers`, `leases`, `dedupe_index`, `draft_packs`, `risk_queue`, `indicator_spool`, `tool_ledger`, `audio_refs`) + content-addressed blob store.
+- `src/rag/rag-service.ts` — Contextual chunker, pgvector dense index + MiniSearch BM25 lexical index, 2-way RRF + cross-encoder rerank + §7.6 eval runner.
+- `src/composer/notice-composer.ts` — Art 33/34 pack builder, canonical content hasher.
+- `src/review/reviewer.ts` — Single-pass adversarial challenge review and deterministic verification (checklist completeness, citation verification, plain-language check, PII scan).
+- `src/evidence/evidence-store.ts` — AES-256-GCM encrypted PostgreSQL + Drizzle ORM store (`timers`, `leases`, `dedupe_index`, `draft_packs`, `risk_queue`, `indicator_spool`, `tool_ledger`) + content-addressed blob store.
 - `src/indicators/indicator-emitter.ts` — §10.6 event calculator (MTTD/MTTR/SLA) + HMAC webhook sender.
 
 ## 5. Agent roles, skills, tools
@@ -491,18 +484,18 @@ Fixed set of 8. Each role has a versioned system prompt (`prompt_sha256` recorde
 
 | Role | System prompt (exact, versioned) | Tools MAY | Tools MUST NOT | Autonomy |
 |---|---|---|---|---|
-| `orchestrator` | `v1.0 "You are the incident-response orchestrator. Dispatch roles strictly per the §6 loop. Enforce transition guards (§6.2), timer arming (§6.4), and the invariants (§6.5). Never call PIMS directly except operator-console recipient management; emit tool calls only. Never invent fields, codes, or deadlines."` | `scheduler_arm`, `scheduler_cancel`, `indicator_emit`, `pims_manage_recipient` (console-triggered only), role-dispatch (internal) | all other `pims_*`, `rag_query`, `stt_*`, `tts_*` | Owns loop + policy + deadlines; ONLY role that arms/cancels timers, processes console recipient changes, and orders `O/P/C` transitions |
-| `intake` | `v1.0 "You extract incident facts from voice transcripts, forms, or signals into the §9.1 intake schema. Ask exactly one re-prompt per missing REQUIRED field, then apply §9.1 defaults. Never guess enums; cite the §3.5 map."` | `pims_create_incident`, `pims_list_incidents`, `stt_transcribe`, `tts_synthesize`, `rag_query` | `pims_notify`, `pims_transition_status`, `pims_add_action`, `pims_create_audit_action`, `pims_emit_risk_signal` | May create `status=O` only; MUST NOT set other statuses |
-| `triage` | `v1.0 "You classify incident_type/severity/impact per §9.2 using FAST_MODEL with conformal prediction calibration, citing §3.5 definitions and Recital 85-87 factors. Duplicate-check before any update."` | `pims_get_incident`, `pims_update_incident`, `pims_list_incidents`, `pims_transition_status` (`O→P` only), `rag_query` | `pims_create_incident`, `pims_notify`, `pims_transition_status` to `C`, `scheduler_*` | May update `O` fields and transition `O→P` once triage guard passes; MUST NOT close; MUST NOT arm timers (requests orchestrator) |
-| `investigator` | `v1.0 "You run Tree-of-Thoughts neuro-symbolic root-cause analysis and minimal cut-set counterfactual control simulation per §5.2, forensically inspect and collect hashed evidence, write C then A actions, link audit actions and risk signals per §9.4, and write R actions only with review_approval_id."` | `pims_get_incident`, `pims_list_incidents`, `pims_update_incident`, `pims_add_action` (`C`/`A`, plus `R` with `review_approval_id`), `pims_upload_attachment`, `pims_get_history`, `pims_search_risks`, `pims_emit_risk_signal`, `pims_create_audit_action`, `rag_query` | `pims_add_action` with `R` lacking `review_approval_id`, `pims_notify`, `pims_transition_status`, `pims_create_incident` | Adds `C`/`A` actions, links §9.4 audit/risk records, and adds `R` actions ONLY when holding a valid `review_approval_id` |
-| `drafter` | `v1.0 "You compose Art 33/34 packs per §10.1-10.2 from validated fields only. Every legal sentence carries a citation. Exemption claims require evidence pointers. Output is inert draft JSON."` | `pims_get_incident`, `pims_get_history`, `rag_query` | every `pims_*` mutation, `pims_notify`, `scheduler_*` | Writes drafts to evidence-store ONLY; MUST NOT notify or mutate PIMS |
-| `compliance_reviewer` | `v1.0 "You run an Adversarial Red-Team Prosecutor challenge followed by the 4-judge constitutional verification rubric (Legal Completeness, Citation NLI Entailment, Plain-Language Readability, Zero-Trust PII & Semantic Entropy Scan). Approve with id or reject with explicit reason + required fix. No silent approval."` | `pims_get_incident`, `pims_get_history`, `rag_query` | every `pims_*` mutation, `pims_notify` | SOLE approver of notify payloads and resolution sign-offs; veto = `REVIEW_REJECTED:<judge>:<item>:<required_fix>`; approval = `review_approval_id` (UUID, single-use per canonical content hash) |
+| `orchestrator` | `v1.0 "You are the incident-response orchestrator. Dispatch roles strictly per the incident lifecycle loop. Enforce transition guards, timer arming, and lifecycle invariants. Never call PIMS directly except operator-console recipient management; emit tool calls only. Never invent fields, codes, or deadlines."` | `scheduler_arm`, `scheduler_cancel`, `indicator_emit`, `pims_manage_recipient` (console-triggered only), role-dispatch (internal) | all other `pims_*`, `rag_query` | Owns loop + policy + deadlines; ONLY role that arms/cancels timers, processes console recipient changes, and orders `O/P/C` transitions |
+| `intake` | `v1.0 "You extract incident facts from forms or external signals into the intake schema. Ask exactly one re-prompt per missing REQUIRED field, then apply standard intake defaults. Never guess enums; cite the incident field map."` | `pims_create_incident`, `pims_list_incidents`, `rag_query` | `pims_notify`, `pims_transition_status`, `pims_add_action`, `pims_create_audit_action`, `pims_emit_risk_signal` | May create `status=O` only; MUST NOT set other statuses |
+| `triage` | `v1.0 "You classify incident_type/severity/impact using FAST_MODEL with conformal prediction calibration, citing incident taxonomy definitions and GDPR risk factors. Duplicate-check before any update."` | `pims_get_incident`, `pims_update_incident`, `pims_list_incidents`, `pims_transition_status` (`O→P` only), `rag_query` | `pims_create_incident`, `pims_notify`, `pims_transition_status` to `C`, `scheduler_*` | May update `O` fields and transition `O→P` once triage guard passes; MUST NOT close; MUST NOT arm timers (requests orchestrator) |
+| `investigator` | `v1.0 "You run root-cause analysis, forensically inspect and collect hashed evidence, link audit actions and risk signals, and write R actions only with review_approval_id."` | `pims_get_incident`, `pims_list_incidents`, `pims_update_incident`, `pims_add_action` (`C`/`A`, plus `R` with `review_approval_id`), `pims_upload_attachment`, `pims_get_history`, `pims_search_risks`, `pims_emit_risk_signal`, `pims_create_audit_action`, `rag_query` | `pims_add_action` with `R` lacking `review_approval_id`, `pims_notify`, `pims_transition_status`, `pims_create_incident` | Adds `C`/`A` actions, links §9.4 audit/risk records, and adds `R` actions ONLY when holding a valid `review_approval_id` |
+| `drafter` | `v1.0 "You compose Art 33/34 packs from validated fields only. Every legal sentence carries a citation. Exemption claims require evidence pointers. Output is inert draft JSON."` | `pims_get_incident`, `pims_get_history`, `rag_query` | every `pims_*` mutation, `pims_notify`, `scheduler_*` | Writes drafts to evidence-store ONLY; MUST NOT notify or mutate PIMS |
+| `compliance_reviewer` | `v1.0 "You challenge notice packs for legal completeness, ungrounded claims, plain-language failures, and personal data leakage. Approve with id or reject with explicit reason + required fix. No silent approval."` | `pims_get_incident`, `pims_get_history`, `rag_query` | every `pims_*` mutation, `pims_notify` | SOLE approver of notify payloads and resolution sign-offs; veto = `REVIEW_REJECTED:<judge>:<item>:<required_fix>`; approval = `review_approval_id` (UUID, single-use per canonical content hash) |
 | `notifier` | `v1.0 "You execute notification via pims_notify with a reviewer-approved pack id. Verify active recipients first. Record the outcome. Never edit pack content."` | `pims_notify`, `pims_list_recipients`, `pims_get_history`, `pims_update_incident` (measure flags only) | `pims_create_incident`, `pims_add_action`, `pims_create_audit_action`, pack editing | Acts ONLY on `review_approval_id` or veto-window expiry (§6.3); content-frozen |
-| `monitor` | `v1.0 "You watch timers, new attachments, and linked-object changes. Reopen on new evidence with its id. Transition P→C when the §9.6 checklist is satisfied. Emit indicator events on every transition."` | `pims_get_incident`, `pims_get_history`, `pims_list_incidents`, `pims_update_incident` (reopen + close per §9.6 rules), `pims_transition_status` (`C→P` reopen, `P→C` close), `tts_synthesize`, `indicator_emit` | `pims_create_incident`, `pims_notify`, `pims_add_action` | May move `C→P` ONLY with `REOPENED:<new_evidence_id>`; `P→C` ONLY with §9.6 close checklist satisfied |
+| `monitor` | `v1.0 "You watch timers, new attachments, and linked-object changes. Reopen on new evidence with its id. Transition P→C when the close checklist is satisfied. Emit indicator events on every transition."` | `pims_get_incident`, `pims_get_history`, `pims_list_incidents`, `pims_update_incident` (reopen + close per §9.6 rules), `pims_transition_status` (`C→P` reopen, `P→C` close), `indicator_emit` | `pims_create_incident`, `pims_notify`, `pims_add_action` | May move `C→P` ONLY with `REOPENED:<new_evidence_id>`; `P→C` ONLY with §9.6 close checklist satisfied |
 
 ### 5.2 Skills
 
-Fixed catalog of 11. Each skill maps to ≥1 tool; missing skill → `SKILL_UNKNOWN`, never improvised.
+Fixed catalog of 10. Each skill maps to ≥1 tool; missing skill → `SKILL_UNKNOWN`, never improvised.
 
 | Skill | Tools | Selector / rule |
 |---|---|---|
@@ -511,16 +504,15 @@ Fixed catalog of 11. Each skill maps to ≥1 tool; missing skill → `SKILL_UNKN
 | `risk-linker` | `pims_search_risks`, `pims_emit_risk_signal` | Emit on systemic root cause; closed period → queue (§9.4) |
 | `audit-action-linker` | `pims_create_audit_action` | Auto-link on `severity H/C`, `impact H/V`, or confirmed breach (§9.4) |
 | `gdpr-notice-drafter` | (via `notice-composer`; no direct tool) | Pack schemas §10.1–10.2; citation rule §6.5 |
-| `root-cause-analyzer` | `pims_add_action` (`A`/`R`), `rag_query` | Expands `TOT_BRANCH_FACTOR` competing causal hypotheses with Bayesian posterior likelihood scoring over IOCs/evidence, then selects: single causal chain → 5-whys (exactly 5 levels, each falsifiable); multi-factor → fishbone (fixed bones: People, Process, Technology, Data, Suppliers, Environment); system-failure/availability → fault-tree (AND/OR gates to basic events). Runs symbolic minimal cut-set counterfactual simulation over `security_measures_adopted` and E22 Annex A controls. Output schema §9.3. |
-| `evidence-collector` | `pims_upload_attachment`, `pims_get_history` | Multimodal `VISION_MODEL` forensic scan (OCR, IOC extraction, visual PII tag, Art 34(3)(a) encryption verification) + SHA-256 hash + upload; manifest §10.3 |
+| `root-cause-analyzer` | `pims_add_action` (`A`/`R`), `rag_query` | Single-prompt root-cause analysis; 5-whys for a single chain, fishbone for multi-factor, fault-tree for system failure. Output schema §9.3. |
+| `evidence-collector` | `pims_upload_attachment`, `pims_get_history` | Collect, hash, and stage file attachments with SHA-256 integrity verification and upload; manifest §10.3 |
 | `deadline-scheduler` | `scheduler_arm`, `scheduler_cancel` | Timer kinds §6.4; armed by orchestrator only |
 | `indicator-reporter` | `indicator_emit` | Event schema §10.6; every state change emits |
-| `voice-intake` | `stt_transcribe`, `tts_synthesize` | Flows §8.3–8.4; redaction §8.5 |
 | `rag-grounded-qa` | `rag_query` | Threshold + citation rules §7.4–7.5 |
 
 ### 5.3 Tool manifest
 
-The complete callable surface. Any call outside this manifest → `TOOL_UNKNOWN`. All tools are synchronous request/response. Mutations REQUIRE client `Idempotency-Key` (`<IDEMPOTENCY_KEY_PREFIX>:<incident_code>:<op>:<uuid>`, §13); PIMS has no native key, so `pims-adapter` implements exactly-once by reconcile-before-retry (GET + history check, §12.1). Every tool declares args, returns, and named errors; arg validation failure → `TOOL_ARGS_INVALID:<tool>:<field>` (no coercion).
+The complete callable surface of 19 tools. Any call outside this manifest → `TOOL_UNKNOWN`. All tools are synchronous request/response. Mutations REQUIRE client `Idempotency-Key` (`<IDEMPOTENCY_KEY_PREFIX>:<incident_code>:<op>:<uuid>`, §13); PIMS has no native key, so `pims-adapter` implements exactly-once by reconcile-before-retry (GET + history check, §12.1). Every tool declares args, returns, and named errors; arg validation failure → `TOOL_ARGS_INVALID:<tool>:<field>` (no coercion).
 
 `pims_login` — args: none (uses `PIMS_TOKEN_CMD` service credential, §13). Returns: `{access_expires_at_utc, schema, user_id}`. Errors: `PIMS_AUTH_FAILED`, `PIMS_THROTTLED`, `PIMS_GATE_BLOCKED`. Side effect: in-memory token only.
 
@@ -536,7 +528,7 @@ The complete callable surface. Any call outside this manifest → `TOOL_UNKNOWN`
 
 `pims_add_action` — args: `{incident_id, action_type(C|A|R), description(REQUIRED), responsible?, action_date?, evidence?}`. Sequencing enforced: `C*→A+→R` per incident (≥1 `A` before `R`; `R` REQUIRES `review_approval_id` in args → else `ACTION_SEQUENCE_VIOLATION`). Implemented as E08 nested PATCH per the §3.1 `NESTED_PROBE` result. Returns: created action with system `position`. Errors: `PIMS_VALIDATION`, `ACTION_SEQUENCE_VIOLATION`, `REVIEW_APPROVAL_MISSING`.
 
-`pims_upload_attachment` — args: `{incident_id, bytes_ref, file_name, mime}`. Gates: type ∈ allowlist (§3.5), size ≤ `ATTACHMENT_MAX_MB` (§13), else `ATTACHMENT_REJECTED:<reason>`. Runs `VISION_MODEL` `vision_json` scan on visual/PDF files before upload. Returns: `{attachment_id, file, file_name, uploaded_at, sha256, forensic_scan}` (hash computed by evidence-store pre-upload, verified post-upload by re-download + compare → mismatch `ATTACHMENT_HASH_MISMATCH`). Errors: `PIMS_ATTACHMENT_MISSING`, `PIMS_GATE_BLOCKED`, `MODEL_UNAVAILABLE`.
+`pims_upload_attachment` — args: `{incident_id, bytes_ref, file_name, mime}`. Gates: type ∈ allowlist (§3.5), size ≤ `ATTACHMENT_MAX_MB` (§13), else `ATTACHMENT_REJECTED:<reason>`. No forensic scan runs in the downscale; `forensic_scan` is always null. Returns: `{attachment_id, file, file_name, uploaded_at, sha256, forensic_scan:null}` (hash computed by evidence-store pre-upload, verified post-upload by re-download + compare → mismatch `ATTACHMENT_HASH_MISMATCH`). Errors: `EVIDENCE_NOT_FOUND:staged_attachment:<file>`, `ATTACHMENT_REJECTED:<reason>`, `ATTACHMENT_HASH_MISMATCH`, `PIMS_GATE_BLOCKED`.
 
 `pims_list_recipients` — args: `{active_only? default true}`. Returns: `[{id,email,label,is_active,created_at}]`. Errors: `PIMS_PERMISSION_DENIED`. Zero active → informational `PIMS_EMPTY_LIST` (notify precondition checked separately).
 
@@ -552,11 +544,7 @@ The complete callable surface. Any call outside this manifest → `TOOL_UNKNOWN`
 
 `pims_create_audit_action` — args: `{audit_id?, finding_id?, classification? default N, finding_description(REQUIRED if new finding), action_plan(REQUIRED), responsible?, due_date?, status? default O, source_requirement_code(REQUIRED — controlling ISO clause/control, e.g. `A.3.12`)}`. Behavior: if `audit_id` absent, the adapter selects the newest open (`P`/`R`) audit, else creates one (`I`, name `Auto: incident <code> corrective actions`, `status=P`); if `finding_id` absent, appends a new `N` finding (E19 `findings[]` per the §3.1 `NESTED_PROBE:audit` result, with `actions[]` sub-key — NEVER `action_plans`); appends the action row. Returns: `{audit_id, audit_code, finding_id, action_plan_id}`. Errors: `AUDIT_LINK_FAILED:<reason>`, `PIMS_PERMISSION_DENIED` (→ delegated-draft contingency §3.3: store draft with `pending_grant:true`, auto-submit on grant).
 
-`rag_query` — args: `{query, top_k? (per RAG_TOP_K, §13), min_score? (per RAG_MIN_SCORE, §13), normative_only? default false}`. Returns: `{passages: [{doc_id, chunk_id, lines, score, crag_grade:"supported"|"ambiguous", graph_path:string[], normative:boolean, text}], eval:boolean}` (top `RAG_RERANK_K` after rerank). Below-threshold on every passage → `RAG_NO_EVIDENCE` (see §6.5 waiver rule). Errors: `RAG_CORPUS_STALE` (ingest version mismatch), `MODEL_UNAVAILABLE`.
-
-`stt_transcribe` — args: `{audio_ref, lang}`. Returns: `{transcript, segments:[{start_ms,end_ms,speaker_id,text,confidence}], mean_confidence, prosody_urgency_score, spoof_risk_score}`. Errors: `VOICE_EMPTY_AUDIO` (zero speech frames), `VOICE_LOW_CONFIDENCE` (mean < `VOICE_MIN_CONFIDENCE`, §13), `VOICE_SPOOF_SUSPECTED` (spoof score ≥ `VOICE_SPOOF_THRESHOLD`, §13 — flags incident for reviewer verification, never drops report), `VOICE_UNAVAILABLE` (quota/timeout — text path continues).
-
-`tts_synthesize` — args: `{text(REDACTED ONLY — adapter verifies no PII patterns, else `TTS_PII_LEAK_BLOCKED`), voice?, lang?}`. Returns: `{audio_ref, duration_ms, redaction_log}`. Errors: `TTS_PII_LEAK_BLOCKED`, `VOICE_UNAVAILABLE`.
+`rag_query` — args: `{query, top_k? (per RAG_TOP_K, §13), min_score? (per RAG_MIN_SCORE, §13), normative_only? default false}`. Returns: `{passages: [{doc_id, chunk_id, lines, score, normative:boolean, text}], eval:boolean}` (top `RAG_RERANK_K` after rerank). Below-threshold on every passage → `RAG_NO_EVIDENCE` (see §6.5 waiver rule). Errors: `RAG_CORPUS_STALE` (ingest version mismatch), `MODEL_UNAVAILABLE`.
 
 `scheduler_arm` — args: `{incident_code, kind(T72_AUTHORITY | T_PROCESSOR | T_SUBJECT | T_REVIEW_SLA | T_PERU_ADVISORY | T_PHASE_FOLLOWUP | T_RETRY), fire_at_utc, payload}`. Orchestrator-only. Returns: `{timer_id}`. Errors: `SCHEDULER_DUPLICATE` (same incident+kind armed → cancel-then-arm instead), `SCHEDULER_PAST_DUE` (fire_at ≤ now → fires immediately as `TIMER_FIRED_LATE`, never silently).
 
@@ -568,18 +556,18 @@ The complete callable surface. Any call outside this manifest → `TOOL_UNKNOWN`
 
 Rows = roles, columns = tools. `●` allowed, `○` denied (`ROLE_TOOL_DENIED` on attempt).
 
-| Role | login | list/get inc | create | update | transition | add_action | upload | recipients | notify | history | risks/signal | audit_action | rag | stt/tts | sched | indic |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| orchestrator | ○ | ○ | ○ | ○ | ○ | ○ | ○ | manage ● | ○ | ○ | ○ | ○ | ○ | ○ | ● | ● |
-| intake | ○ | ● list only | ● | ○ | ○ | ○ | ○ | ○ | ○ | ○ | ○ | ○ | ● | ● | ○ | ○ |
-| triage | ○ | ● | ○ | ● | O→P ● | ○ | ○ | ○ | ○ | ○ | ○ | ○ | ● | ○ | ○ | ○ |
-| investigator | ○ | ● get/list | ○ | ● | ○ | C/A + approved R ● | ● | ○ | ○ | ● | ● | ● | ● | ○ | ○ | ○ |
-| drafter | ○ | ● get only | ○ | ○ | ○ | ○ | ○ | ○ | ○ | ● | ○ | ○ | ● | ○ | ○ | ○ |
-| compliance_reviewer | ○ | ● get only | ○ | ○ | ○ | ○ | ○ | ○ | ○ | ● | ○ | ○ | ● | ○ | ○ | ○ |
-| notifier | ○ | ● get only | ○ | measures only | ○ | ○ | ○ | ● | ● | ● | ○ | ○ | ○ | ○ | ○ | ○ |
-| monitor | ○ | ● | ○ | ● reopen/close | C→P / P→C ● | ○ | ○ | ○ | ○ | ● | ○ | ○ | ○ | tts ● | ○ | ● |
+| Role | login | list/get inc | create | update | transition | add_action | upload | recipients | notify | history | risks/signal | audit_action | rag | sched | indic |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| orchestrator | ○ | ○ | ○ | ○ | ○ | ○ | ○ | manage ● | ○ | ○ | ○ | ○ | ○ | ● | ● |
+| intake | ○ | ● list only | ● | ○ | ○ | ○ | ○ | ○ | ○ | ○ | ○ | ○ | ● | ○ | ○ |
+| triage | ○ | ● | ○ | ● | O→P ● | ○ | ○ | ○ | ○ | ○ | ○ | ○ | ● | ○ | ○ |
+| investigator | ○ | ● get/list | ○ | ● | ○ | C/A + approved R ● | ● | ○ | ○ | ● | ● | ● | ● | ○ | ○ |
+| drafter | ○ | ● get only | ○ | ○ | ○ | ○ | ○ | ○ | ○ | ● | ○ | ○ | ● | ○ | ○ |
+| compliance_reviewer | ○ | ● get only | ○ | ○ | ○ | ○ | ○ | ○ | ○ | ● | ○ | ○ | ● | ○ | ○ |
+| notifier | ○ | ● get only | ○ | measures only | ○ | ○ | ○ | ● | ● | ● | ○ | ○ | ○ | ○ | ○ |
+| monitor | ○ | ● | ○ | ● reopen/close | C→P / P→C ● | ○ | ○ | ○ | ○ | ● | ○ | ○ | ○ | ○ | ● |
 
-`pims_login` is adapter-internal (session management), callable by no role. `tts_synthesize` is callable by `intake` (readback confirm) and `monitor` (notice readback for the operator) via voice-gateway flows only, never ad-hoc.
+`pims_login` is adapter-internal (session management), callable by no role.
 
 ## 6. Orchestration and loops
 
@@ -654,7 +642,7 @@ Deadline timers: `armed → fired → satisfied | breached`. Breach is NEVER sil
 
 ### 6.4 Timers
 
-Scheduler tick `SCHEDULER_TICK_S` ± `SCHEDULER_JITTER_S` (§13). Timers persisted in evidence-store (survive restart; re-armed from history + `detection_*` on boot). All `fire_at_utc` computed from `awareness_at_utc` (§1). On every tick for active `core_incident` rows, the scheduler computes a Weibull Survival SLA Hazard Score `sla_breach_prob_72h` $\in [0,1]$ from elapsed awareness time, remaining loop stages, and current `REVIEW_REJECTED` cycle count; when `sla_breach_prob_72h` ≥ `SLA_HAZARD_WARN_THRESHOLD` (§13), it emits `sla_hazard_high` (§10.6) and pages the reviewer prior to deadline breach. Timer count capped at `SCHEDULER_MAX_TIMERS` (beyond → `SCHEDULER_OVERFLOW`: refuse new non-deadline timers, deadline timers always admitted + page).
+Scheduler tick `SCHEDULER_TICK_S` ± `SCHEDULER_JITTER_S` (§13). Timers persisted in evidence-store (survive restart; re-armed from history + `detection_*` on boot). All `fire_at_utc` computed from `awareness_at_utc` (§1). Timer count capped at `SCHEDULER_MAX_TIMERS` (beyond → `SCHEDULER_OVERFLOW`: refuse new non-deadline timers, deadline timers always admitted + page).
 
 | Kind | Fires at | On fire | Satisfied when |
 |---|---|---|---|
@@ -699,7 +687,7 @@ flowchart TD
 1. Every mutation produced a `core_incidenthistory` row (verified by re-GET history tail; else `HISTORY_GAP` → reconcile, never proceed blind).
 2. Every state change emitted an indicator event (§10.6); emission failure spools (§4.2), never blocks.
 3. Every LLM output that reaches PIMS or a notice carries ≥1 RAG citation (`doc_id:chunk:lines`) OR a `RAG_NO_EVIDENCE` waiver signed by `compliance_reviewer` with `{reason, scope}` — waiver allowed ONLY for operational fields (`assigned_to`, `reported_by`, `responsible`, scheduling text), NEVER for legal content (deadlines, exemptions, rights language, notice bodies).
-4. No PII in prompts beyond the §11.3 redacted-context schema; no PII in logs beyond field names; voice redaction map applied before any TTS.
+4. No PII in prompts beyond the §11.3 redacted-context schema; no PII in logs beyond field names.
 5. Lease held for the incident (§6.6); no double-notify (notify requires fresh `review_approval_id` per pack hash; history `notified` check before every send).
 6. Timers armed for every incident in `O`/`P` with `involves_personal_data=true`: at minimum `T72_AUTHORITY`; missing timer → `TIMER_MISSING` → arm immediately + page.
 
@@ -740,11 +728,11 @@ Every normative chunk is indexed with **Contextual Retrieval Headers**: at inges
 
 ### 7.3 Index and serving
 
-`rag-service` holds a **Tri-Modal Hybrid Index**: (1) dense vector index (embeddings in pgvector), (2) MiniSearch BM25 lexical index (same chunks), (3) **Bipartite Normative Knowledge Graph with Dense Bi-Encoder Anchor Grounding** (nodes: ISO clauses, Annex A/B controls, GDPR articles/recitals; pre-embedded node definitions matched via dense vector similarity; edges: `requires`, `maps_to_field`, `mitigates`, `crosswalks_to`), and (4) metadata store (`doc_id, chunk_id, lines, normative, article_or_clause, sha256`). Single-writer ingest (ingest lock, `RAG_INGEST_LOCKED` on contention → queue, max 1 queued, else reject). Queries are read-only and lock-free. Index snapshot per corpus version; rollback = point queries at previous snapshot (`RAG_ROLLBACK:<version>` logged).
+`rag-service` holds a **Dual-Modal Hybrid Index**: (1) dense vector index (embeddings in pgvector), (2) MiniSearch BM25 lexical index (same chunks), and (3) metadata store (`doc_id, chunk_id, lines, normative, article_or_clause, sha256`). Single-writer ingest (ingest lock, `RAG_INGEST_LOCKED` on contention → queue, max 1 queued, else reject). Queries are read-only and lock-free. Index snapshot per corpus version; rollback = point queries at previous snapshot (`RAG_ROLLBACK:<version>` logged).
 
 ### 7.4 Retrieval
 
- Pipeline (fixed): (1) **Agentic Self-RAG Query Decomposition + Dense Bi-Encoder Grounding** (`FAST_MODEL` decomposes compound legal/technical questions, generates a hypothetical normative clause/schema snippet; pre-embedded Knowledge Graph nodes matched via dense vector cosine similarity extract entity anchors), (2) **3-Way Reciprocal Rank Fusion (RRF)** over Dense Vector + BM25 + Multi-Hop Personalized PageRank (PPR) over the Knowledge Graph neighbourhood → `top_k` (`RAG_TOP_K`, §13), (3) cross-encoder rerank (`RERANKER_MODEL`) → top `RAG_RERANK_K` (§13), (4) **CRAG (Corrective RAG) Self-Grading** (`supported | ambiguous | unsupported`; unsupported passages are stripped immediately, and if only ambiguous passages remain, one automated query-rewrite loop executes within budget) with cite threshold `min_score` (`RAG_MIN_SCORE`, §13, scores normalized 0..1). Any passage below threshold is dropped; if ALL drop → `RAG_NO_EVIDENCE` (see §6.5 waiver rule: legal content MUST NOT proceed; operational fields need reviewer-signed waiver). `normative_only=true` restricts to `normative:true` chunks (REQUIRED for notice drafting and exemption evaluation). Retrieval latency budget `RAG_TIMEOUT_MS` (§13); timeout → `MODEL_UNAVAILABLE:rag` → park per §4.3 (no ungrounded fallback). Fixed retrieval constants (named in `@pims/types/constants.ts`): RRF k=60, weights dense 1.0 / BM25 1.2 / PPR 1.5; CRAG supported ≥ 0.65; rerank blend 0.85·score + 0.15·min(1, ppr·2.5); candidate limits dense 30 / BM25 40 / rewrite 20; PPR α=0.85, 25 iters; decomposition max_tokens 1500.
+Pipeline (fixed): (1) parallel retrieval via dense pgvector and MiniSearch BM25, (2) **2-Way Reciprocal Rank Fusion (RRF)** over Dense Vector + BM25 → `top_k` (`RAG_TOP_K`, §13), (3) cross-encoder rerank (`RERANKER_MODEL`) → top `RAG_RERANK_K` (§13), (4) min-score filter with cite threshold `min_score` (`RAG_MIN_SCORE`, §13, scores normalized 0..1). Any passage below threshold is dropped; if ALL drop → `RAG_NO_EVIDENCE` (see §6.5 waiver rule: legal content MUST NOT proceed; operational fields need reviewer-signed waiver). `normative_only=true` restricts to `normative:true` chunks (REQUIRED for notice drafting and exemption evaluation). Retrieval latency budget `RAG_TIMEOUT_MS` (§13); timeout → `MODEL_UNAVAILABLE:rag` → park per §4.3 (no ungrounded fallback). Fixed retrieval constants (named in `@pims/types/constants.ts`): RRF k=60, weights dense 1.0 / BM25 1.2; candidate limits dense 30 / BM25 40.
 
 ### 7.5 Citations
 
@@ -767,77 +755,31 @@ Harness: runs each query through `rag_query` with `normative_only` as listed; PA
 | Q09 | B.3.11 incident management planning processes and roles | true | `iso27701` B.3.11: "plan and prepare for managing information security incidents" + "processes, roles and responsibilities" |
 | Q10 | Clause 10.2 nonconformity and corrective action steps | true | `iso27701` Clause 10.2: "react to the nonconformity" + "evaluate the need for action" |
 
-## 8. Voice subsystem
+## 8. Voice subsystem (Deprecated)
 
-Required by: B.3.11 (communicate incident management processes — voice is a capture channel, primarily `es-PE` for UNSA reporters), B.3.12 (clear notifications — readback confirmation), 10.2(a) (react promptly — voice intake shortens capture time).
-
-### 8.1 Provider config
-
-`STT_PROVIDER`/`STT_MODEL`, `TTS_PROVIDER`/`TTS_MODEL`/`TTS_VOICE` from §13 (configurable cloud, same zero-fallback rule as §4.3). Primary language `VOICE_PRIMARY_LANG=es-PE`, fallback `VOICE_FALLBACK_LANG=en`. Language detection per utterance; below 0.7 detection confidence → `VOICE_LANG_UNCERTAIN` → proceed in `es-PE` and tag transcript `lang_assumed:true`.
-
-### 8.2 Audio handling
-
-Audio enters ONLY as `audio_ref` (evidence-store handle: `{ref, sha256, bytes, mime, received_at_utc, prosody_urgency_score, spoof_risk_score, speaker_count}`). Supported: `audio/wav,audio/mpeg,audio/ogg,audio/webm,audio/mp4` ≤`VOICE_MAX_AUDIO_MB` (`VOICE_AUDIO_TOO_LARGE` above). Real-time WebSocket streams support **VAD Barge-In** (<150 ms TTS interruption on caller speech onset), **Multi-Speaker Diarization** (`speaker_id` per segment to separate primary reporter from bystanders on bridge calls), an **Acoustic Anti-Spoofing / Deepfake Liveness Score** (`spoof_risk_score` $\in [0.0, 1.0]$ from spectral phase/codec artifacts — ≥`VOICE_SPOOF_THRESHOLD` appends marker `VOICE_SPOOF_FLAGGED` to `core_incident.evidence_refs` for investigator verification without blocking capture), and an acoustic **Paralinguistic Stress/Urgency Score** (`0.0..1.0` from pitch variance, speech rate, and jitter — used ONLY to prioritize triage queue ordering, NEVER to alter legal severity/impact rules). Retention `VOICE_RETENTION_DAYS` (§13), then cryptographic erasure (key destroy + overwrite attestation `VOICE_PURGED:<ref>`). Raw audio MUST NOT appear in prompts, logs, RAG, or PIMS fields. Transcripts carry PII and are handled per §11.3.
-
-### 8.3 Flow 1: intake interview
-
-| Step | Actor | Action |
-|---|---|---|
-| 1 | caller → voice-gateway | Audio received; `stt_transcribe` → transcript + segments + `mean_confidence` |
-| 2 | voice-gateway | `mean_confidence<0.5` → `VOICE_LOW_CONFIDENCE`: exactly ONE TTS re-prompt ("Por favor repita…"), then park to text intake (`VOICE_PARKED_TEXT`) if still low. Empty (zero speech frames) → `VOICE_EMPTY_AUDIO`: same single re-prompt, then park. |
-| 3 | intake role | Slot-fill §9.1 schema from transcript: `title, description, incident_date, affected_treatment, num_affected_subjects` + reporter/entity/DPO slots when spoken. Missing REQUIRED → TTS question per field, max 2 rounds, then §9.1 defaults apply. |
-| 4 | intake → caller | TTS readback of filled slots (REDACTED per §8.5: names → `[REPORTANTE]`, contact → `[CONTACTO]`, ids → `[ID]`); caller confirms/corrects (STT); max 2 readback rounds, then proceed with `readback_partial:true` flag. |
-| 5 | intake | `pims_create_incident` with `reported_by` = reporter name (original, to PIMS — PIMS is the system of record), transcript attached via `pims_upload_attachment` as `intake-transcript.txt`, `evidence_refs` appended with `voice:intake:<audio_ref_sha8>`. |
-
-Transcript slot-fill error → `INTAKE_SLOT_AMBIGUOUS:<field>:<candidates>`: TTS disambiguation once, then reviewer flag (never guess).
-
-### 8.4 Flow 2: notice readback (operator monitoring)
-
-`monitor` may render a reviewer-APPROVED draft as TTS for the operator console (accessibility/monitoring). Input MUST be the approved pack text AFTER §8.5 redaction; unapproved drafts are never synthesized (`TTS_UNAPPROVED_BLOCKED`). Readback of subject-list content is forbidden (subject identities stay in PIMS; readback says counts only). Logged as `VOICE_REDACTED:<fields>` with the field list.
-
-### 8.5 Redaction map (voice-gateway enforced, pre-synthesis)
-
-| Pattern | Replacement | Log tag |
-|---|---|---|
-| Person names (reporter, DPO, assignee, subjects) | `[REPORTANTE]` / `[DPO]` / `[RESPONSABLE]` | `VOICE_REDACTED:name` |
-| Email / phone | `[CONTACTO]` | `VOICE_REDACTED:contact` |
-| Document number / RUC / expiry | `[ID]` | `VOICE_REDACTED:id` |
-| URL / system hostname (internal) | `[SISTEMA]` | `VOICE_REDACTED:system` |
-| Free-text description sentences with ≥2 PII hits | `[DESCRIPCION]` (full-sentence replace) | `VOICE_REDACTED:desc` |
-
-Redaction executes as a **Dual-Pass Pipeline**: Pass 1 runs deterministic regexes (email, Peru mobile `9\d{8}`, landline `0\d{1,2}-?\d{6,7}`, DNI/CE 8–9 digits, RUC 11 digits, IPv4/IPv6/internal hostnames); Pass 2 runs a local span-level NER token classifier (`PER`, `LOC`, `ORG_ID`, `CREDENTIAL`) to catch unstructured Spanish/Quechua names and spoken numbers. Post-redaction verification scan MUST find zero hits or synthesis is blocked (`TTS_PII_LEAK_BLOCKED`). False-positive appeal: reviewer may allowlist a specific string per incident (`TTS_ALLOWLIST:<incident>:<hash>`), logged.
-
-### 8.6 Voice failures
-
-| Error | Handling |
-|---|---|
-| `VOICE_EMPTY_AUDIO` / `VOICE_LOW_CONFIDENCE` | One TTS re-prompt, then park to text intake; incident capture continues via form/API; timers unaffected |
-| `VOICE_UNAVAILABLE` (STT/TTS quota, timeout, 5xx) | Text path continues; in-flight voice session parked with `VOICE_PARKED_TEXT`; deadline timers unaffected; page on 3rd consecutive (`VOICE_ROUTE_DOWN`) |
-| `VOICE_AUDIO_TOO_LARGE` / unsupported mime | Reject with TTS/text message stating limits; no partial transcribe |
-| `TTS_PII_LEAK_BLOCKED` / `TTS_UNAPPROVED_BLOCKED` | Block synthesis; log; continue without audio; page reviewer on `PII_LEAK` (potential prompt bug) |
-| STT/TTS provider schema violation | `MODEL_UNAVAILABLE:voice` → §4.3 park rule (voice only; rest of loop continues) |
+Voice capture was removed in the downscale; intake accepts web form JSON and external signals (§9.1). The `voice-intake` skill and `stt_transcribe`/`tts_synthesize` tools no longer exist.
 
 ## 9. Closed-loop lifecycle
 
 Required by: B.3.12 (event→breach review; notifications; records), 10.2(a)–(e) (react → causes → implement → effectiveness → PIMS change), 9.2/9.3.2(d) (audit linkage, trend inputs), 6.1.3 (risk treatment linkage). This section references every writable `core_incident` column at least once (mechanical gate §14.3).
 
-### 9.1 Intake (roles: `intake` + `orchestrator`; skills: `pims-incident-crud`, `voice-intake`, `rag-grounded-qa`)
+### 9.1 Intake (roles: `intake` + `orchestrator`; skills: `pims-incident-crud`, `rag-grounded-qa`)
 
-Accepts voice (Flow §8.3), web form JSON, or external signal (SIEM webhook, processor notice — `{source, occurred_at, summary, affected_system?, contact?}`). Steps:
+Accepts web form JSON or external signal (SIEM webhook, processor notice — `{source, occurred_at, summary, affected_system?, contact?}`). Steps:
 
 1. Validate payload non-empty; empty → `INTAKE_EMPTY` reject, no record, log caller identity.
 2. Slot-extract to the intake schema: `title` (REQUIRED, ≤150 chars — truncate ONLY at word boundary with `…[truncated]` + reviewer flag, else `INTAKE_TITLE_TOO_LONG` re-prompt once), `description` (≤1000 chars, same rule), `involves_personal_data` (tri-state input `true/false/null`), `incident_date` (REQUIRED, `YYYY-MM-DD`, not future → `INTAKE_FUTURE_DATE` re-prompt once then use today + flag), `incident_time?`, `detection_date?` (default today), `detection_time?`, reporter block (`rep_document_number, rep_document_expiry, rep_first_name, rep_last_name_p, rep_last_name_m, rep_position, rep_phone, rep_email`), entity block (`entity_type R/U, entity_ruc, entity_name, entity_phone, entity_extension, entity_department, entity_province, entity_district`), `affected_treatment?`, DPO block (`dpo_contact_name, dpo_contact_email, dpo_contact_phone`), `affected_data_types[]` (default `[]`), `num_affected_subjects?`, `compromised_system?`, `affected_url?`, `reported_by?` (default channel identity), `assigned_to?` (default null → triage assigns), `severity?/impact?` (intake MAY suggest, triage decides).
 3. `involves_personal_data` tri-state handling (the SINGLE allowed default in this spec, reason: over-notifying beats under-notifying — an undeclared breach risks Art 33 violation, while a declared non-breach costs only a correction): `true` → full breach path; `false` → security-incident path (skips Art 33/34 packs, still runs C/A/R + history + monitoring + close checklist minus notice items); `null` → `INTAKE_MISSING_PII_FLAG`: re-prompt exactly once ("¿El incidente involucra datos personales?"), then default `true` with tag `assumed_pii:true` in `evidence_refs` + reviewer attention flag + indicator event `pii_assumed`.
 4. Dedupe per §6.6 (fuzzy title + exact `incident_date` + exact `compromised_system`/`affected_url`). Match on live row → update-or-restore path (§6.1 `UPD`): PATCH new facts, append marker `DEDUPE_MERGED:<source_id>` per the marker rule below; match on logically-deleted row → restore (`is_deleted=false`) + same marker. No match → `pims_create_incident` with `status=O` + `affected_data_types/security_measures_adopted/affected_cid` (send `[]` when empty — NOT NULL jsonb).
-5. Post-create: arm awareness timers (`T72_AUTHORITY` always when PII; `T_PROCESSOR` when processor-signal; `T_PERU_ADVISORY` always as advisory); `O→P` is NOT done here (triage owns it after classification); emit `incident_opened` indicator event; attach intake transcript/source payload.
-Marker rule (applies everywhere this spec says "append marker"): `core_incidenthistory` is server-appended and NOT authorable via any API (E10 is GET-only; POST was never observed) — so agent markers (`DEDUPE_MERGED`, `DUPE_OF`, `VETOED_BY`, `VETO_WINDOW_EXPIRED`, `REEVALUATED`, `PROCESSOR_NOTIFIED`, `SUBJECT_NOTIFIED`, `ACK`, `CLOSE_APPROVED`, `BUNDLE_SEALED`, `TYPE_AMBIGUOUS`, `VOICE_SPOOF_FLAGGED`, `assumed_pii`, `readback_partial`, `UNASSIGNED`) are appended to `core_incident.evidence_refs` as `;`-separated tokens via E08 (read-modify-write: GET current value, append, PATCH). `evidence_refs` overflow (>1000 chars) spills to an `evidence-index.txt` attachment (NOT `.md` — outside the §3.5 allowlist) with a pointer token left in-field. Markers are machine tokens, never prose; ambiguous free text in `evidence_refs` is forbidden.
+5. Post-create: arm awareness timers (`T72_AUTHORITY` always when PII; `T_PROCESSOR` when processor-signal; `T_PERU_ADVISORY` always as advisory); `O→P` is NOT done here (triage owns it after classification); emit `incident_opened` indicator event; attach intake source payload.
+Marker rule (applies everywhere this spec says "append marker"): `core_incidenthistory` is server-appended and NOT authorable via any API (E10 is GET-only; POST was never observed) — so agent markers (`DEDUPE_MERGED`, `DUPE_OF`, `VETOED_BY`, `VETO_WINDOW_EXPIRED`, `REEVALUATED`, `PROCESSOR_NOTIFIED`, `SUBJECT_NOTIFIED`, `ACK`, `CLOSE_APPROVED`, `BUNDLE_SEALED`, `TYPE_AMBIGUOUS`, `assumed_pii`, `readback_partial`, `UNASSIGNED`) are appended to `core_incident.evidence_refs` as `;`-separated tokens via E08 (read-modify-write: GET current value, append, PATCH). `evidence_refs` overflow (>1000 chars) spills to an `evidence-index.txt` attachment (NOT `.md` — outside the §3.5 allowlist) with a pointer token left in-field. Markers are machine tokens, never prose; ambiguous free text in `evidence_refs` is forbidden.
 
 
 Guards: `detection_date >= incident_date` (else server 400 → `PIMS_VALIDATION:detection_date` → fix to `incident_date` + flag, never backdate silently). `incident_type` at intake: provisional from signal keywords, MUST be confirmed by triage (triage overwrites without history spam: single `updated` event covers it).
 
 ### 9.2 Triage (roles: `triage` + `orchestrator`; skills: `pims-incident-crud`, `rag-grounded-qa`)
 
-`FAST_MODEL` (temperature `TEMP_CLASSIFIER`) classification with **Split-Conformal Prediction Calibration** (`conformal_set: incident_type[]`, `nonconformity_score: 0..1` calibrated against historical closed incidents; if `conformal_set.length > 1` on `incident_type`, auto-triggers deep GraphRAG expansion before committing) and RAG citations to §3.5 definitions + Recital 85–87 factors (§2.1). Output schema: `{incident_type, conformal_set, nonconformity_score, severity, impact, rationale[3 bullets max], citations[≥1], duplicate_check:{ran:true, matches:[]}}`.
+`FAST_MODEL` (temperature `TEMP_CLASSIFIER`) classification with **Split-Conformal Prediction Calibration** (`conformal_set: incident_type[]`, `nonconformity_score: 0..1` calibrated against historical closed incidents; if `conformal_set.length > 1` on `incident_type`, re-runs normative retrieval for the candidate types and merges the citations before committing) and RAG citations to §3.5 definitions + Recital 85–87 factors (§2.1). Output schema: `{incident_type, conformal_set, nonconformity_score, severity, impact, rationale[3 bullets max], citations[≥1], duplicate_check:{ran:true, matches:[]}}`.
 
 - `incident_type` decision tree (first match wins; ambiguous → `OT` + reviewer flag `TYPE_AMBIGUOUS:<candidates>`, never force-fit): credential/unauthorized access evidence → `UA`; exfiltration/loss/disclosure confirmed or probable → `DL`; malware/ransomware indicator → `MW`; phishing/social-engineering lure → `PH`; availability attack → `DS`; human mistake without malice → `HE`; device theft/loss → `DV`; else `OT`.
 - `severity` (L/M/H/C): C if (PII + (large volume ≥1000 subjects OR `sensitive`/`health`/`biometric`/`minors`/`financial`/`credentials` data OR authority-notification already overdue OR active ongoing compromise)); H if (PII + medium volume 100–999 OR `id_doc`/`email`/`phone`+exfiltration probable OR `impact V`); M if (PII low volume <100 with containment likely OR non-PII with service degradation); L otherwise. Every H/C MUST cite the triggering factor; C REQUIRES reviewer countersign within `T_REVIEW_SLA` (else `TRIAGE_C_UNCONFIRMED` page — classification stands, page is informational, work continues).
@@ -849,8 +791,8 @@ Guards: `detection_date >= incident_date` (else server 400 → `PIMS_VALIDATION:
 ### 9.3 Investigation (role: `investigator`; skills: `root-cause-analyzer`, `evidence-collector`, `pims-incident-crud`, `rag-grounded-qa`)
 
 1. B.3.12 review gate (event-vs-breach): for PII incidents, record the determination "breach requiring response: yes/no + rationale" as the FIRST `A` action (`action_type=A`, `action_date=today`, `responsible=investigator:<id>`). NOTE1 non-triggers (pings, scans, failed logons without success) → `no` + evidence → skip to §9.6 fast-close path (still needs reviewer sign-off + 1 `A`; notices `not_required`). All other PII incidents default `yes` unless evidence proves otherwise.
-2. Tree-of-Thoughts (ToT) neuro-symbolic root-cause method & minimal cut-set counterfactual simulation (§5.2 selector): `investigator` expands `TOT_BRANCH_FACTOR` (§13) candidate causal hypotheses, computes Bayesian posterior weights $P(H_k \mid E)$ against collected IOCs/attachments, and commits the MAP hypothesis using: single chain → 5-whys (exactly 5 levels, each level `{claim, evidence_ref|null}` — unevidenced level 5 → `ROOT_CAUSE_UNPROVEN` flag, analysis continues, close requires reviewer waiver); multi-factor → fishbone (bones: People, Process, Technology, Data, Suppliers, Environment; ≥1 cause per bone OR explicit `bone_empty:<bone>:<reason>`); system-failure → fault-tree (`{top_event, gates:[{op:AND/OR, inputs:[]}], basic_events[]}`). For every method, `investigator` executes a **Symbolic Minimal Cut-Set Counterfactual Control Simulation** (`counterfactuals: [{control_code, blocks_cut_set: boolean, residual_probability_delta: int, proof_rationale}]`) proving which `core_incident.security_measures_adopted` / E22 Annex A controls break the causal cut-set at $t_0$. Output stored as `A` action `description` (structured JSON-in-text; keep each action ≤2000 chars — overflow continues in numbered follow-up `A` actions `…(2/3)`) + full JSON attached as `root-cause.txt` (JSON text in `.txt` — `.json` is outside the §3.5 allowlist).
-3. Multimodal forensic evidence collection: every item `{source, collected_at_utc, sha256, bytes, mime, pii_tags[], forensic_scan}` staged in evidence-store; visual/PDF items (`jpg,jpeg,png,tif,bmp,pdf`) run through `VISION_MODEL` (`vision_json`) to extract redacted OCR text, IOCs, visual PII bounding tags, and Art 34(3)(a) cryptographic configuration proof before upload via `pims_upload_attachment` (type/size gates §3.5), hash verified post-upload. `evidence` text on actions points at `file_name`s. `evidence_refs` on the incident accumulates `file:<name>:<sha8>` + `voice:*` + `cite:<doc:chunk>` tokens per §9.1 marker rule (≤1000 chars; overflow → `evidence-index.txt` attachment with pointer token left in-field). PII-tagged items (`rep_*`, DPO, subject samples) are marked `pii:true` in the manifest and excluded from RAG precedent ingest until redacted.
+2. Single-prompt root-cause analysis (§5.2 selector): `investigator` selects method (single chain → 5-whys; multi-factor → fishbone; system-failure → fault-tree) and produces `RootCause` shape `{ method, cause, evidence_refs, systemic, remediation, root_cause_unproven }`. Stored via `evidenceStore.saveRootCause` in the `root_causes` table; the `A` action description is `Root cause (<method>): <cause>` with evidence refs joined into `evidence`; `root_cause_unproven:true` appends `ROOT_CAUSE_UNPROVEN`. No `root-cause.txt` attachment is produced.
+3. Evidence collection: every item `{file_name, sha256, bytes, mime, pii_tags[], uploader, uploaded_at_utc, pims_attachment_id?}` staged in evidence-store with SHA-256 hash integrity verification before upload via `pims_upload_attachment` (type/size gates §3.5), hash verified post-upload. `evidence` text on actions points at `file_name`s. `evidence_refs` on the incident accumulates `file:<name>:<sha8>` tokens per §9.1 marker rule (≤1000 chars; overflow → `evidence-index.txt` attachment with pointer token left in-field).
 4. Containment (`C` actions) BEFORE deep analysis completes: isolate system, revoke credentials, block URL/IP, preserve logs — each as its own `C` action with `action_date` and `evidence`. Zero `C` with ongoing compromise at 24h → `CONTAINMENT_OVERDUE` page (work continues; page is informational).
 5. `measure_*` flags updated as facts land: `measure_updated_registry` (Y when history shows full trail), `measure_new_security` (Y when a `C` adds a control), `measure_improved_policies` (Y when policy fix identified), `measure_considered_resolved` (stays N/U until §9.6), `measure_reported_authorities` (stays N/U until §9.5 send). `security_measures_adopted` appended from the 10-code catalog as measures deploy (codes ONLY from §3.5; unknown → `PIMS_UNKNOWN_CODE`).
 6. Investigation completeness gate (before handoff to draft): ≥1 `C` (or `no_containment_needed:<reason>` reviewer-approved) + ≥1 `A` with method output + evidence manifest non-empty (or `no_evidence:<reason>` reviewer-approved — zero-evidence close is otherwise forbidden) + `affected_data_types[]` finalized + `num_affected_subjects` estimated or `unknown:PHASED_PENDING` + `affected_cid[]` finalized + `compromised_system`/`affected_url` set or `unknown`. Handoff emits `investigation_complete`.
@@ -867,7 +809,7 @@ Training trigger: `incident_type=HE` with People-bone causes → emit `training_
 
 Chain ONLY — no role may be skipped. Pack built by `notice-composer` from VALIDATED incident fields (re-GET before build; stale >5 min → re-GET again, `PACK_STALE_RETRY` max 3).
 
-Authority pack (§10.1): items (a)+(b)+(c)+(d) + `awareness_at_utc` + `deadline_at_utc` + `delay_reasons` (REQUIRED if now > awareness+72h: `{hours_late, reasons[]}` — MUST be factual, cited to history) + `phased` + `citations[]`. Unknown quantities → `unknown:PHASED_PENDING` + `T_PHASE_FOLLOWUP` armed (Art 33(4)). `drafter` writes draft to evidence-store (`pack:authority:<code>:<uuid>.json`); `compliance_reviewer` first runs an **Adversarial Red-Team Prosecutor Pass** (simulating a supervisory auditor challenging every delay reason, phased-unknown marker, and Art 34(3) exemption claim) followed by the **4-Judge Constitutional Rubric** (Judge 1: §2.2/§2.3 Checklist Completeness; Judge 2: NLI Citation Entailment ≥`NLI_ENTAILMENT_MIN` (§13) against retrieved normative chunks; Judge 3: Plain-Language Readability ≤`PLAIN_LANG_MAX_WORDS` (§13) words/sentence; Judge 4: Zero-Trust PII, Exemption Proof & Semantic Entropy ≤`MAX_SEMANTIC_ENTROPY` (§13) Verification). Any judge failure (up to `MAX_REVIEW_CYCLES`, §13) → `REVIEW_REJECTED:<judge>:<item>:<fix>`; unanimous pass mints a single-use `review_approval_id` bound to `pack_content_sha256` (the SHA-256 of canonical JSON excluding envelope fields `state`, `review_approval_id`, and `submitted_at_utc`; any substantive edit invalidates the hash → `REVIEW_APPROVAL_INVALID`). Upon resolution approval (`review_approval_id`), `orchestrator` dispatches `investigator` in the `approve/notify` stage to record the `R` action(s) via `pims_add_action(action_type="R", review_approval_id=...)` prior to `monitor` close evaluation.
+Authority pack (§10.1): items (a)+(b)+(c)+(d) + `awareness_at_utc` + `deadline_at_utc` + `delay_reasons` (REQUIRED if now > awareness+72h: `{hours_late, reasons[]}` — MUST be factual, cited to history) + `phased` + `citations[]`. Unknown quantities → `unknown:PHASED_PENDING` + `T_PHASE_FOLLOWUP` armed (Art 33(4)). `drafter` writes draft to evidence-store (`pack:authority:<code>:<uuid>.json`); `compliance_reviewer` runs one adversarial challenge call plus deterministic legal-completeness, citation-existence, plain-language, PII, and close-checklist checks. Any check failure (up to `MAX_REVIEW_CYCLES`, §13) → `REVIEW_REJECTED:<judge>:<item>:<fix>`; a pass mints a single-use `review_approval_id` bound to `pack_content_sha256` (the SHA-256 of canonical JSON excluding envelope fields `state`, `review_approval_id`, and `submitted_at_utc`; any substantive edit invalidates the hash → `REVIEW_APPROVAL_INVALID`). Upon resolution approval (`review_approval_id`), `orchestrator` dispatches `investigator` in the `approve/notify` stage to record the `R` action(s) via `pims_add_action(action_type="R", review_approval_id=...)` prior to `monitor` close evaluation.
 
 Subject notice (§10.2): high-risk gate FIRST — `likely_high_risk` true when ANY of the typed triggers fire: `severity` enum = `C`, `impact` enum = `V`, a sensitive `affected_data_types` entry from either catalog (`categorias_especiales`, `economicos_financieros`, `datos_relativos_condenas_infracciones` in the ES catalog; `sensitive`, `health`, `biometric`, `minors`, `financial`, `credentials` in the bundle catalog — single source `SENSITIVE_AFFECTED_DATA_TYPES`), `num_affected_subjects ≥100` (null when unknown), `unencrypted_exfiltration`, or `authority_ordered` (Art 34(4)). Inputs are Zod-validated enums; out-of-catalog values fail fast (`PIMS_VALIDATION:high_risk_gate`). Gate false → state `not_required` with rationale + reviewer sign-off (no notice, no exemption needed). Gate true → evaluate Art 34(3) exemptions in order (a)→(b)→(c) with the §2.3 evidence table (each needs evidence + approval id; (c) needs the public-communication artifact attached FIRST). Exemption granted → state `exempted:<letter>:<approval_id>` + evidence pointers in bundle. No exemption → compose (b)+(c)+(d) in clear plain language (`es` default for UNSA subjects, `en` available; reading-level check: no sentence >25 words without reviewer waiver `PLAIN_LANGUAGE_WAIVER`), approval, then send.
 
@@ -966,10 +908,10 @@ Controlling controls: B.3.12 record list, Art 33(5), 10.2 evidence. One manifest
   "sealed_at_utc": "...|null",
   "seal_sha256": "...|null",
   "incident": {"description": "...", "time_period": {"from": "...", "to": "..."}, "consequences": "...", "reporter": "...", "reported_to": "...", "resolution_steps": ["..."], "person_in_charge": "...", "data_recovered": "...|null", "cid_fact": ["C"], "pii_description": "...|null", "notification_steps": ["authority:sent:...", "subject:exempted:a:..."]},
-  "items": [{"file_name": "...", "sha256": "...", "bytes": 0, "mime": "...", "pii_tags": [], "forensic_scan": {"ocr_text": "...", "iocs": [], "visual_pii": [], "encryption_proof_signal": false, "tamper_score": 0.0}|null, "uploader": "...", "uploaded_at_utc": "...", "pims_attachment_id": 0}],
+  "items": [{"file_name": "...", "sha256": "...", "bytes": 0, "mime": "...", "pii_tags": [], "forensic_scan": null, "uploader": "...", "uploaded_at_utc": "...", "pims_attachment_id": 0}],
   "citations": ["doc:chunk:lines"],
   "packs": ["pack:authority:<uuid>.json", "pack:subject:<uuid>.json"],
-  "root_cause": {"method": "5-whys|fishbone|fault-tree", "tot_posterior": 0.92, "summary": "...", "systemic": false, "counterfactuals": [{"control_code": "encrypt_rest", "blocks_cut_set": true, "residual_probability_delta": -2, "proof_rationale": "..."}]}
+  "root_cause": {"method": "5-whys|fishbone|fault-tree", "cause": "...", "systemic": false, "remediation": "..."}
 }
 ```
 
@@ -988,7 +930,7 @@ Controlling clauses: 6.1.3(e) (SoA), 9.2 (audit evidence). Per incident: `{incid
 Controlling clause: 9.3.2(d) (trends in nonconformities/corrective actions, monitoring results, audit results) + 10.2 trend needs.
 
 ```json
-{"event": "incident_opened|pii_assumed|incident_triaged|investigation_complete|notice_sent|notice_exempted|sla_hazard_high|deadline_missed|corrective_linked|risk_signalled|training_recommended|gate_blocked|incident_closed|incident_reopened", "incident_code": "INC-001", "at_utc": "...", "actor_role": "...", "attrs": {"severity": "H", "incident_type": "DL", "mttd_hours": 1.5, "mttr_hours": 72.0, "sla_72h_met": true, "sla_breach_prob_72h": 0.12, "exemption": null}}
+{"event": "incident_opened|pii_assumed|incident_triaged|investigation_complete|notice_sent|notice_exempted|deadline_missed|corrective_linked|risk_signalled|training_recommended|gate_blocked|incident_closed|incident_reopened", "incident_code": "INC-001", "at_utc": "...", "actor_role": "...", "attrs": {"severity": "H", "incident_type": "DL", "mttd_hours": 1.5, "mttr_hours": 72.0, "sla_72h_met": true, "exemption": null}}
 ```
 
 Derived metrics (emitter computes): counts by type/severity/status, MTTD (awareness−occurrence), MTTR (close−awareness), 72h SLA compliance rate, overdue actions, exemption rate by letter. `incident_closed` REQUIRES `mttd_hours` + `mttr_hours` (else `ARTIFACT_INCOMPLETE`). Events feed Agente de Indicadores (transport: webhook `INDICATOR_WEBHOOK_URL` §13 with HMAC `INDICATOR_WEBHOOK_SECRET`; delivery failure spools per §4.2).
@@ -1005,14 +947,14 @@ Required by: B.3.11/B.3.12 (protect the process itself), 4.2/6.1.2 (PII risk), A
 
 ### 11.2 Secrets handling
 
-Secrets (PIMS credential, provider API keys, webhook HMAC, evidence encryption key, TTS allowlist excluded — allowlist holds hashes only) live ONLY in env vars or `*_CMD` helpers, never in files, prompts, logs, RAG, bundles, or transcripts. Capture transcripts redacted at write time (verified: 38 files, zero tokens/passwords). Secret access logged as `SECRET_ACCESSED:<name>` (name only). Secret value in any log/artifact (automated scan) → `SECRET_LEAKED:<name>`: rotate immediately via documented rotation procedure (§12.5 runbook), purge the artifact, page operator. Scan-exclusion forensics: every `grep -v` exclusion in the §14.3 gates MUST name a fixed literal allowlist (`STT_API_KEY`, `TTS_API_KEY`, `_AUTH_ENV`, `G4 secret`, `14.3 Mechanical`) — never a bare `CORE_` marker or line range; the `CORE_START/END` comments in §14.3 are visual anchors only, and the awk range excludes the whole gate block INCLUDING any future `core_incident`-adjacent text, so reviewers MUST re-read §14.3 diffs on every spec change (`GATE_BLOCK_DIRTY` check in CI: fail if §14.3 changed without a reviewer sign-off trailer).
+Secrets (PIMS credential, provider API keys, webhook HMAC, evidence encryption key) live ONLY in environment variables or deterministic `*_CMD` secret-fetching commands per §11.2, never in files, prompts, logs, RAG, bundles, or transcripts. Capture transcripts redacted at write time (verified: 38 files, zero tokens/passwords). Secret access logged as `SECRET_ACCESSED:<name>` (name only). Secret value in any log/artifact (automated scan) → `SECRET_LEAKED:<name>`: rotate immediately via documented rotation procedure (§12.5 runbook), purge the artifact, page operator. Scan-exclusion forensics: every `grep -v` exclusion in the §14.3 gates MUST name a fixed literal allowlist (`_AUTH_ENV`, `G4 secret`, `14.3 Mechanical`) — never a bare `CORE_` marker or line range; the `CORE_START/END` comments in §14.3 are visual anchors only, and the awk range excludes the whole gate block INCLUDING any future `core_incident`-adjacent text, so reviewers MUST re-read §14.3 diffs on every spec change (`GATE_BLOCK_DIRTY` check in CI: fail if §14.3 changed without a reviewer sign-off trailer).
 
 ### 11.3 PII minimization (binding on every component)
 
-- Prompts carry the redacted-context schema ONLY: `{incident_code, status, incident_type, severity, impact, dates, enum_codes, redacted_text ([REPORTANTE]/[CONTACTO]/[ID]/[SISTEMA]/[DESCRIPCION] per §8.5), counts, citations}`. Originals (`rep_*`, DPO contacts, subject data, URLs, descriptions) are resolved ONLY inside `pims-adapter`/`evidence-store` AFTER the LLM step. Violation (PII pattern in prompt — same scan as §8.5) → `PROMPT_PII_BLOCKED`: block the call, page reviewer (potential adapter bug).
+- Prompts carry the redacted-context schema ONLY: `{incident_code, status, incident_type, severity, impact, dates, enum_codes, redacted_text ([REPORTANTE]/[CONTACTO]/[ID]/[SISTEMA]/[DESCRIPCION] per `redactForPrompt`), counts, citations}`. Originals (`rep_*`, DPO contacts, subject data, URLs, descriptions) are resolved ONLY inside `pims-adapter`/`evidence-store` AFTER the LLM step. Violation (PII pattern in prompt — the `AgentModelClient` PII gate) → `PROMPT_PII_BLOCKED`: block the call, page reviewer (potential adapter bug).
 - Logs: field names only (mirror `core_securitylog.detail`); `incident_code`/enum codes allowed; values forbidden. `LOG_PII=false` is a CONSTANT, not settable true (config parser rejects `true` → `CONFIG_REJECTED:LOG_PII`).
 - `__str__`/display: code-only (`INC-001`), never names (Anexo_05 §6.4).
-- Cloud-LLM decision (user override of `class1.txt:442-482` "pecera de vidrio" on-prem preference): accepted as CONFIGURABLE cloud because the course grades maximum AI surface and the provider rows are swappable; mitigated by redaction + zero raw PII in prompts + zero audio/transcript retention at providers (contract requirement on provider selection: zero-retention API tier REQUIRED, else `PROVIDER_REJECTED:retention`). If the instructor rejects cloud at grading, execute the §4-provider-swap contingency (Assumptions): replace provider rows with Ollama/Llama + local embeddings, re-run §7.6 eval — no lifecycle rewrite.
+- Cloud-LLM decision (user override of `class1.txt:442-482` "pecera de vidrio" on-prem preference): accepted as CONFIGURABLE cloud because the course grades maximum AI surface and the provider rows are swappable; mitigated by redaction + zero raw PII in prompts + zero-retention API tier at providers (contract requirement on provider selection: zero-retention API tier REQUIRED, else `PROVIDER_REJECTED:retention`). If the instructor rejects cloud at grading, execute the §4-provider-swap contingency (Assumptions): replace provider rows with Ollama/Llama + local embeddings, re-run §7.6 eval — no lifecycle rewrite.
 - Exports: `PIMS_EXPORT_PII_WARNED` + redacted columns default (§3.4). RAG precedent ingest: redacted bundles only + zero-hit PII scan (§7.1).
 
 ### 11.4 Tenant isolation
@@ -1024,7 +966,7 @@ Every PIMS call carries the session whose JWT `schema` claim MUST equal the conn
 - `OPERATOR_HALT` (console, requires `change_incident`): §6.3 semantics (mutations frozen ≤5s, in-flight completes, timers run, resume replays). Halt state persisted; restart during halt resumes halted (`HALT_PERSISTED`). Unhalt requires explicit console action + reason (logged `HALT_LIFTED:<op>:<reason>`).
 - `HUMAN_VETO_WINDOW_MIN>0`: §6.3/§9.5 (parks `pims_notify` only). Vetoed pack → `draft` with `VETOED_BY` record; 3 vetoes on one pack → `VETO_STUCK` page (work continues on other incidents).
 - Lease anti-double-notify: §6.6 (single lease per code; notify needs fresh approval + history check). Double-send detected post-hoc (two `notified` for one pack hash) → `DOUBLE_NOTIFY:<pack_id>`: page immediately, record correction note, root-cause the orchestrator (fatal bug class).
-- Attachment gates: type/size (§3.5) + malware-pattern filename block (`*.exe,*.js,*.vbs,*.scr,*.bat,*.ps1,*.dll,*.so` rejected → `ATTACHMENT_REJECTED:executable`, even though PIMS allowlist omits them — defense in depth) + 10 MB cap. TTS/STT quotas per §13 (exceeded → `VOICE_UNAVAILABLE`, text continues).
+- Attachment gates: type/size (§3.5) + malware-pattern filename block (`*.exe,*.js,*.vbs,*.scr,*.bat,*.ps1,*.dll,*.so` rejected → `ATTACHMENT_REJECTED:executable`, even though PIMS allowlist omits them — defense in depth) + 10 MB cap.
 
 ### 11.6 Abuse controls
 
@@ -1044,11 +986,11 @@ Per §3.6 map (400-shape/401/403/404/409/429/5xx). LLM/tool JSON errors: schema-
 
 ### 12.3 Persistence
 
-Persisted (evidence-store, encrypted, fsync): timers, drafts (packs + approvals), leases, dedupe index, risk-signal queue, indicator spool, voice audio-refs, corpus version pointer. PIMS history is the source of truth on conflict (restart replay §6.6). Backup: `pg_dump -Fc` before any PIMS migration (Anexo_06) — agent-side: nightly evidence-store snapshot (encrypted) + pre-seal manifest copy. Rollback = re-arm timers from history (§6.6 restart); no PIMS rollback is ever attempted by the agent (PIMS owns its data; agent requests via API only).
+Persisted (evidence-store, encrypted, fsync): timers, drafts (packs + approvals), leases, dedupe index, risk-signal queue, indicator spool, corpus version pointer. PIMS history is the source of truth on conflict (restart replay §6.6). Backup: `pg_dump -Fc` before any PIMS migration (Anexo_06) — agent-side: nightly evidence-store snapshot (encrypted) + pre-seal manifest copy. Rollback = re-arm timers from history (§6.6 restart); no PIMS rollback is ever attempted by the agent (PIMS owns its data; agent requests via API only).
 
 ### 12.4 Observability
 
-Structured JSON logs, one line per tool call: `{at_utc, incident_code, role, tool, idempotency_key, corpus_version, prompt_sha, citation_ids[], timer_ids[], duration_ms, rag_triad:{context_relevance, groundedness, answer_relevance}, conformal_score?, outcome, error?}`. NO prompt text, NO PII values, NO tokens (automated scan in CI: `SECRET_LEAKED`/`PROMPT_PII` patterns → build fail). Metrics (Prometheus `/metrics`): loop latency histogram, 72h SLA compliance gauge, retry counts by error, voice route availability, RAG hit-rate + RAG triad gauges + eval status, conformal uncertainty histogram, spool depth, lease contention, circuit-breaker states. Tracing: OpenTelemetry `gen_ai.*` semantic conventions, one trace per incident (`trace_id=incident_code:run_uuid`), child spans per role, tool, and constitutional judge. Alerting: pages on `DEADLINE_MISSED_*`, `DOUBLE_NOTIFY`, `HALT_RISK_72H`, `VOICE_ROUTE_DOWN`, `CIRCUIT_OPEN`, `RAG_EVAL_FAILED`, `SECRET_LEAKED`; tickets (non-urgent) on `VETO_STUCK`, `ESCALATE_STUCK_REVIEW`, `BUNDLE_PIMS_MISMATCH`. Deploy gate: §7.6 eval PASS + §14 gates green, else `DEPLOY_BLOCKED:<gate>`.
+Structured JSON logs, one line per tool call: `{at_utc, incident_code, role, tool, idempotency_key, corpus_version, prompt_sha, citation_ids[], timer_ids[], duration_ms, conformal_score?, outcome, error?}`. NO prompt text, NO PII values, NO tokens (automated scan in CI: `SECRET_LEAKED`/`PROMPT_PII` patterns → build fail). Metrics (Prometheus `/metrics`): loop latency histogram, 72h SLA compliance gauge, retry counts by error, RAG hit-rate + eval status, conformal uncertainty histogram, spool depth, lease contention, circuit-breaker states. Tracing: OpenTelemetry `gen_ai.*` semantic conventions, one trace per incident (`trace_id=incident_code:run_uuid`), child spans per role, tool, and review check. Alerting: pages on `DEADLINE_MISSED_*`, `DOUBLE_NOTIFY`, `HALT_RISK_72H`, `CIRCUIT_OPEN`, `RAG_EVAL_FAILED`, `SECRET_LEAKED`; tickets (non-urgent) on `VETO_STUCK`, `ESCALATE_STUCK_REVIEW`, `BUNDLE_PIMS_MISMATCH`. Deploy gate: §7.6 eval PASS + §14 gates green, else `DEPLOY_BLOCKED:<gate>`.
 
 ### 12.5 Deployment and runbooks
 
@@ -1082,30 +1024,22 @@ Required by: B.3.11 (documented, communicated procedures — configuration IS pr
 | `PIMS_TIMEOUT_MS` | int | `15000` | No | Per-request timeout |
 | `PIMS_MAX_RETRIES` | int | `3` | No | §3.6/§12.2 retry cap |
 | `PIMS_PAGE_SIZE` | `default/max` | `50/100` | No | §5.3 pagination bounds for `core_incident` and related list queries |
+| `PIMS_EXTRA_HEADERS_JSON` | json | `{}` | No | Optional HTTP headers to include with PIMS requests |
+| `PIMS_COOKIES_JSON` | json | `{}` | No | Optional cookies to include with PIMS requests |
 | `IDEMPOTENCY_KEY_PREFIX` | string | `agi1` | No | Mutation key prefix (§5.3) |
 | `JURISDICTION_DEADLINES_JSON` | json | `{"EU_GDPR":{"authority_h":72,"processor_to_controller":"without_undue_delay"},"PE_PDP":{"authority_h":"48_unverified"}}` | Yes | Deadline table (§2.6); `48_unverified` enables advisory timer ONLY |
 | `SUBJECT_NOTICE_POLICY` | enum | `high_risk_only` | No | `high_risk_only` (Art 34 gate) ONLY — no other value exists today; unknown → `CONFIG_REJECTED` |
 | `HUMAN_VETO_WINDOW_MIN` | int | `0` | No | 0 = fully autonomous; >0 parks `pims_notify` only (§6.3) |
 | `ASSIGNEES` | string[] | `[]` | No | Round-robin `assigned_to` pool; empty → leave null + flag `UNASSIGNED` (never invent a name) |
-| `VOICE_PRIMARY_LANG` | string | `es-PE` | No | Intake language |
-| `VOICE_FALLBACK_LANG` | string | `en` | No | Fallback language |
-| `STT_PROVIDER` | string | — | If voice | e.g. `deepgram` — example only, any provider implementing the call contract |
-| `STT_MODEL` | string | — | If voice | Provider model id |
-| `STT_AUTH_ENV` | string | `STT_API_KEY` | If voice | Env holding the key (name only, never value) |
-| `TTS_PROVIDER` / `TTS_MODEL` / `TTS_VOICE` / `TTS_AUTH_ENV` | strings | — / — / — / `TTS_API_KEY` | If voice | Same pattern; voice must support `es-PE` |
-| `VOICE_RETENTION_DAYS` | int | `30` | No | Audio-ref retention, then crypto-erasure (§8.2) |
-| `VOICE_MAX_AUDIO_MB` | int | `25` | No | §8.2 cap |
-| `VOICE_MIN_CONFIDENCE` / `VOICE_LANG_CONFIDENCE` / `VOICE_SPOOF_THRESHOLD` | floats | `0.5` / `0.7` / `0.80` | No | §8.1–§8.3 STT confidence, language detection & anti-spoofing gates |
 | `REASONING_MODEL` | `provider,model,endpoint,auth_env,timeout_ms,max_retries,fallback:none` | — | Yes | §4.3 investigation/drafting/review |
 | `FAST_MODEL` | same | — | Yes | §4.3 classification/extraction/triage |
-| `VISION_MODEL` | same | — | Yes | §4.3/§9.3 multimodal forensic attachment scanner |
+| `VISION_MODEL` | same | — | No | reserved provider capability; no current caller after forensic-scanner removal |
 | `EMBEDDINGS_MODEL` | same | — | Yes | §4.3/§7 (change ⇒ re-ingest) |
 | `RERANKER_MODEL` | same | — | Yes | §4.3/§7.4 |
- | `TEMP_CLASSIFIER` / `TEMP_REASONING` | floats | `0.0` / `0.2` | No | §4.3/§5.1 fixed role temperatures; `TEMP_CLASSIFIER` is passed with `FAST_MODEL` calls, `TEMP_REASONING` with `REASONING_MODEL` calls; values fixed, not routing signals |
-| `TOT_BRANCH_FACTOR` | int | `3` | No | §5.2/§9.3 Tree-of-Thoughts candidate hypothesis count |
-| `MAX_REVIEW_CYCLES` / `NLI_ENTAILMENT_MIN` / `PLAIN_LANG_MAX_WORDS` / `MAX_SEMANTIC_ENTROPY` | int/float/int/float | `3` / `0.85` / `25` / `0.65` | No | §6.1/§9.5 constitutional review rubric & semantic-entropy thresholds |
+| `TEMP_CLASSIFIER` / `TEMP_REASONING` | floats | `0.0` / `0.2` | No | §4.3/§5.1 fixed role temperatures; `TEMP_CLASSIFIER` is passed with `FAST_MODEL` calls, `TEMP_REASONING` with `REASONING_MODEL` calls; values fixed, not routing signals |
+| `MAX_REVIEW_CYCLES` / `PLAIN_LANG_MAX_WORDS` | int/int | `3` / `25` | No | §6.1/§9.5 review cycle cap & plain-language word limit |
 | `DEDUPE_TRIGRAM_THRESHOLD` / `DEDUPE_COSINE_THRESHOLD` | floats | `0.85` / `0.90` | No | §6.6 hybrid lexical+semantic dedupe thresholds |
-| `SLA_PROCESSOR_H` / `SLA_SUBJECT_H` / `SLA_REVIEW_H` / `SLA_HAZARD_WARN_THRESHOLD` | ints/float | `1` / `4` / `4` / `0.75` | No | §2.4/§6.4 internal policy bounds (hours) & Weibull hazard alert gate |
+| `SLA_PROCESSOR_H` / `SLA_SUBJECT_H` / `SLA_REVIEW_H` | ints | `1` / `4` / `4` | No | §2.4/§6.4 internal policy bounds (hours) |
 | `CORRECTIVE_DEFAULT_DUE_DAYS` | int | `30` | No | §9.4 default `due_date` offset from detection |
 | `CIRCUIT_BREAKER_FAILS` / `CIRCUIT_BREAKER_WINDOW_S` / `CIRCUIT_BREAKER_OPEN_S` | ints | `5` / `60` / `300` | No | §12.2 circuit breaker parameters |
 | `RAG_CORPUS_PATHS` | map | §7.1 table | No | Override per `doc_id` only; corpus membership fixed |
@@ -1170,7 +1104,7 @@ awk '/^### 14.3/{f=1} /^### 14.4/{f=0} !f' docs/incident-agent-spec.md | grep -n
 # G3 incident coverage (count MUST be ≥ 20; every writable column appears ≥1 — failing list via comm of §3.2 names vs spec tokens)
 grep -c 'core_incident' docs/incident-agent-spec.md
 # G4 secret scan (MUST print nothing; excludes §13 *_ENV config-name rows which name variables without values; patterns split to avoid self-match)
-grep -rinE 'Q\\^|BEGIN .*PRIVATE' docs/ | grep -v '14.3 Mechanical\|G4 secret' ; grep -rinE 'eyJ[A-Za-z0-9_-]{10,}' docs/ ; grep -rinE 'api[_-]?key' docs/ | grep -v 'STT_API_KEY\|TTS_API_KEY\|_AUTH_ENV\|G4 secret\|14.3 Mechanical'
+grep -rinE 'Q\\^|BEGIN .*PRIVATE' docs/ | grep -v '14.3 Mechanical\|G4 secret' ; grep -rinE 'eyJ[A-Za-z0-9_-]{10,}' docs/ ; grep -rinE 'api[_-]?key' docs/ | grep -v '_AUTH_ENV\|G4 secret\|14.3 Mechanical'
 # G5 structure (MUST list 15 sections 0..14; mermaid count MUST be 4: §4.1 + 3 in §6; second command excludes this block)
 grep -n '^## ' docs/incident-agent-spec.md
 awk '/^### 14.3/{f=1} /^### 14.4/{f=0} !f' docs/incident-agent-spec.md | grep -c '```mermaid'
@@ -1208,10 +1142,10 @@ G2 allowlist note: G2 output MUST contain ONLY the §1 definition, §2.4/§2.5/�
 | PIMS enums + 12/10/CID catalogs | §3.5 | G6, A01 |
 | PIMS endpoints E01–E26 | §3.1 | G6, A11, A15 |
 | PIMS error map | §3.6 | A05, A11, A12 |
-| Roles (8) + skills (11) + tools (21) | §5 | A01 (chain executes), A06 (veto parks notifier only) |
+| Roles (8) + skills (10) + tools (19) | §5 | A01 (chain executes), A06 (veto parks notifier only) |
 | Loop + state machines + timers | §6 | A01, A02, A06, A07, A12, A13 |
 | RAG + citations + eval | §7 | A14 |
-| Voice intake + readback + redaction | §8 | A03 (re-prompt rule), §8.6 table |
+| Voice subsystem (removed in the downscale) | §8 | §8 deprecation note; no voice tools/skills |
 | Artifacts (packs/bundle/export/links/events) | §10 | A01, A08–A10 |
 | Security/privacy/safety | §11 | G4, A06, A13 |
 | Reliability/observability/deploy | §12 | A11–A13, G1–G6 |

@@ -1,5 +1,4 @@
 import { IndicatorEmitter } from "@pims/agent/indicators/indicator-emitter.ts";
-import { TotAnalyzer } from "@pims/agent/investigation/tot-analyzer.ts";
 import { CloseChecklistVerifier } from "@pims/agent/lifecycle/close-checklist.ts";
 import { AgentModelClient } from "@pims/agent/llm/safe-prompt.ts";
 import { IncidentOrchestrator } from "@pims/agent/orchestrator/orchestrator.ts";
@@ -8,8 +7,8 @@ import {
   DeadlineScheduler,
   type TimerEffects,
 } from "@pims/agent/orchestrator/scheduler.ts";
-import { ConstitutionalReviewer } from "@pims/agent/review/constitutional-judges.ts";
 import { NoticeDraftService } from "@pims/agent/review/draft-service.ts";
+import { NoticeReviewer } from "@pims/agent/review/reviewer.ts";
 import { createIncidentToolHandlers } from "@pims/agent/tools/incident-tools.ts";
 import { createKnowledgeToolHandlers } from "@pims/agent/tools/knowledge-tools.ts";
 import { createNoticeToolHandlers } from "@pims/agent/tools/notice-tools.ts";
@@ -19,24 +18,18 @@ import {
   ToolRegistry,
 } from "@pims/agent/tools/registry.ts";
 import { createRiskAuditToolHandlers } from "@pims/agent/tools/risk-audit-tools.ts";
-import {
-  createUnconfiguredVoicePort,
-  type VoicePort,
-} from "@pims/agent/voice/voice-port.ts";
 import type { AgentConfig } from "@pims/config";
 import { BundleSealer } from "@pims/evidence/bundle-sealer.ts";
 import type { EvidenceStore } from "@pims/evidence/evidence-store.ts";
-import { ForensicScanner } from "@pims/evidence/forensic-scanner.ts";
 import { ExemptionEngine } from "@pims/notices/exemption-engine.ts";
 import { NoticeComposer } from "@pims/notices/notice-composer.ts";
 import type { PimsAdapter } from "@pims/pims-adapter";
 import type { RAGService } from "@pims/rag";
-import type { ToolName } from "@pims/types/agent.ts";
+import type { PageAlert, ToolName } from "@pims/types/agent.ts";
 import { PimsClientBugError } from "@pims/types/errors.ts";
 import type { ModelProvider } from "@pims/types/models.ts";
 
 export * from "@pims/agent/indicators/indicator-emitter.ts";
-export * from "@pims/agent/investigation/tot-analyzer.ts";
 export * from "@pims/agent/lifecycle/awareness.ts";
 export * from "@pims/agent/lifecycle/close-checklist.ts";
 export * from "@pims/agent/lifecycle/dedupe.ts";
@@ -46,15 +39,14 @@ export * from "@pims/agent/orchestrator/lifecycle.ts";
 export * from "@pims/agent/orchestrator/orchestrator.ts";
 export * from "@pims/agent/orchestrator/roles.ts";
 export * from "@pims/agent/orchestrator/scheduler.ts";
-export * from "@pims/agent/review/constitutional-judges.ts";
 export * from "@pims/agent/review/draft-service.ts";
+export * from "@pims/agent/review/reviewer.ts";
 export * from "@pims/agent/tools/helpers.ts";
 export * from "@pims/agent/tools/incident-tools.ts";
 export * from "@pims/agent/tools/knowledge-tools.ts";
 export * from "@pims/agent/tools/notice-tools.ts";
 export * from "@pims/agent/tools/registry.ts";
 export * from "@pims/agent/tools/risk-audit-tools.ts";
-export * from "@pims/agent/voice/voice-port.ts";
 
 export interface CreateAgentDeps {
   adapter: PimsAdapter;
@@ -63,17 +55,11 @@ export interface CreateAgentDeps {
   ragService: RAGService;
   config: AgentConfig;
   bundleSealer?: BundleSealer;
-  forensicScanner?: ForensicScanner;
   composer?: NoticeComposer;
   exemptionEngine?: ExemptionEngine;
-  voice?: VoicePort;
   clock?: () => Date;
   fetchImpl?: typeof fetch;
-  page?: (alert: {
-    incident_code: string;
-    kind: string;
-    reason: string;
-  }) => void;
+  page?: (alert: PageAlert) => void;
 }
 
 export interface CreateAgentOptions {
@@ -84,8 +70,7 @@ export interface Agent {
   roles: RoleRegistry;
   tools: ToolRegistry;
   scheduler: DeadlineScheduler;
-  reviewer: ConstitutionalReviewer;
-  totAnalyzer: TotAnalyzer;
+  reviewer: NoticeReviewer;
   draftService: NoticeDraftService;
   orchestrator: IncidentOrchestrator;
   indicator: IndicatorEmitter;
@@ -113,10 +98,8 @@ export async function createAgent(
   const evidenceStore = deps.evidenceStore;
   const adapter = deps.adapter;
   const bundleSealer = deps.bundleSealer ?? new BundleSealer(evidenceStore);
-  const forensicScanner = deps.forensicScanner ?? new ForensicScanner();
   const composer = deps.composer ?? new NoticeComposer({ now: clock });
   const exemptionEngine = deps.exemptionEngine ?? new ExemptionEngine();
-  const voice = deps.voice ?? createUnconfiguredVoicePort();
   const modelClient = new AgentModelClient(deps.modelProvider);
 
   const roles = new RoleRegistry();
@@ -164,16 +147,10 @@ export async function createAgent(
     page,
   });
 
-  const reviewer = new ConstitutionalReviewer({
+  const reviewer = new NoticeReviewer({
     modelClient,
     ragService: deps.ragService,
     evidenceStore,
-    config,
-    clock,
-  });
-  const totAnalyzer = new TotAnalyzer({
-    modelClient,
-    ragService: deps.ragService,
     config,
   });
   const draftService = new NoticeDraftService({
@@ -189,13 +166,11 @@ export async function createAgent(
     adapter,
     evidenceStore,
     bundleSealer,
-    forensicScanner,
     closeChecklist,
     ragService: deps.ragService,
     modelClient,
     scheduler,
     indicator,
-    voice,
     config,
     clock,
     roleRegistry: roles,
@@ -218,12 +193,10 @@ export async function createAgent(
     tools,
     evidenceStore,
     bundleSealer,
-    forensicScanner,
     modelClient,
     scheduler,
     reviewer,
     draftService,
-    totAnalyzer,
     composer,
     exemptionEngine,
     ragService: deps.ragService,
@@ -248,7 +221,6 @@ export async function createAgent(
     tools,
     scheduler,
     reviewer,
-    totAnalyzer,
     draftService,
     orchestrator,
     indicator,

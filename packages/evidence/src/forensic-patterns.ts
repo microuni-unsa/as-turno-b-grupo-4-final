@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import net from "node:net";
 import { PII_PHONE_REGIONS } from "@pims/types/constants.ts";
 import { AttachmentRejectedError } from "@pims/types/errors.ts";
@@ -19,6 +20,10 @@ const SPANISH_ID_LETTERS = "TRWAGMYFPDXBNJZSQVHLCKE";
 const ACCEPTED_HASH_LENGTHS: ReadonlySet<number> = new Set([32, 40, 64]);
 const NIE_PREFIX_DIGITS: Record<string, string> = { X: "0", Y: "1", Z: "2" };
 const EMAIL_SCHEMA = z.string().email();
+
+export function sha256HexBytes(data: Buffer | Uint8Array): string {
+  return crypto.createHash("sha256").update(data).digest("hex");
+}
 
 function collectAll(pattern: RegExp, text: string): RegExpExecArray[] {
   return Array.from(text.matchAll(new RegExp(pattern.source, "g")));

@@ -32,21 +32,21 @@ export type CapabilityExecutor = (
 
 export const ROLE_PROMPTS: Readonly<Record<AgentRole, string>> = Object.freeze({
   orchestrator:
-    "You are the incident-response orchestrator. Dispatch roles strictly per the §6 loop. Enforce transition guards (§6.2), timer arming (§6.4), and the invariants (§6.5). Never call PIMS directly except operator-console recipient management; emit tool calls only. Never invent fields, codes, or deadlines.",
+    "You are the incident-response orchestrator. Dispatch roles strictly per the incident lifecycle loop. Enforce transition guards, timer arming, and lifecycle invariants. Never call PIMS directly except operator-console recipient management; emit tool calls only. Never invent fields, codes, or deadlines.",
   intake:
-    "You extract incident facts from voice transcripts, forms, or signals into the §9.1 intake schema. Ask exactly one re-prompt per missing REQUIRED field, then apply §9.1 defaults. Never guess enums; cite the §3.5 map.",
+    "You extract incident facts from forms or external signals into the intake schema. Ask exactly one re-prompt per missing REQUIRED field, then apply standard intake defaults. Never guess enums; cite the incident field map.",
   triage:
-    "You classify incident_type/severity/impact per §9.2 using FAST_MODEL with conformal prediction calibration, citing §3.5 definitions and Recital 85-87 factors. Duplicate-check before any update.",
+    "You classify incident_type/severity/impact using FAST_MODEL with conformal prediction calibration, citing incident taxonomy definitions and GDPR risk factors. Duplicate-check before any update.",
   investigator:
-    "You run Tree-of-Thoughts neuro-symbolic root-cause analysis and minimal cut-set counterfactual control simulation per §5.2, forensically inspect and collect hashed evidence, link audit actions and risk signals per §9.4, and write R actions only with review_approval_id.",
+    "You run root-cause analysis, forensically inspect and collect hashed evidence, link audit actions and risk signals, and write R actions only with review_approval_id.",
   drafter:
-    "You compose Art 33/34 packs per §10.1-10.2 from validated fields only. Every legal sentence carries a citation. Exemption claims require evidence pointers. Output is inert draft JSON.",
+    "You compose Art 33/34 packs from validated fields only. Every legal sentence carries a citation. Exemption claims require evidence pointers. Output is inert draft JSON.",
   compliance_reviewer:
-    "You run an Adversarial Red-Team Prosecutor challenge followed by the 4-judge constitutional verification rubric (Legal Completeness, Citation NLI Entailment, Plain-Language Readability, Zero-Trust PII & Semantic Entropy Scan). Approve with id or reject with explicit reason + required fix. No silent approval.",
+    "You challenge notice packs for legal completeness, ungrounded claims, plain-language failures, and personal data leakage. Approve with id or reject with explicit reason + required fix. No silent approval.",
   notifier:
     "You execute notification via pims_notify with a reviewer-approved pack id. Verify active recipients first. Record the outcome. Never edit pack content.",
   monitor:
-    "You watch timers, new attachments, and linked-object changes. Reopen on new evidence with its id. Transition P→C when the §9.6 checklist is satisfied. Emit indicator events on every transition.",
+    "You watch timers, new attachments, and linked-object changes. Reopen on new evidence with its id. Transition P→C when the close checklist is satisfied. Emit indicator events on every transition.",
 });
 
 const ROLE_AUTONOMY: Readonly<Record<AgentRole, string>> = Object.freeze({
@@ -56,15 +56,15 @@ const ROLE_AUTONOMY: Readonly<Record<AgentRole, string>> = Object.freeze({
   triage:
     "May update O fields and transition O→P once triage guard passes; MUST NOT close; MUST NOT arm timers (requests orchestrator)",
   investigator:
-    "Adds C/A actions, links §9.4 audit/risk records, and adds R actions ONLY when holding a valid review_approval_id",
+    "Adds C/A actions, links audit/risk records, and adds R actions ONLY when holding a valid review_approval_id",
   drafter:
     "Writes drafts to evidence-store ONLY; MUST NOT notify or mutate PIMS",
   compliance_reviewer:
     "SOLE approver of notify payloads and resolution sign-offs; veto = REVIEW_REJECTED:<judge>:<item>:<required_fix>; approval = review_approval_id (UUID, single-use per canonical content hash)",
   notifier:
-    "Acts ONLY on review_approval_id or veto-window expiry (§6.3); content-frozen",
+    "Acts ONLY on review_approval_id or veto-window expiry; content-frozen",
   monitor:
-    "May move C→P ONLY with REOPENED:<new_evidence_id>; P→C ONLY with §9.6 close checklist satisfied",
+    "May move C→P ONLY with REOPENED:<new_evidence_id>; P→C ONLY with close checklist satisfied",
 });
 
 export const ROLE_TOOL_MATRIX: Readonly<Record<AgentRole, ToolName[]>> =
@@ -75,13 +75,7 @@ export const ROLE_TOOL_MATRIX: Readonly<Record<AgentRole, ToolName[]>> =
       "scheduler_cancel",
       "indicator_emit",
     ],
-    intake: [
-      "pims_list_incidents",
-      "pims_create_incident",
-      "rag_query",
-      "stt_transcribe",
-      "tts_synthesize",
-    ],
+    intake: ["pims_list_incidents", "pims_create_incident", "rag_query"],
     triage: [
       "pims_get_incident",
       "pims_list_incidents",
@@ -115,7 +109,6 @@ export const ROLE_TOOL_MATRIX: Readonly<Record<AgentRole, ToolName[]>> =
       "pims_list_incidents",
       "pims_update_incident",
       "pims_transition_status",
-      "tts_synthesize",
       "indicator_emit",
     ],
   });
@@ -144,43 +137,39 @@ const SKILL_SPECS: Readonly<Record<SkillName, SkillSpec>> = Object.freeze({
   "risk-linker": {
     tools: ["pims_search_risks", "pims_emit_risk_signal"],
     selector_rule:
-      "Emit on systemic root cause; closed risk period queues the signal (§9.4)",
+      "Emit on systemic root cause; closed risk period queues the signal",
   },
   "audit-action-linker": {
     tools: ["pims_create_audit_action"],
-    selector_rule:
-      "Auto-link on severity H/C, impact H/V, or confirmed breach (§9.4)",
+    selector_rule: "Auto-link on severity H/C, impact H/V, or confirmed breach",
   },
   "gdpr-notice-drafter": {
     tools: [],
     selector_rule:
-      "Pack schemas §10.1-10.2 via notice-composer; citation rule §6.5",
+      "Draft authority and subject notice packs via notice-composer; citation rule enforced",
   },
   "root-cause-analyzer": {
     tools: ["pims_add_action", "rag_query"],
     selector_rule:
-      "Expands TOT_BRANCH_FACTOR competing causal hypotheses with Bayesian posterior scoring; 5-whys for a single chain, fishbone for multi-factor, fault-tree for system failure; symbolic minimal cut-set counterfactual simulation",
+      "Single-prompt root-cause analysis; 5-whys for a single chain, fishbone for multi-factor, fault-tree for system failure",
   },
   "evidence-collector": {
     tools: ["pims_upload_attachment", "pims_get_history"],
     selector_rule:
-      "VISION_MODEL forensic scan plus SHA-256 hash and upload; manifest §10.3",
+      "Collect, hash, and stage file attachments with SHA-256 integrity verification and upload; verify manifest",
   },
   "deadline-scheduler": {
     tools: ["scheduler_arm", "scheduler_cancel"],
-    selector_rule: "Timer kinds §6.4; armed by the orchestrator only",
+    selector_rule: "Timer countdown scheduling; armed by the orchestrator only",
   },
   "indicator-reporter": {
     tools: ["indicator_emit"],
-    selector_rule: "Event schema §10.6; every state change emits",
-  },
-  "voice-intake": {
-    tools: ["stt_transcribe", "tts_synthesize"],
-    selector_rule: "Flows §8.3-8.4; redaction §8.5",
+    selector_rule: "Standard indicator events; every state change emits",
   },
   "rag-grounded-qa": {
     tools: ["rag_query"],
-    selector_rule: "Threshold and citation rules §7.4-7.5",
+    selector_rule:
+      "Grounded normative question-answering with threshold and citation verification",
   },
 });
 
@@ -280,13 +269,16 @@ export class RoleRegistry {
   }
 
   listSkills(): readonly SkillDefinition[] {
-    return AGENT_SKILLS.map((skill) => SKILL_DEFINITIONS[skill]);
+    return Object.values(SKILL_DEFINITIONS);
   }
 
   getSkill(name: string): SkillDefinition {
-    if (!(AGENT_SKILLS as readonly string[]).includes(name)) {
+    const definition = (
+      SKILL_DEFINITIONS as Record<string, SkillDefinition | undefined>
+    )[name];
+    if (definition === undefined) {
       throw new SkillUnknownError(name);
     }
-    return SKILL_DEFINITIONS[name as SkillName];
+    return definition;
   }
 }

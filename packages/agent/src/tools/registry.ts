@@ -9,11 +9,9 @@ import type {
 } from "@pims/agent/orchestrator/roles.ts";
 import type { DeadlineScheduler } from "@pims/agent/orchestrator/scheduler.ts";
 import { idempotencyKey, redactArgs } from "@pims/agent/tools/helpers.ts";
-import type { VoicePort } from "@pims/agent/voice/voice-port.ts";
 import type { AgentConfig } from "@pims/config";
 import type { BundleSealer } from "@pims/evidence/bundle-sealer.ts";
 import type { EvidenceStore } from "@pims/evidence/evidence-store.ts";
-import type { ForensicScanner } from "@pims/evidence/forensic-scanner.ts";
 import type { PimsAdapter } from "@pims/pims-adapter";
 import type { RAGService } from "@pims/rag";
 import {
@@ -39,13 +37,11 @@ export interface ToolDependencies {
   adapter: PimsAdapter;
   evidenceStore: EvidenceStore;
   bundleSealer: BundleSealer;
-  forensicScanner: ForensicScanner;
   closeChecklist: CloseChecklistVerifier;
   ragService: RAGService;
   modelClient: AgentModelClient;
   scheduler: DeadlineScheduler;
   indicator: IndicatorEmitter;
-  voice: VoicePort;
   config: AgentConfig;
   clock: () => Date;
   roleRegistry: RoleRegistry;

@@ -1,6 +1,9 @@
 import { JsonObjectSchema } from "@pims/types/models.ts";
 import { z } from "zod";
 
+export const TotMethodSchema = z.enum(["5-whys", "fishbone", "fault-tree"]);
+export type TotMethod = z.infer<typeof TotMethodSchema>;
+
 export const ForensicScanResultSchema = z.object({
   ocr_text: z.string(),
   iocs: z.array(z.string()),
@@ -43,21 +46,14 @@ export type EvidenceBundleIncident = z.infer<
   typeof EvidenceBundleIncidentSchema
 >;
 
-export const CounterfactualControlSchema = z.object({
-  control_code: z.string().min(1),
-  blocks_cut_set: z.boolean(),
-  residual_probability_delta: z.number(),
-  proof_rationale: z.string().min(1),
-});
-export type CounterfactualControl = z.infer<typeof CounterfactualControlSchema>;
-
-export const EvidenceBundleRootCauseSchema = z.object({
-  method: z.enum(["5-whys", "fishbone", "fault-tree"]),
-  tot_posterior: z.number().min(0).max(1),
-  summary: z.string().min(1),
-  systemic: z.boolean(),
-  counterfactuals: z.array(CounterfactualControlSchema),
-});
+export const EvidenceBundleRootCauseSchema = z
+  .object({
+    method: TotMethodSchema,
+    cause: z.string().min(1),
+    systemic: z.boolean(),
+    remediation: z.string().min(1),
+  })
+  .strict();
 export type EvidenceBundleRootCause = z.infer<
   typeof EvidenceBundleRootCauseSchema
 >;

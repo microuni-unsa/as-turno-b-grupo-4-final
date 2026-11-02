@@ -1,7 +1,7 @@
 # Phase 1: Foundation, Reverse-Engineered PIMS Test API, and PIMS Client Adapter
 
 ## Objective
-Establish the foundational type system with strict Zod validation, error taxonomy, configuration loader with `sops` decryption, a reverse-engineered PIMS test API server built with Hono and Drizzle ORM backed by a real PostgreSQL data store in testcontainers (initialized via `/docker-entrypoint-initdb.d/`), and the complete PIMS HTTP Client Adapter covering endpoints E01–E26 with exact capture fidelity in a clean Bun workspace monorepo.
+Establish the foundational type system with strict Zod validation, error taxonomy, configuration loader with fail-fast environment/`*_CMD` validation, a reverse-engineered PIMS test API server built with Hono and Drizzle ORM backed by a real PostgreSQL data store in testcontainers (initialized via `/docker-entrypoint-initdb.d/`), and the complete PIMS HTTP Client Adapter covering endpoints E01–E26 with exact capture fidelity in a clean Bun workspace monorepo.
 
 ## Requirements & Scope
 - **Monorepo Architecture**:
@@ -13,7 +13,7 @@ Establish the foundational type system with strict Zod validation, error taxonom
   - Zero weak types: no `(string & {})`, `unknown`, `any`, or loose `Record<string, unknown>`.
 - **Configuration & Secrets (`@pims/config`)**:
   - Centralized configuration manager reading keys defined in §13 of the spec.
-  - Integration with `sops` for decrypting sensitive environment variables and credentials.
+  - Secrets resolve from environment variables or `*_CMD` helpers per spec §11.2; no encrypted-file path.
   - Strict validation: missing required keys fail fast with `CONFIG_MISSING:<KEY>`, type errors raise `CONFIG_TYPE:<KEY>`.
   - Zero fallback paths; deterministic path resolution.
 - **Reverse-Engineered PIMS Test API Server (`@pims/pims-mock`)**:
@@ -31,7 +31,7 @@ Establish the foundational type system with strict Zod validation, error taxonom
 
 ## Deliverables
 - `packages/types/`: Complete Zod schemas, TypeScript models, enums, catalog definitions, and error taxonomy.
-- `packages/config/`: Strongly typed configuration loader with `sops` decryption and zero fallback paths.
+- `packages/config/`: Strongly typed configuration loader with fail-fast environment/`*_CMD` validation and zero fallback paths.
 - `packages/pims-mock/`: Reverse-engineered PIMS server implementation using Hono and Drizzle ORM.
 - `packages/pims-adapter/`: Production PIMS HTTP client adapter with strict typing.
 - `data/02-init-unsa-seed.sql`: Container entrypoint initialization and seeding script.

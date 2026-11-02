@@ -1,19 +1,19 @@
 # Phase 3: Evidence Store, Notice Composer, and Compliance Artifacts
 
 ## Objective
-Implement the PostgreSQL + Drizzle ORM encrypted evidence store, forensic attachment scanning, GDPR Art 33 and Art 34 notice composers, exemption evaluation logic, and compliance bundle generation.
+Implement the PostgreSQL + Drizzle ORM encrypted evidence store with SHA-256 attachment hash integrity verification, GDPR Art 33 and Art 34 notice composers, exemption evaluation logic, and compliance bundle generation.
 
 ## Requirements & Scope
 - **Encrypted Evidence Store (`packages/evidence/src/evidence-store.ts`)**:
-  - PostgreSQL backing with Drizzle ORM (under dedicated `evidence` schema), encrypted at rest using AES-256-GCM (key from `EVIDENCE_KEY` via `sops`).
+  - PostgreSQL backing with Drizzle ORM (under dedicated `evidence` schema), encrypted at rest using AES-256-GCM (key from `EVIDENCE_KEY` env per §11.2).
   - Staging area for incident attachments prior to upload.
-  - Storage of SHA-256 hashes, multimodal scan results, draft packs, reviewer approvals, active leases, deduplication indexes, and queued risk signals.
+  - Storage of SHA-256 hashes, draft packs, reviewer approvals, active leases, deduplication indexes, and queued risk signals.
   - Automatic retention pruning based on `RETENTION_NOTICE_YEARS`.
-- **Multimodal Forensic Inspection (`packages/evidence/src/forensic-scanner.ts`)**:
-  - Attachment metadata validation through the shared `assertAttachmentMeta` rule (`jpg,jpeg,png,tif,bmp,pdf,doc,docx,txt`, size ≤ 10 MB) plus content-signature verification with `file-type` (OLE2 magic for `.doc`).
-  - Integration with `VISION_MODEL` for visual and PDF forensic analysis (OCR, IOC extraction, visual PII detection, tamper score). The scan result exposes `encryption_proof_signal` only; Art 34(3)(a) requires a separate structured `EncryptionProofAttestation`.
-  - Parser-validated extraction for text and Word attachments (`Intl`/`TextDecoder` UTF-8 for `.txt`, `mammoth` for `.docx`, `word-extractor` for `.doc`); no binary-as-UTF-8 fallback. IOC and PII candidates are parser-validated (`net.isIP`, `tldts`, `libphonenumber-js` E.164, Spanish DNI/NIE checksum).
-  - Computing SHA-256 pre-upload, post-upload re-download verification, and alerting on `ATTACHMENT_HASH_MISMATCH`.
+- **Attachment Metadata, Hashing, and Pattern Extraction (`packages/evidence/src/forensic-patterns.ts`)**:
+  - Attachment metadata validation through the shared `assertAttachmentMeta` rule (`@pims/types/attachments.ts`: `jpg,jpeg,png,tif,bmp,pdf,doc,docx,txt`, size ≤ 10 MB).
+  - `forensic-patterns.ts` helpers: `sha256HexBytes`, `extractPii`, `extractIocs`, `decodeUtf8`; IOC and PII candidates are parser-validated (`net.isIP`, `tldts`, `libphonenumber-js` E.164, Spanish DNI/NIE checksum).
+  - The VISION forensic scanner was removed in the downscale; `forensic_scan` is always null and no OCR/visual-analysis path runs.
+  - SHA-256 computed pre-upload, verified post-upload by re-download + compare → mismatch raises `ATTACHMENT_HASH_MISMATCH`.
 - **Notice Composer (`packages/notices/src/notice-composer.ts`)**:
   - GDPR Article 33 Authority Pack:
     - Exact JSON schema matching §10.1 (items (a)–(d), DPO contacts, consequences, measures, citations).
@@ -33,7 +33,7 @@ Implement the PostgreSQL + Drizzle ORM encrypted evidence store, forensic attach
 
 ## Deliverables
 - `packages/evidence/src/evidence-store.ts`: Encrypted PostgreSQL + Drizzle repository.
-- `packages/evidence/src/forensic-scanner.ts`: Attachment processor and hashing verifier.
+- `packages/evidence/src/forensic-patterns.ts`: Attachment metadata rule, SHA-256 hashing, PII/IOC extraction, and UTF-8 decoding helpers (scanner removed).
 - `packages/notices/src/notice-composer.ts`: Authority & subject notice builders.
 - `packages/notices/src/exemption-engine.ts`: Decision table evaluator for Art 34(3) exemptions.
 - `packages/evidence/src/bundle-sealer.ts`: Packaging and manifest generator.

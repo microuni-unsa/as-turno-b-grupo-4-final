@@ -1,6 +1,5 @@
 import crypto from "node:crypto";
 import type { IndicatorEmitter } from "@pims/agent/indicators/indicator-emitter.ts";
-import type { TotAnalyzer } from "@pims/agent/investigation/tot-analyzer.ts";
 import type { CloseChecklistVerifier } from "@pims/agent/lifecycle/close-checklist.ts";
 import { findDedupeDecision } from "@pims/agent/lifecycle/dedupe.ts";
 import {
@@ -8,17 +7,19 @@ import {
   readMarkers,
 } from "@pims/agent/lifecycle/markers.ts";
 import type { AgentModelClient } from "@pims/agent/llm/safe-prompt.ts";
-import { redactForPrompt } from "@pims/agent/llm/safe-prompt.ts";
+import {
+  redactForPrompt,
+  redactOptionalForPrompt,
+} from "@pims/agent/llm/safe-prompt.ts";
 import type { RoleRegistry } from "@pims/agent/orchestrator/roles.ts";
 import {
   awarenessFromIncident,
   type DeadlineScheduler,
-  hazard,
   limaLocalToUtc,
   type TimerEffects,
 } from "@pims/agent/orchestrator/scheduler.ts";
-import type { ConstitutionalReviewer } from "@pims/agent/review/constitutional-judges.ts";
 import type { NoticeDraftService } from "@pims/agent/review/draft-service.ts";
+import type { NoticeReviewer } from "@pims/agent/review/reviewer.ts";
 import { assetIdsForSystem, toJsonObject } from "@pims/agent/tools/helpers.ts";
 import type {
   ToolCallContext,
@@ -27,28 +28,38 @@ import type {
 import type { AgentConfig } from "@pims/config";
 import type { BundleSealer } from "@pims/evidence/bundle-sealer.ts";
 import type { EvidenceStore } from "@pims/evidence/evidence-store.ts";
-import type { ForensicScanner } from "@pims/evidence/forensic-scanner.ts";
 import type { ExemptionEngine } from "@pims/notices/exemption-engine.ts";
 import type { NoticeComposer } from "@pims/notices/notice-composer.ts";
 import type { PimsAdapter } from "@pims/pims-adapter";
 import type { RAGService } from "@pims/rag";
 import {
   type AgentRole,
+  type ApproveNotifyResult,
   CLOSE_CHECKLIST_ITEMS,
+  type CloseResult,
+  type DraftReviewOptions,
   type DraftReviewResult,
   type IndicatorEventAttrs,
+  type IntakeCallbacks,
   type IntakePayload,
   type IntakeResult,
+  type InvestigationResult,
+  type MonitorResult,
+  type PageAlert,
   type PimsEmitRiskSignalResult,
   type PimsNotifyResult,
   PimsNotifyResultSchema,
+  type ReviewResult,
+  RiskCatalogCodesSchema,
+  RootCauseSchema,
   SchedulerArmResultSchema,
-  type SlaHazard,
   type TimerKind,
   type ToolName,
-  type TotAnalysis,
+  type TotEvidence,
   type TriageCalibrationMode,
+  type TriageResult,
 } from "@pims/types/agent.ts";
+import { assertAttachmentMeta } from "@pims/types/attachments.ts";
 import {
   CONFORMAL_ALPHA,
   CONFORMAL_MIN_SAMPLES,
@@ -74,44 +85,46 @@ import {
   OperatorHaltError,
   PimsBaseError,
   PimsNotFoundError,
+  PimsUnknownCodeError,
   PimsValidationError,
   RestoreFailedError,
   TimerMissingError,
   TransitionForbiddenError,
 } from "@pims/types/errors.ts";
 import type {
-  EvidenceAttachment,
   EvidenceBundleIncident,
   EvidenceBundleRootCause,
 } from "@pims/types/evidence.ts";
 import type { JsonObject, JsonValue } from "@pims/types/models.ts";
 import type {
-  ExemptionEvaluationInput,
   ExemptionEvaluationResult,
   NumericApproval,
 } from "@pims/types/notices.ts";
 import {
   AFFECTED_CID,
-  type AffectedCid,
   type AffectedDataType,
   INCIDENT_IMPACTS,
   INCIDENT_SEVERITIES,
   INCIDENT_TYPES,
-  type IncidentImpact,
   type IncidentSeverity,
   type IncidentType,
   type PimsIncident,
-  type PimsIncidentAction,
   type PimsIncidentHistory,
   PimsIncidentSchema,
 } from "@pims/types/pims.ts";
 import { z } from "zod";
 
 export const TRIAGE_SYSTEM =
-  "You are the triage classifier of a GDPR/ISO 27701 incident-response agent. Classify incident_type, severity, impact and affected CID against the §3.5 enum catalogs, and cite the §3.5 definitions and Recital 85-87 risk factors. Return strict JSON only. Never guess enum values outside the supplied catalogs.";
+  "You are the triage classifier of a GDPR/ISO 27701 incident-response agent. Classify incident_type, severity, impact and affected CID against the standard enum catalogs, and cite the standard definitions and GDPR risk factors. Return strict JSON only. Never guess enum values outside the supplied catalogs.";
+
+export const ROOT_CAUSE_SYSTEM =
+  "You investigate the root cause of a privacy incident. Read the incident, history, actions, evidence and citations. Return one primary cause with supporting evidence refs, the analysis method used (5-whys, fishbone, or fault-tree), whether the cause is systemic, and the remediation. Return strict JSON only.";
+
+export const RISK_CATALOG_SYSTEM =
+  "You map one root-cause statement to the live PIMS risk catalogs. Match the threat and vulnerability that the cause exercises. Use ONLY codes present in the supplied threat/vulnerability arrays; when no listed code matches, return null for that field. Return only the requested JSON object.";
 
 export const B3_12_SYSTEM =
-  "You are the ISO 27701 B.3.12 breach-review gate. Decide whether the observed event is a personal-data breach requiring a response, or a documented non-trigger (ping, scan, failed logon without success). Cite the controlling normative passages. Return strict JSON only.";
+  "You are the incident breach-review gate under ISO 27701. Decide whether the observed event is a personal-data breach requiring a response, or a documented non-trigger (ping, scan, failed logon without success). Cite the controlling normative passages. Return strict JSON only.";
 
 export const CONTAINMENT_SYSTEM =
   "You are the containment planner of an incident-response agent. Propose concrete containment actions (isolate system, revoke credentials, block URL/IP, preserve logs). Each action is one sentence with an optional responsible owner and evidence pointer. Return strict JSON only.";
@@ -193,22 +206,26 @@ const ReevaluationSnapshotSchema = z
   })
   .strict();
 
-export interface IntakeCallbacks {
-  piiReprompt?: () => Promise<boolean | null>;
-  futureDateReprompt?: () => Promise<string | null>;
-}
+export type {
+  ApproveNotifyResult,
+  CloseResult,
+  DraftReviewOptions,
+  IntakeCallbacks,
+  InvestigationResult,
+  MonitorResult,
+  PageAlert,
+  TriageResult,
+} from "@pims/types/agent.ts";
 
 export interface IncidentOrchestratorDeps {
   adapter: PimsAdapter;
   tools: ToolRegistry;
   evidenceStore: EvidenceStore;
   bundleSealer: BundleSealer;
-  forensicScanner: ForensicScanner;
   modelClient: AgentModelClient;
   scheduler: DeadlineScheduler;
-  reviewer: ConstitutionalReviewer;
+  reviewer: NoticeReviewer;
   draftService: NoticeDraftService;
-  totAnalyzer: TotAnalyzer;
   composer: NoticeComposer;
   exemptionEngine: ExemptionEngine;
   ragService: RAGService;
@@ -217,64 +234,7 @@ export interface IncidentOrchestratorDeps {
   clock: () => Date;
   roles: RoleRegistry;
   indicator: IndicatorEmitter;
-  page: (alert: {
-    incident_code: string;
-    kind: string;
-    reason: string;
-  }) => void;
-}
-
-export interface TriageResult {
-  incident: PimsIncident;
-  classification: {
-    incident_type: IncidentType;
-    conformal_set: IncidentType[];
-    nonconformity_score: number;
-    severity: IncidentSeverity;
-    impact: IncidentImpact;
-    affected_cid: AffectedCid[];
-    citations: string[];
-    calibration_mode: TriageCalibrationMode;
-  };
-  calibration_mode: TriageCalibrationMode;
-}
-
-export interface InvestigationResult {
-  incident: PimsIncident;
-  rootCause: TotAnalysis;
-  auditLink: {
-    audit_id: number;
-    finding_id: number;
-    action_plan_id: number;
-  } | null;
-  riskSignal: PimsEmitRiskSignalResult | null;
-  evidence: EvidenceAttachment[];
-}
-
-export interface ApproveNotifyResult {
-  parked: boolean;
-  parkedUntilUtc: string | null;
-  actions: PimsIncidentAction[];
-  notifies: PimsNotifyResult[];
-}
-
-export interface MonitorResult {
-  newAttachments: number;
-  scopeGrowth: boolean;
-  reevaluated: string[];
-  closed: boolean;
-}
-
-export interface CloseResult {
-  incident: PimsIncident;
-  sealSha256: string;
-  marker: string;
-}
-
-export interface DraftReviewOptions {
-  exemption?: ExemptionEvaluationInput;
-  numericApprovals?: NumericApproval[];
-  phaseDueAtUtc?: string;
+  page: (alert: PageAlert) => void;
 }
 
 export class IncidentOrchestrator {
@@ -598,16 +558,12 @@ export class IncidentOrchestrator {
     incident: PimsIncident,
     payload: IntakePayload,
   ): Promise<void> {
-    if (
-      payload.transcript === undefined &&
-      payload.source_payload === undefined
-    ) {
+    if (payload.source_payload === undefined) {
       return;
     }
     const body = JSON.stringify({
       channel: payload.channel,
-      transcript: payload.transcript ?? null,
-      source_payload: payload.source_payload ?? null,
+      source_payload: payload.source_payload,
     });
     await this.deps.evidenceStore.stageAttachment(
       this.deps.config.PIMS_SCHEMA,
@@ -618,14 +574,6 @@ export class IncidentOrchestrator {
       "intake",
       null,
     );
-    if (payload.transcript !== undefined) {
-      const sha8 = crypto
-        .createHash("sha256")
-        .update(payload.transcript, "utf8")
-        .digest("hex")
-        .slice(0, 8);
-      await this.appendMarker(incident, `voice:intake:${sha8}`);
-    }
   }
 
   private async stageIntakeAttachments(
@@ -634,15 +582,7 @@ export class IncidentOrchestrator {
   ): Promise<void> {
     for (const attachment of payload.attachments ?? []) {
       const bytes = Buffer.from(attachment.bytes_base64, "base64");
-      this.deps.forensicScanner.validateAttachment(
-        attachment.file_name,
-        bytes.length,
-      );
-      const scan = await this.deps.forensicScanner.scanAttachment(
-        attachment.file_name,
-        bytes,
-        this.deps.modelClient,
-      );
+      assertAttachmentMeta(attachment.file_name, bytes.length);
       await this.deps.evidenceStore.stageAttachment(
         this.deps.config.PIMS_SCHEMA,
         incident.incident_code,
@@ -650,7 +590,7 @@ export class IncidentOrchestrator {
         bytes,
         attachment.mime,
         "intake",
-        scan,
+        null,
       );
     }
   }
@@ -781,7 +721,9 @@ export class IncidentOrchestrator {
             involves_personal_data: incident.involves_personal_data,
             num_affected_subjects: incident.num_affected_subjects ?? null,
             affected_data_types: incident.affected_data_types,
-            compromised_system: incident.compromised_system ?? null,
+            compromised_system: redactOptionalForPrompt(
+              incident.compromised_system,
+            ),
             incident_type_catalog: INCIDENT_TYPES,
             severity_catalog: INCIDENT_SEVERITIES,
             impact_catalog: INCIDENT_IMPACTS,
@@ -845,7 +787,7 @@ export class IncidentOrchestrator {
     let citations = classification.citations;
     if (calibration.conformal_set.length > 1) {
       const expanded = await this.deps.ragService.query(
-        `incident type discrimination for candidates ${calibration.conformal_set.join(", ")} under GDPR Article 4(12) and Recital 85-87`,
+        `incident type discrimination for candidates ${calibration.conformal_set.join(", ")} under GDPR Article 4(12) and associated breach risk criteria`,
         { normative_only: true },
       );
       citations = Array.from(new Set([...citations, ...expanded.citations]));
@@ -989,8 +931,10 @@ export class IncidentOrchestrator {
               incident_code: incident.incident_code,
               title: redactForPrompt(incident.title),
               description: redactForPrompt(incident.description ?? ""),
-              compromised_system: incident.compromised_system ?? null,
-              affected_url: incident.affected_url ?? null,
+              compromised_system: redactOptionalForPrompt(
+                incident.compromised_system,
+              ),
+              affected_url: redactOptionalForPrompt(incident.affected_url),
               affected_cid: incident.affected_cid,
             }),
           },
@@ -1056,7 +1000,7 @@ export class IncidentOrchestrator {
       if (!gateParsed.success) {
         throw new ModelSchemaViolationError(
           MODEL_ROUTE_FAST,
-          `B.3.12 gate violated its schema: ${gateParsed.error.message}`,
+          `Breach review gate violated its schema: ${gateParsed.error.message}`,
         );
       }
       for (const citation of gateParsed.data.citations) {
@@ -1065,7 +1009,7 @@ export class IncidentOrchestrator {
 
       await this.appendAction(incident, {
         action_type: "A",
-        description: `B.3.12 breach requiring response: ${gateParsed.data.breach_requiring_response ? "yes" : "no"} — ${gateParsed.data.rationale}`,
+        description: `Breach review assessment: breach requiring response: ${gateParsed.data.breach_requiring_response ? "yes" : "no"} — ${gateParsed.data.rationale}`,
         responsible: "investigator",
         evidence: gateParsed.data.citations.join(" "),
       });
@@ -1117,48 +1061,63 @@ export class IncidentOrchestrator {
             ? row.evidence
             : redactForPrompt(row.evidence),
       }));
-      const evidence: Array<{
-        ref: string;
-        kind: "attachment" | "history" | "ioc" | "action" | "citation";
-        description: string;
-      }> = staged.map((attachment) => ({
+      const evidence: TotEvidence[] = staged.map((attachment) => ({
         ref: `file:${attachment.file_name}:${attachment.sha256.slice(0, 8)}`,
         kind: "attachment",
-        description: redactForPrompt(
-          attachment.forensic_scan?.ocr_text ??
-            `attachment ${attachment.file_name}`,
-        ),
+        description: redactForPrompt(`attachment ${attachment.file_name}`),
       }));
 
-      const analysis = await this.deps.totAnalyzer.analyze({
-        incident: current,
-        history: redactedHistory,
-        actions: redactedActions,
-        evidence,
-        adoptedMeasures: current.security_measures_adopted,
-        annexAControls,
-        ragCitations: gateParsed.data.citations,
+      const rootCauseRaw = await this.deps.modelClient.chat_json({
+        system: ROOT_CAUSE_SYSTEM,
+        messages: [
+          {
+            role: "user",
+            content: JSON.stringify({
+              incident: {
+                incident_code: current.incident_code,
+                incident_type: current.incident_type,
+                severity: current.severity ?? null,
+                impact: current.impact ?? null,
+                title: redactForPrompt(current.title),
+                description: current.description
+                  ? redactForPrompt(current.description)
+                  : null,
+                affected_data_types: [...current.affected_data_types],
+                compromised_system: redactOptionalForPrompt(
+                  current.compromised_system,
+                ),
+              },
+              history: redactedHistory,
+              actions: redactedActions,
+              evidence,
+              adoptedMeasures: current.security_measures_adopted,
+              annexAControls,
+              ragCitations: gateParsed.data.citations,
+            }),
+          },
+        ],
+        route: MODEL_ROUTE_REASONING,
+        max_tokens: 3000,
+        temperature: this.deps.config.TEMP_REASONING,
       });
-      await this.deps.evidenceStore.saveTotAnalysis(
+      const rootCauseParsed = RootCauseSchema.safeParse(rootCauseRaw.content);
+      if (!rootCauseParsed.success) {
+        throw new ModelSchemaViolationError(
+          MODEL_ROUTE_REASONING,
+          `Root cause output violated its schema: ${rootCauseParsed.error.message}`,
+        );
+      }
+      const analysis = rootCauseParsed.data;
+      await this.deps.evidenceStore.saveRootCause(
         incident.incident_code,
         analysis,
       );
 
-      const selected = analysis.hypotheses.find(
-        (hypothesis) => hypothesis.id === analysis.selected_hypothesis_id,
-      );
-      if (selected === undefined) {
-        throw new PimsValidationError(
-          "tot_analysis",
-          "Selected hypothesis missing from analysis",
-        );
-      }
-
       await this.appendAction(incident, {
         action_type: "A",
-        description: `Root cause (${analysis.method}) MAP hypothesis ${selected.id} posterior ${analysis.tot_posterior.toFixed(4)}: ${selected.claim}`,
+        description: `Root cause (${analysis.method}): ${analysis.cause}`,
         responsible: "investigator",
-        evidence: selected.evidence_refs.join(" "),
+        evidence: analysis.evidence_refs.join(" "),
       });
 
       if (analysis.root_cause_unproven) {
@@ -1198,7 +1157,7 @@ export class IncidentOrchestrator {
           "pims_create_audit_action",
           {
             classification: "N",
-            finding_description: `10.2 corrective action for ${incident.incident_code}: ${selected.claim}`,
+            finding_description: `10.2 corrective action for ${incident.incident_code}: ${analysis.cause}`,
             action_plan: analysis.remediation,
             responsible: current.assigned_to ?? "UNASSIGNED",
             source_requirement_code: "A.3.12",
@@ -1216,15 +1175,51 @@ export class IncidentOrchestrator {
 
       let riskSignal: PimsEmitRiskSignalResult | null = null;
       if (analysis.systemic) {
-        const codes = await this.deps.totAnalyzer.selectRiskCatalogCodes({
-          cause: selected.claim,
-          threats: catalogs.threats,
-          vulnerabilities: catalogs.vulnerabilities,
+        const codesRaw = await this.deps.modelClient.chat_json({
+          system: RISK_CATALOG_SYSTEM,
+          messages: [
+            {
+              role: "user",
+              content: JSON.stringify({
+                cause: redactForPrompt(analysis.cause),
+                threats: catalogs.threats,
+                vulnerabilities: catalogs.vulnerabilities,
+              }),
+            },
+          ],
+          route: MODEL_ROUTE_REASONING,
+          max_tokens: 500,
+          temperature: this.deps.config.TEMP_REASONING,
         });
+        const codesParsed = RiskCatalogCodesSchema.safeParse(codesRaw.content);
+        if (!codesParsed.success) {
+          throw new ModelSchemaViolationError(
+            MODEL_ROUTE_REASONING,
+            `Risk catalog output violated its schema: ${codesParsed.error.message}`,
+          );
+        }
+        const codes = codesParsed.data;
+        if (
+          codes.threat_code !== null &&
+          !catalogs.threats.some((t) => t.code === codes.threat_code)
+        ) {
+          throw new PimsUnknownCodeError("threat", codes.threat_code);
+        }
+        if (
+          codes.vulnerability_code !== null &&
+          !catalogs.vulnerabilities.some(
+            (v) => v.code === codes.vulnerability_code,
+          )
+        ) {
+          throw new PimsUnknownCodeError(
+            "vulnerability",
+            codes.vulnerability_code,
+          );
+        }
         const dimension = catalogs.active_matrix?.dimension ?? 1;
         const level = severityLevel(current.severity);
         const signalArgs: JsonObject = {
-          description: `Risk signal from ${incident.incident_code}: ${selected.claim}`,
+          description: `Risk signal from ${incident.incident_code}: ${analysis.cause}`,
           controlled_probability: Math.min(level, dimension),
           controlled_impact: Math.min(level, dimension),
           response_strategy: "M",
@@ -1273,11 +1268,7 @@ export class IncidentOrchestrator {
         await this.appendMarker(incident, "systemic:false");
       }
 
-      if (
-        current.incident_type === "HE" &&
-        analysis.fishbone !== null &&
-        analysis.fishbone.bones.People.length > 0
-      ) {
+      if (current.incident_type === "HE") {
         const training = await this.deps.modelClient.chat_json({
           route: MODEL_ROUTE_FAST,
           system: TRAINING_SYSTEM,
@@ -1286,9 +1277,7 @@ export class IncidentOrchestrator {
               role: "user",
               content: JSON.stringify({
                 incident_code: incident.incident_code,
-                people_causes: analysis.fishbone.bones.People.map((cause) =>
-                  redactForPrompt(cause.cause),
-                ),
+                people_causes: [redactForPrompt(analysis.cause)],
               }),
             },
           ],
@@ -1395,7 +1384,6 @@ export class IncidentOrchestrator {
           content_sha256: subject.contentSha,
           body_text: subject.pack.body_plain,
           citations: subject.citations,
-          semantic_entropy: subject.semanticEntropy,
           numeric_approvals: opts?.numericApprovals ?? [],
           plain_language_waiver: null,
           checklist: null,
@@ -1470,7 +1458,6 @@ export class IncidentOrchestrator {
         content_sha256: draft.contentSha,
         body_text: bodyText,
         citations: draft.citations,
-        semantic_entropy: draft.semanticEntropy,
         numeric_approvals: opts?.numericApprovals ?? [],
         plain_language_waiver: null,
         checklist: null,
@@ -1494,7 +1481,6 @@ export class IncidentOrchestrator {
       content_sha256: string;
       body_text: string;
       citations: string[];
-      semantic_entropy: number | null;
       numeric_approvals: NumericApproval[];
       plain_language_waiver: null;
       checklist: null;
@@ -1505,14 +1491,13 @@ export class IncidentOrchestrator {
   ): Promise<string> {
     const code = incident.incident_code;
     for (let cycle = 0; cycle < this.deps.config.MAX_REVIEW_CYCLES; cycle++) {
-      const result = await this.deps.reviewer.review(
+      const result: ReviewResult = await this.deps.reviewer.review(
         {
           incident_code: code,
           pack_type: ctx.pack_type,
           content_sha256: ctx.content_sha256,
           body_text: ctx.body_text,
           citations: ctx.citations,
-          semantic_entropy: ctx.semantic_entropy,
           numeric_approvals: ctx.numeric_approvals,
           plain_language_waiver: ctx.plain_language_waiver,
           checklist: ctx.checklist,
@@ -1569,20 +1554,20 @@ export class IncidentOrchestrator {
           incident,
           [...CLOSE_CHECKLIST_ITEMS],
         );
-        const resolutionReview = await this.deps.reviewer.reviewResolution(
-          {
-            incident_code: code,
-            pack_type: "resolution",
-            content_sha256: resolution.contentSha,
-            body_text: resolution.bodyText,
-            citations: resolution.citations,
-            semantic_entropy: resolution.semanticEntropy,
-            numeric_approvals: [],
-            plain_language_waiver: null,
-            checklist: [...CLOSE_CHECKLIST_ITEMS],
-          },
-          incident,
-        );
+        const resolutionReview: ReviewResult =
+          await this.deps.reviewer.reviewResolution(
+            {
+              incident_code: code,
+              pack_type: "resolution",
+              content_sha256: resolution.contentSha,
+              body_text: resolution.bodyText,
+              citations: resolution.citations,
+              numeric_approvals: [],
+              plain_language_waiver: null,
+              checklist: [...CLOSE_CHECKLIST_ITEMS],
+            },
+            incident,
+          );
         if (
           !resolutionReview.approved ||
           resolutionReview.approval_id === null
@@ -1923,7 +1908,7 @@ export class IncidentOrchestrator {
         throw new CloseChecklistFailedError(preSealFailure.item);
       }
 
-      const analysis = await this.deps.evidenceStore.getTotAnalysis(code);
+      const analysis = await this.deps.evidenceStore.getRootCause(code);
       if (analysis === null) {
         throw new ArtifactIncompleteError("evidence-bundle", "root_cause");
       }
@@ -1932,10 +1917,9 @@ export class IncidentOrchestrator {
       const facts = buildBundleFacts(refreshed, history);
       const rootCause: EvidenceBundleRootCause = {
         method: analysis.method,
-        tot_posterior: analysis.tot_posterior,
-        summary: analysis.remediation,
+        cause: analysis.cause,
         systemic: analysis.systemic,
-        counterfactuals: analysis.counterfactuals,
+        remediation: analysis.remediation,
       };
       const packs = await this.bundlePackRefs(code);
       const citations = await this.bundleCitations(code);
@@ -2018,15 +2002,6 @@ export class IncidentOrchestrator {
         closedAt.getTime() - awareness.getTime() <=
         this.authorityDeadlineHours() * 3_600_000;
 
-      await this.deps.evidenceStore.recordIncidentOutcome({
-        incident_code: code,
-        awareness_at_utc: awareness.toISOString(),
-        closed_at_utc: closedAt.toISOString(),
-        severity: sealedIncident.severity ?? "M",
-        review_cycles: 0,
-        sla_72h_met: sla72Met,
-        recorded_at_utc: closedAt.toISOString(),
-      });
       await this.deps.evidenceStore.saveTriageCalibration({
         incident_code: code,
         actual_incident_type: sealedIncident.incident_type,
@@ -2261,20 +2236,6 @@ export class IncidentOrchestrator {
     }
   }
 
-  async hazardFor(
-    incident: PimsIncident,
-    opts?: { reviewCycles?: number },
-  ): Promise<SlaHazard> {
-    const outcomes = await this.deps.evidenceStore.listIncidentOutcomes();
-    return hazard(
-      incident,
-      outcomes,
-      this.deps.clock(),
-      this.deps.config,
-      opts,
-    );
-  }
-
   async verifyInvariants(
     incidentId: number,
     before: { historyCount: number; spoolCount: number; stateChanged: boolean },
@@ -2501,7 +2462,6 @@ export class IncidentOrchestrator {
       | "investigation_complete"
       | "notice_sent"
       | "notice_exempted"
-      | "sla_hazard_high"
       | "deadline_missed"
       | "corrective_linked"
       | "risk_signalled"

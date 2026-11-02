@@ -1,4 +1,4 @@
-import type { TotAnalysis } from "@pims/types/agent.ts";
+import type { RootCause } from "@pims/types/agent.ts";
 import type { JsonObject, JsonValue } from "@pims/types/models.ts";
 import {
   boolean,
@@ -135,22 +135,6 @@ export const reviewApprovalsTable = evidenceSchema.table("review_approvals", {
   note: text("note").notNull(),
 });
 
-export const incidentOutcomesTable = evidenceSchema.table("incident_outcomes", {
-  incident_code: varchar("incident_code", { length: 64 }).primaryKey(),
-  awareness_at_utc: timestamp("awareness_at_utc", {
-    withTimezone: true,
-  }).notNull(),
-  closed_at_utc: timestamp("closed_at_utc", {
-    withTimezone: true,
-  }).notNull(),
-  severity: varchar("severity", { length: 1 }).notNull(),
-  review_cycles: integer("review_cycles").notNull(),
-  sla_72h_met: boolean("sla_72h_met").notNull(),
-  recorded_at_utc: timestamp("recorded_at_utc", {
-    withTimezone: true,
-  }).notNull(),
-});
-
 export const triageCalibrationTable = evidenceSchema.table(
   "triage_calibration",
   {
@@ -166,9 +150,9 @@ export const triageCalibrationTable = evidenceSchema.table(
   },
 );
 
-export const totAnalysesTable = evidenceSchema.table("tot_analyses", {
+export const rootCausesTable = evidenceSchema.table("root_causes", {
   incident_code: varchar("incident_code", { length: 64 }).primaryKey(),
-  analysis_json: jsonb("analysis_json").$type<TotAnalysis>().notNull(),
+  analysis_json: jsonb("analysis_json").$type<RootCause>().notNull(),
   created_at_utc: timestamp("created_at_utc", {
     withTimezone: true,
   }).notNull(),

@@ -203,16 +203,6 @@ function renderIncidentProse(incident: PimsIncident): string {
   return redactForPrompt(lines.join("\n"));
 }
 
-function requireNumber(value: unknown, route: string): number {
-  if (typeof value !== "number" || !Number.isFinite(value)) {
-    throw new ModelSchemaViolationError(
-      route,
-      "Model response carries no semantic_entropy measurement",
-    );
-  }
-  return value;
-}
-
 function parseResponse<T>(
   schema: z.ZodType<T>,
   content: JsonObject,
@@ -278,7 +268,6 @@ export class NoticeDraftService {
     pack: AuthorityNoticePack;
     contentSha: string;
     citations: string[];
-    semanticEntropy: number;
   }> {
     const now = this.clock();
     if (now.getTime() - context.fetchedAt.getTime() > STALE_PACK_MS) {
@@ -395,12 +384,7 @@ export class NoticeDraftService {
       "draft",
     );
 
-    const semanticEntropy = requireNumber(
-      response.semantic_entropy,
-      MODEL_ROUTE_REASONING,
-    );
-
-    return { pack, contentSha, citations: pack.citations, semanticEntropy };
+    return { pack, contentSha, citations: pack.citations };
   }
 
   async draftSubject(
@@ -412,7 +396,6 @@ export class NoticeDraftService {
     pack: SubjectNoticePack;
     contentSha: string;
     citations: string[];
-    semanticEntropy: number | null;
   }> {
     const contact = requireDpoContact(incident, "subject");
 
@@ -440,7 +423,7 @@ export class NoticeDraftService {
         null,
         "not_required",
       );
-      return { pack, contentSha, citations: [], semanticEntropy: null };
+      return { pack, contentSha, citations: [] };
     }
 
     if (exemption !== null && exemption.kind === "exempted") {
@@ -467,7 +450,7 @@ export class NoticeDraftService {
         null,
         "exempted",
       );
-      return { pack, contentSha, citations: [], semanticEntropy: null };
+      return { pack, contentSha, citations: [] };
     }
 
     const rag = await this.ragService.query(SUBJECT_RAG_QUERY, {
@@ -526,12 +509,7 @@ export class NoticeDraftService {
       "draft",
     );
 
-    const semanticEntropy = requireNumber(
-      response.semantic_entropy,
-      MODEL_ROUTE_REASONING,
-    );
-
-    return { pack, contentSha, citations: pack.citations, semanticEntropy };
+    return { pack, contentSha, citations: pack.citations };
   }
 
   async draftResolution(
@@ -541,7 +519,6 @@ export class NoticeDraftService {
     contentSha: string;
     bodyText: string;
     citations: string[];
-    semanticEntropy: number;
   }> {
     const response = await this.modelClient.chat_json({
       system: RESOLUTION_SYSTEM,
@@ -563,11 +540,6 @@ export class NoticeDraftService {
       "resolution",
     );
 
-    const semanticEntropy = requireNumber(
-      response.semantic_entropy,
-      MODEL_ROUTE_REASONING,
-    );
-
     const bodyText = `${draft.summary}\n${draft.remediation}`;
     const contentSha = hashCanonicalContent({
       incident_code: incident.incident_code,
@@ -581,7 +553,6 @@ export class NoticeDraftService {
       contentSha,
       bodyText,
       citations: draft.citations,
-      semanticEntropy,
     };
   }
 

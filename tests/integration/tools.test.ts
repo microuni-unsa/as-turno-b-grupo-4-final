@@ -9,7 +9,6 @@ import {
   createKnowledgeToolHandlers,
   createNoticeToolHandlers,
   createRiskAuditToolHandlers,
-  createUnconfiguredVoicePort,
   DeadlineScheduler,
   IndicatorEmitter,
   type RoleCapabilityHandle,
@@ -25,7 +24,6 @@ import type {
 import type { AgentConfig } from "@pims/config";
 import { BundleSealer } from "@pims/evidence/bundle-sealer.ts";
 import { EvidenceStore } from "@pims/evidence/evidence-store.ts";
-import { ForensicScanner } from "@pims/evidence/forensic-scanner.ts";
 import { OpenAIModelProvider } from "@pims/models";
 import { PimsAdapter } from "@pims/pims-adapter";
 import {
@@ -34,7 +32,7 @@ import {
   type MockDatabaseClient,
   type PimsTestServerInstance,
 } from "@pims/pims-mock";
-import { NormativeKnowledgeGraph, RAGService, RagIndexer } from "@pims/rag";
+import { RAGService, RagIndexer } from "@pims/rag";
 import type { AgentRole, ToolName } from "@pims/types/agent.ts";
 import { PIMS_TEST_SEED_PASSWORD } from "@pims/types/constants.ts";
 import type { TimerRecord } from "@pims/types/evidence.ts";
@@ -260,16 +258,13 @@ describe("Agent Tool Registry integration suite", {
       ],
       "tools-test-v1",
     );
-    const knowledgeGraph = new NormativeKnowledgeGraph();
     const ragService = new RAGService({
       modelProvider: provider,
       indexer,
-      knowledgeGraph,
       config: TEST_CONFIG,
     });
 
     const bundleSealer = new BundleSealer(store);
-    const forensicScanner = new ForensicScanner();
     const clock = () => CLOCK_NOW;
     const closeChecklist = new CloseChecklistVerifier({
       evidenceStore: store,
@@ -309,13 +304,11 @@ describe("Agent Tool Registry integration suite", {
       adapter,
       evidenceStore: store,
       bundleSealer,
-      forensicScanner,
       closeChecklist,
       ragService,
       modelClient,
       scheduler,
       indicator,
-      voice: createUnconfiguredVoicePort(),
       config: TEST_CONFIG,
       clock,
       roleRegistry: roles,

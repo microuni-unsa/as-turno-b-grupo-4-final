@@ -1,9 +1,10 @@
 import {
-  type CounterfactualControl,
-  CounterfactualControlSchema,
+  EvidenceAttachmentSchema,
   ForensicScanResultSchema,
   RiskSignalPayloadSchema as RiskSignalPayloadEvidenceSchema,
   TimerRecordSchema,
+  type TotMethod,
+  TotMethodSchema,
 } from "@pims/types/evidence.ts";
 import {
   type JsonObject,
@@ -12,6 +13,7 @@ import {
 } from "@pims/types/models.ts";
 import {
   Art34ExemptionLetterSchema,
+  ExemptionEvaluationInputSchema,
   ExemptionEvaluationResultSchema,
   HighRiskGateResultSchema,
   NumericApprovalSchema,
@@ -24,6 +26,7 @@ import {
   ALL_AFFECTED_DATA_TYPES,
   ALL_SECURITY_MEASURES,
   FINDING_CLASSIFICATIONS,
+  INCIDENT_IMPACTS,
   INCIDENT_SEVERITIES,
   INCIDENT_STATUSES,
   INCIDENT_TYPES,
@@ -36,7 +39,6 @@ import {
   PimsRiskEvaluationSchema,
   paginatedResultSchema,
 } from "@pims/types/pims.ts";
-import { CRAGGradeSchema } from "@pims/types/rag.ts";
 import { z } from "zod";
 
 export const AGENT_ROLES = [
@@ -62,7 +64,6 @@ export const AGENT_SKILLS = [
   "evidence-collector",
   "deadline-scheduler",
   "indicator-reporter",
-  "voice-intake",
   "rag-grounded-qa",
 ] as const;
 export const SkillNameSchema = z.enum(AGENT_SKILLS);
@@ -85,8 +86,6 @@ export const AGENT_TOOL_NAMES = [
   "pims_emit_risk_signal",
   "pims_create_audit_action",
   "rag_query",
-  "stt_transcribe",
-  "tts_synthesize",
   "scheduler_arm",
   "scheduler_cancel",
   "indicator_emit",
@@ -141,15 +140,6 @@ export const NOTICE_PACK_TYPES = [
 export const NoticePackTypeSchema = z.enum(NOTICE_PACK_TYPES);
 export type NoticePackType = z.infer<typeof NoticePackTypeSchema>;
 
-export const JUDGE_NAMES = [
-  "legal_completeness",
-  "citation_nli",
-  "plain_language",
-  "pii_semantic_entropy",
-] as const;
-export const JudgeNameSchema = z.enum(JUDGE_NAMES);
-export type JudgeName = z.infer<typeof JudgeNameSchema>;
-
 export const PROSECUTOR_SEVERITIES = ["low", "medium", "high"] as const;
 export const ProsecutorSeveritySchema = z.enum(PROSECUTOR_SEVERITIES);
 export type ProsecutorSeverity = z.infer<typeof ProsecutorSeveritySchema>;
@@ -160,10 +150,6 @@ export const TRIAGE_CALIBRATION_MODES = [
 ] as const;
 export const TriageCalibrationModeSchema = z.enum(TRIAGE_CALIBRATION_MODES);
 export type TriageCalibrationMode = z.infer<typeof TriageCalibrationModeSchema>;
-
-export const HAZARD_MODES = ["fixed", "fitted"] as const;
-export const HazardModeSchema = z.enum(HAZARD_MODES);
-export type HazardMode = z.infer<typeof HazardModeSchema>;
 
 export const RoleDefinitionSchema = z
   .object({
@@ -389,23 +375,6 @@ export const RagQueryArgsSchema = z
   .strict();
 export type RagQueryArgs = z.infer<typeof RagQueryArgsSchema>;
 
-export const SttTranscribeArgsSchema = z
-  .object({
-    audio_ref: z.string().min(1),
-    lang: z.string().min(2),
-  })
-  .strict();
-export type SttTranscribeArgs = z.infer<typeof SttTranscribeArgsSchema>;
-
-export const TtsSynthesizeArgsSchema = z
-  .object({
-    text: z.string().min(1),
-    voice: z.string().min(1).optional(),
-    lang: z.string().min(2).optional(),
-  })
-  .strict();
-export type TtsSynthesizeArgs = z.infer<typeof TtsSynthesizeArgsSchema>;
-
 export const SchedulerArmArgsSchema = z
   .object({
     incident_code: z.string().min(1),
@@ -561,42 +530,10 @@ export const RagQueryResultToolSchema = z
     query: z.string().min(1),
     passages: z.array(RankedPassageSchema),
     citations: z.array(z.string().min(1)),
-    crag_grade: CRAGGradeSchema,
     eval: z.boolean(),
   })
   .strict();
 export type RagQueryResultTool = z.infer<typeof RagQueryResultToolSchema>;
-
-export const SttSegmentSchema = z
-  .object({
-    start_ms: z.number().nonnegative(),
-    end_ms: z.number().nonnegative(),
-    speaker_id: z.string().min(1),
-    text: z.string(),
-    confidence: z.number().min(0).max(1),
-  })
-  .strict();
-export type SttSegment = z.infer<typeof SttSegmentSchema>;
-
-export const SttTranscribeResultSchema = z
-  .object({
-    transcript: z.string(),
-    segments: z.array(SttSegmentSchema),
-    mean_confidence: z.number().min(0).max(1),
-    prosody_urgency_score: z.number().min(0).max(1),
-    spoof_risk_score: z.number().min(0).max(1),
-  })
-  .strict();
-export type SttTranscribeResult = z.infer<typeof SttTranscribeResultSchema>;
-
-export const TtsSynthesizeResultSchema = z
-  .object({
-    audio_ref: z.string().min(1),
-    duration_ms: z.number().nonnegative(),
-    redaction_log: z.array(z.string()),
-  })
-  .strict();
-export type TtsSynthesizeResult = z.infer<typeof TtsSynthesizeResultSchema>;
 
 export const SchedulerArmResultSchema = z
   .object({ timer_id: z.string().min(1) })
@@ -622,31 +559,8 @@ export const DueTimerSchema = z
   .strict();
 export type DueTimer = z.infer<typeof DueTimerSchema>;
 
-export const WeibullParametersSchema = z
-  .object({
-    shape: z.number().positive(),
-    scale_h: z.number().positive(),
-    mode: HazardModeSchema,
-    samples: z.number().int().nonnegative(),
-  })
-  .strict();
-export type WeibullParameters = z.infer<typeof WeibullParametersSchema>;
-
-export const SlaHazardSchema = z
-  .object({
-    incident_code: z.string().min(1),
-    sla_breach_prob_72h: z.number().min(0).max(1),
-    weibull: WeibullParametersSchema,
-    remaining_stages: z.number().int().nonnegative(),
-    review_cycles: z.number().int().nonnegative(),
-    alert: z.boolean(),
-  })
-  .strict();
-export type SlaHazard = z.infer<typeof SlaHazardSchema>;
-
 export const TOT_METHODS = ["5-whys", "fishbone", "fault-tree"] as const;
-export const TotMethodSchema = z.enum(TOT_METHODS);
-export type TotMethod = z.infer<typeof TotMethodSchema>;
+export { type TotMethod, TotMethodSchema };
 
 export const TOT_EVIDENCE_KINDS = [
   "attachment",
@@ -667,147 +581,17 @@ export const TotEvidenceSchema = z
   .strict();
 export type TotEvidence = z.infer<typeof TotEvidenceSchema>;
 
-export const TotCauseSchema = z
-  .object({
-    cause: z.string().min(1),
-    control_codes: z.array(z.string().min(1)),
-  })
-  .strict();
-export type TotCause = z.infer<typeof TotCauseSchema>;
-
-export const TotHypothesisSchema = z
-  .object({
-    id: z.string().min(1),
-    claim: z.string().min(1),
-    prior: z.number().min(0).max(1),
-    likelihood: z.number().min(0).max(1),
-    evidence_refs: z.array(z.string().min(1)),
-    ioc_refs: z.array(z.string().min(1)),
-    causes: z.array(TotCauseSchema),
-  })
-  .strict();
-export type TotHypothesis = z.infer<typeof TotHypothesisSchema>;
-
-export const FiveWhyLevelSchema = z
-  .object({
-    level: z.union([
-      z.literal(1),
-      z.literal(2),
-      z.literal(3),
-      z.literal(4),
-      z.literal(5),
-    ]),
-    claim: z.string().min(1),
-    evidence_ref: z.string().min(1).nullable(),
-  })
-  .strict();
-export type FiveWhyLevel = z.infer<typeof FiveWhyLevelSchema>;
-
-export const FiveWhysSchema = z
-  .object({
-    levels: z.tuple([
-      FiveWhyLevelSchema,
-      FiveWhyLevelSchema,
-      FiveWhyLevelSchema,
-      FiveWhyLevelSchema,
-      FiveWhyLevelSchema,
-    ]),
-  })
-  .strict();
-export type FiveWhys = z.infer<typeof FiveWhysSchema>;
-
-export const FISHBONE_BONES = [
-  "People",
-  "Process",
-  "Technology",
-  "Data",
-  "Suppliers",
-  "Environment",
-] as const;
-export const FishboneBoneSchema = z.enum(FISHBONE_BONES);
-export type FishboneBone = z.infer<typeof FishboneBoneSchema>;
-
-export const FishboneCauseSchema = z
-  .object({
-    cause: z.string().min(1),
-    evidence_ref: z.string().min(1).nullable(),
-    control_codes: z.array(z.string().min(1)),
-  })
-  .strict();
-export type FishboneCause = z.infer<typeof FishboneCauseSchema>;
-
-export const FishboneSchema = z
-  .object({
-    bones: z
-      .object({
-        People: z.array(FishboneCauseSchema),
-        Process: z.array(FishboneCauseSchema),
-        Technology: z.array(FishboneCauseSchema),
-        Data: z.array(FishboneCauseSchema),
-        Suppliers: z.array(FishboneCauseSchema),
-        Environment: z.array(FishboneCauseSchema),
-      })
-      .strict(),
-  })
-  .strict();
-export type Fishbone = z.infer<typeof FishboneSchema>;
-
-export const FaultTreeGateSchema = z
-  .object({
-    gate_id: z.string().min(1),
-    op: z.enum(["AND", "OR"]),
-    inputs: z.array(z.string().min(1)),
-  })
-  .strict();
-export type FaultTreeGate = z.infer<typeof FaultTreeGateSchema>;
-
-export const FaultTreeBasicEventSchema = z
-  .object({
-    event_id: z.string().min(1),
-    description: z.string().min(1),
-    evidence_ref: z.string().min(1).nullable(),
-    control_codes: z.array(z.string().min(1)),
-  })
-  .strict();
-export type FaultTreeBasicEvent = z.infer<typeof FaultTreeBasicEventSchema>;
-
-export const FaultTreeSchema = z
-  .object({
-    top_event: z.string().min(1),
-    gates: z.array(FaultTreeGateSchema),
-    basic_events: z.array(FaultTreeBasicEventSchema),
-  })
-  .strict();
-export type FaultTree = z.infer<typeof FaultTreeSchema>;
-
-export const TotPosteriorSchema = z
-  .object({
-    hypothesis_id: z.string().min(1),
-    posterior: z.number().min(0).max(1),
-  })
-  .strict();
-export type TotPosterior = z.infer<typeof TotPosteriorSchema>;
-
-export const TotAnalysisSchema = z
+export const RootCauseSchema = z
   .object({
     method: TotMethodSchema,
-    hypotheses: z.array(TotHypothesisSchema),
-    posteriors: z.array(TotPosteriorSchema),
-    selected_hypothesis_id: z.string().min(1),
-    tot_posterior: z.number().min(0).max(1),
-    five_whys: FiveWhysSchema.nullable(),
-    fishbone: FishboneSchema.nullable(),
-    fault_tree: FaultTreeSchema.nullable(),
+    cause: z.string().min(1),
+    evidence_refs: z.array(z.string().min(1)),
     systemic: z.boolean(),
     remediation: z.string().min(1),
-    counterfactuals: z.array(CounterfactualControlSchema),
     root_cause_unproven: z.boolean(),
   })
   .strict();
-export type TotAnalysis = z.infer<typeof TotAnalysisSchema>;
-
-export const TotAnalysisResultSchema = TotAnalysisSchema;
-export type TotAnalysisResult = TotAnalysis;
+export type RootCause = z.infer<typeof RootCauseSchema>;
 
 export const RiskCatalogCodesSchema = z
   .object({
@@ -816,8 +600,6 @@ export const RiskCatalogCodesSchema = z
   })
   .strict();
 export type RiskCatalogCodes = z.infer<typeof RiskCatalogCodesSchema>;
-
-export type { CounterfactualControl };
 
 export const ReviewApprovalSchema = z
   .object({
@@ -848,34 +630,6 @@ export const ProsecutorResultSchema = z
   .strict();
 export type ProsecutorResult = z.infer<typeof ProsecutorResultSchema>;
 
-export const JudgeVerdictSchema = z
-  .object({
-    judge: JudgeNameSchema,
-    passed: z.boolean(),
-    findings: z.array(z.string()),
-    required_fix: z.string().min(1).nullable(),
-    score: z.number().nullable(),
-  })
-  .strict();
-export type JudgeVerdict = z.infer<typeof JudgeVerdictSchema>;
-
-export const CitationEntailmentSchema = z
-  .object({
-    citation: z.string().min(1),
-    score: z.number().min(0).max(1),
-    entailed: z.boolean(),
-    unsupported_claims: z.array(z.string()),
-  })
-  .strict();
-export type CitationEntailment = z.infer<typeof CitationEntailmentSchema>;
-
-export const CitationEntailmentResultSchema = z
-  .object({ entailment: z.array(CitationEntailmentSchema) })
-  .strict();
-export type CitationEntailmentResult = z.infer<
-  typeof CitationEntailmentResultSchema
->;
-
 export const ReviewRejectionSchema = z
   .object({
     judge: z.string().min(1),
@@ -885,19 +639,15 @@ export const ReviewRejectionSchema = z
   .strict();
 export type ReviewRejection = z.infer<typeof ReviewRejectionSchema>;
 
-export const ConstitutionalReviewResultSchema = z
+export const ReviewResultSchema = z
   .object({
     approved: z.boolean(),
     approval_id: z.string().uuid().nullable(),
-    judges: z.array(JudgeVerdictSchema),
-    prosecutor: ProsecutorResultSchema,
-    semantic_entropy: z.number().nullable(),
+    challenges: z.array(ProsecutorChallengeSchema),
     rejection: ReviewRejectionSchema.nullable(),
   })
   .strict();
-export type ConstitutionalReviewResult = z.infer<
-  typeof ConstitutionalReviewResultSchema
->;
+export type ReviewResult = z.infer<typeof ReviewResultSchema>;
 
 export const ReviewContextSchema = z
   .object({
@@ -906,7 +656,6 @@ export const ReviewContextSchema = z
     content_sha256: z.string().length(64),
     body_text: z.string(),
     citations: z.array(z.string().min(1)),
-    semantic_entropy: z.number().nullable(),
     numeric_approvals: z.array(NumericApprovalSchema),
     plain_language_waiver: PlainLanguageWaiverSchema.nullable(),
     checklist: z.array(CloseChecklistItemSchema).nullable(),
@@ -940,19 +689,6 @@ export const LifecycleRunSchema = z
   })
   .strict();
 export type LifecycleRun = z.infer<typeof LifecycleRunSchema>;
-
-export const IncidentOutcomeSchema = z
-  .object({
-    incident_code: z.string().min(1),
-    awareness_at_utc: z.string().datetime(),
-    closed_at_utc: z.string().datetime(),
-    severity: z.enum(INCIDENT_SEVERITIES),
-    review_cycles: z.number().int().nonnegative(),
-    sla_72h_met: z.boolean(),
-    recorded_at_utc: z.string().datetime(),
-  })
-  .strict();
-export type IncidentOutcome = z.infer<typeof IncidentOutcomeSchema>;
 
 export const TriageCalibrationSchema = z
   .object({
@@ -1037,7 +773,6 @@ export const IntakePayloadSchema = z
     compromised_system: z.string().min(1).optional(),
     affected_url: z.string().min(1).optional(),
     assigned_to: z.string().min(1).optional(),
-    transcript: z.string().min(1).optional(),
     source_payload: JsonObjectSchema.optional(),
     attachments: z.array(IntakeAttachmentSchema).optional(),
   })
@@ -1075,7 +810,6 @@ export const INDICATOR_EVENT_TYPES = [
   "investigation_complete",
   "notice_sent",
   "notice_exempted",
-  "sla_hazard_high",
   "deadline_missed",
   "corrective_linked",
   "risk_signalled",
@@ -1094,7 +828,6 @@ export const IndicatorEventAttrsSchema = z
     mttd_hours: z.number().nonnegative().optional(),
     mttr_hours: z.number().nonnegative().optional(),
     sla_72h_met: z.boolean().optional(),
-    sla_breach_prob_72h: z.number().min(0).max(1).optional(),
     exemption: Art34ExemptionLetterSchema.nullable().optional(),
     deadline_kind: TimerKindSchema.optional(),
     reason: z.string().min(1).optional(),
@@ -1140,8 +873,6 @@ export const TOOL_ARG_SCHEMAS: Readonly<Record<ToolName, z.ZodTypeAny>> =
     pims_emit_risk_signal: PimsEmitRiskSignalArgsSchema,
     pims_create_audit_action: PimsCreateAuditActionArgsSchema,
     rag_query: RagQueryArgsSchema,
-    stt_transcribe: SttTranscribeArgsSchema,
-    tts_synthesize: TtsSynthesizeArgsSchema,
     scheduler_arm: SchedulerArmArgsSchema,
     scheduler_cancel: SchedulerCancelArgsSchema,
     indicator_emit: IndicatorEmitArgsSchema,
@@ -1165,11 +896,118 @@ export const TOOL_RESULT_SCHEMAS: Readonly<Record<ToolName, z.ZodTypeAny>> =
     pims_emit_risk_signal: PimsEmitRiskSignalResultSchema,
     pims_create_audit_action: PimsCreateAuditActionResultSchema,
     rag_query: RagQueryResultToolSchema,
-    stt_transcribe: SttTranscribeResultSchema,
-    tts_synthesize: TtsSynthesizeResultSchema,
     scheduler_arm: SchedulerArmResultSchema,
     scheduler_cancel: SchedulerCancelResultSchema,
     indicator_emit: IndicatorEmitResultSchema,
   });
 
 export type ToolArgs = JsonObject;
+
+export const IncidentTypeSchema = z.enum(INCIDENT_TYPES);
+export const IncidentSeveritySchema = z.enum(INCIDENT_SEVERITIES);
+export const IncidentImpactSchema = z.enum(INCIDENT_IMPACTS);
+export const AffectedCidSchema = z.enum(AFFECTED_CID);
+
+export const PageAlertSchema = z
+  .object({
+    incident_code: z.string().min(1),
+    kind: TimerKindSchema,
+    reason: z.string().min(1),
+  })
+  .strict();
+export type PageAlert = z.infer<typeof PageAlertSchema>;
+
+export const TriageClassificationResultSchema = z
+  .object({
+    incident_type: IncidentTypeSchema,
+    conformal_set: z.array(IncidentTypeSchema),
+    nonconformity_score: z.number(),
+    severity: IncidentSeveritySchema,
+    impact: IncidentImpactSchema,
+    affected_cid: z.array(AffectedCidSchema),
+    citations: z.array(z.string()),
+    calibration_mode: TriageCalibrationModeSchema,
+  })
+  .strict();
+export type TriageClassificationResult = z.infer<
+  typeof TriageClassificationResultSchema
+>;
+
+export const TriageResultSchema = z
+  .object({
+    incident: PimsIncidentSchema,
+    classification: TriageClassificationResultSchema,
+    calibration_mode: TriageCalibrationModeSchema,
+  })
+  .strict();
+export type TriageResult = z.infer<typeof TriageResultSchema>;
+
+export const AuditLinkResultSchema = z
+  .object({
+    audit_id: z.number().int().positive(),
+    finding_id: z.number().int().positive(),
+    action_plan_id: z.number().int().positive(),
+  })
+  .strict();
+export type AuditLinkResult = z.infer<typeof AuditLinkResultSchema>;
+
+export const InvestigationResultSchema = z
+  .object({
+    incident: PimsIncidentSchema,
+    rootCause: RootCauseSchema,
+    auditLink: AuditLinkResultSchema.nullable(),
+    riskSignal: PimsEmitRiskSignalResultSchema.nullable(),
+    evidence: z.array(EvidenceAttachmentSchema),
+  })
+  .strict();
+export type InvestigationResult = z.infer<typeof InvestigationResultSchema>;
+
+export const ApproveNotifyResultSchema = z
+  .object({
+    parked: z.boolean(),
+    parkedUntilUtc: z.string().nullable(),
+    actions: z.array(PimsIncidentActionSchema),
+    notifies: z.array(PimsNotifyResultSchema),
+  })
+  .strict();
+export type ApproveNotifyResult = z.infer<typeof ApproveNotifyResultSchema>;
+
+export const MonitorResultSchema = z
+  .object({
+    newAttachments: z.number().int().nonnegative(),
+    scopeGrowth: z.boolean(),
+    reevaluated: z.array(z.string()),
+    closed: z.boolean(),
+  })
+  .strict();
+export type MonitorResult = z.infer<typeof MonitorResultSchema>;
+
+export const CloseResultSchema = z
+  .object({
+    incident: PimsIncidentSchema,
+    sealSha256: z.string(),
+    marker: z.string(),
+  })
+  .strict();
+export type CloseResult = z.infer<typeof CloseResultSchema>;
+
+export const IntakeCallbacksSchema = z.object({
+  piiReprompt: z
+    .function()
+    .returns(z.promise(z.boolean().nullable()))
+    .optional(),
+  futureDateReprompt: z
+    .function()
+    .returns(z.promise(z.string().nullable()))
+    .optional(),
+});
+export type IntakeCallbacks = z.infer<typeof IntakeCallbacksSchema>;
+
+export const DraftReviewOptionsSchema = z
+  .object({
+    exemption: ExemptionEvaluationInputSchema.optional(),
+    numericApprovals: z.array(NumericApprovalSchema).optional(),
+    phaseDueAtUtc: z.string().optional(),
+  })
+  .strict();
+export type DraftReviewOptions = z.infer<typeof DraftReviewOptionsSchema>;

@@ -857,66 +857,9 @@ export class OperatorHaltError extends PimsBaseError {
   }
 }
 
-export class VoiceUnavailableError extends PimsBaseError {
-  constructor(
-    message = "Voice provider is unavailable or unconfigured",
-    details?: PimsErrorDetails,
-  ) {
-    super(message, "VOICE_UNAVAILABLE", details);
-  }
-}
-
-export class VoiceLowConfidenceError extends PimsBaseError {
-  constructor(message: string, details?: PimsErrorDetails) {
-    super(message, "VOICE_LOW_CONFIDENCE", details);
-  }
-}
-
-export class VoiceEmptyAudioError extends PimsBaseError {
-  constructor(
-    message = "Audio contained zero speech frames",
-    details?: PimsErrorDetails,
-  ) {
-    super(message, "VOICE_EMPTY_AUDIO", details);
-  }
-}
-
-export class VoiceSpoofSuspectedError extends PimsBaseError {
-  constructor(message: string, details?: PimsErrorDetails) {
-    super(message, "VOICE_SPOOF_SUSPECTED", details);
-  }
-}
-
-export class TtsPiiLeakBlockedError extends PimsBaseError {
-  constructor(message: string, details?: PimsErrorDetails) {
-    super(message, "TTS_PII_LEAK_BLOCKED", details);
-  }
-}
-
-export class TtsUnapprovedBlockedError extends PimsBaseError {
-  constructor(message: string, details?: PimsErrorDetails) {
-    super(message, "TTS_UNAPPROVED_BLOCKED", details);
-  }
-}
-
-export class VoiceAudioTooLargeError extends PimsBaseError {
-  constructor(message: string, details?: PimsErrorDetails) {
-    super(message, "VOICE_AUDIO_TOO_LARGE", details);
-  }
-}
-
 export class ConformalCalibrationError extends PimsBaseError {
   constructor(message: string, details?: PimsErrorDetails) {
     super(message, "CONFORMAL_CALIBRATION_ERROR", details);
-  }
-}
-
-export class WeibullFitError extends PimsBaseError {
-  readonly reason: string;
-
-  constructor(reason: string, details?: PimsErrorDetails) {
-    super(`Weibull fit failed: ${reason}`, `WEIBULL_FIT:${reason}`, details);
-    this.reason = reason;
   }
 }
 

@@ -1,11 +1,6 @@
 import type { AgentConfig } from "@pims/config";
 import { OpenAIModelProvider } from "@pims/models";
-import {
-  CorpusLoader,
-  NormativeKnowledgeGraph,
-  RAGService,
-  RagIndexer,
-} from "@pims/rag";
+import { CorpusLoader, RAGService, RagIndexer } from "@pims/rag";
 import type { RankedPassage } from "@pims/types";
 import {
   PostgreSqlContainer,
@@ -163,61 +158,6 @@ describe("Automated RAG Evaluation Gate (§7.6 Integration Suite)", () => {
       return { vectors };
     });
 
-    vi.spyOn(modelProvider, "chat_json").mockImplementation(
-      async ({ messages }) => {
-        const promptContent = messages[0]?.content ?? "";
-        const qMatch =
-          promptContent.match(/Query:\s*"([^"]+)"/) ||
-          promptContent.match(/Query:\s*(.+)/);
-        const query = qMatch ? (qMatch[1]?.trim() ?? "") : promptContent;
-        const qLower = query.toLowerCase();
-
-        const anchors: string[] = [];
-        if (qLower.includes("33(1)") || qLower.includes("72")) {
-          anchors.push("gdpr:art33.1");
-        }
-        if (qLower.includes("33(2)")) {
-          anchors.push("gdpr:art33.2");
-        }
-        if (qLower.includes("33(3)")) {
-          anchors.push("gdpr:art33.3");
-        }
-        if (qLower.includes("33(5)")) {
-          anchors.push("gdpr:art33.5");
-        }
-        if (qLower.includes("34(1)")) {
-          anchors.push("gdpr:art34.1");
-        }
-        if (qLower.includes("34(2)")) {
-          anchors.push("gdpr:art34.2");
-        }
-        if (qLower.includes("34(3)(a)")) {
-          anchors.push("gdpr:art34.3a");
-        }
-        if (qLower.includes("34(3)(b)")) {
-          anchors.push("gdpr:art34.3b");
-        }
-        if (qLower.includes("b.3.11")) {
-          anchors.push("iso:b.3.11");
-        }
-        if (qLower.includes("b.3.12")) {
-          anchors.push("iso:b.3.12");
-        }
-        if (qLower.includes("10.2")) {
-          anchors.push("iso:10.2");
-        }
-
-        return {
-          content: {
-            sub_queries: [query],
-            hyde_clause: query,
-            graph_anchors: anchors,
-          },
-          citations_requested: false,
-        };
-      },
-    );
-
     vi.spyOn(modelProvider, "rerank").mockImplementation(
       async ({ query, passages }) => {
         const queryWords = query.toLowerCase().match(/[a-z0-9_.]+/g) ?? [];
@@ -254,23 +194,19 @@ describe("Automated RAG Evaluation Gate (§7.6 Integration Suite)", () => {
     const corpus = await loader.loadAll();
     buildGdprTextAxes(corpus.chunks);
 
-    const knowledgeGraph = new NormativeKnowledgeGraph();
-
     indexer = new RagIndexer({
       modelProvider,
       pgClient: sql,
-      knowledgeGraph,
     });
     await indexer.indexCorpus(corpus.chunks, corpus.version, 25);
 
     ragService = new RAGService({
       modelProvider,
       indexer,
-      knowledgeGraph,
       // RAGService reads only the four RAG_* keys.
       config: {
-        RAG_TOP_K: 24,
-        RAG_RERANK_K: 6,
+        RAG_TOP_K: 100,
+        RAG_RERANK_K: 20,
         RAG_MIN_SCORE: 0.35,
         RAG_TIMEOUT_MS: 30000,
       } as unknown as AgentConfig,

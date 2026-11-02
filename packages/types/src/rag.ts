@@ -56,74 +56,10 @@ export const CorpusSourceSchema = z.discriminatedUnion("type", [
 ]);
 export type CorpusSource = z.infer<typeof CorpusSourceSchema>;
 
-export const KGNodeKindSchema = z.enum([
-  "clause",
-  "control",
-  "article",
-  "field",
-  "catalog",
-  "spec",
-]);
-export type KGNodeKind = z.infer<typeof KGNodeKindSchema>;
-
-export const KnowledgeGraphNodeSchema = z.object({
-  id: z.string(),
-  kind: KGNodeKindSchema,
-  label: z.string(),
-  description: z.string().optional(),
-});
-export type KnowledgeGraphNode = z.infer<typeof KnowledgeGraphNodeSchema>;
-
-export const KGEdgeRelationSchema = z.enum([
-  "requires",
-  "maps_to_field",
-  "mitigates",
-  "crosswalks_to",
-]);
-export type KGEdgeRelation = z.infer<typeof KGEdgeRelationSchema>;
-
-export const KnowledgeGraphEdgeSchema = z.object({
-  source: z.string(),
-  target: z.string(),
-  relation: KGEdgeRelationSchema,
-  weight: z.number().positive(),
-});
-export type KnowledgeGraphEdge = z.infer<typeof KnowledgeGraphEdgeSchema>;
-
-export const KnowledgeGraphDataSchema = z.object({
-  nodes: z.array(KnowledgeGraphNodeSchema),
-  edges: z.array(KnowledgeGraphEdgeSchema),
-});
-export type KnowledgeGraphData = z.infer<typeof KnowledgeGraphDataSchema>;
-
-export const QueryDecompositionSchema = z.object({
-  sub_queries: z.array(z.string()),
-  hyde_clause: z.string(),
-  graph_anchors: z.array(z.string()),
-});
-export type QueryDecomposition = z.infer<typeof QueryDecompositionSchema>;
-
-export const CRAGGradeSchema = z.enum([
-  "supported",
-  "ambiguous",
-  "unsupported",
-]);
-export type CRAGGrade = z.infer<typeof CRAGGradeSchema>;
-
-export const CRAGResultSchema = z.object({
-  grade: CRAGGradeSchema,
-  reason: z.string(),
-  rewritten_query: z.string().optional(),
-  passed_passages: z.array(RankedPassageSchema),
-});
-export type CRAGResult = z.infer<typeof CRAGResultSchema>;
-
 export const RagQueryResultSchema = z.object({
   query: z.string(),
   passages: z.array(RankedPassageSchema),
   citations: z.array(z.string()),
-  crag_grade: CRAGGradeSchema,
-  decomposed: QueryDecompositionSchema,
   corpus_version: z.string(),
 });
 export type RagQueryResult = z.infer<typeof RagQueryResultSchema>;
@@ -138,13 +74,6 @@ export const EvalQueryDefSchema = z.object({
   min_score: z.number(),
 });
 export type EvalQueryDef = z.infer<typeof EvalQueryDefSchema>;
-
-export const RAGTriadScoresSchema = z.object({
-  context_relevance: z.number(),
-  groundedness: z.number(),
-  answer_relevance: z.number(),
-});
-export type RAGTriadScores = z.infer<typeof RAGTriadScoresSchema>;
 
 export const LoadedCorpusSchema = z.object({
   version: z.string(),

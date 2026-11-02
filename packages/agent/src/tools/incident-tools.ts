@@ -1,4 +1,3 @@
-import crypto from "node:crypto";
 import { appendEvidenceMarker } from "@pims/agent/lifecycle/markers.ts";
 import { assertPostHistory, toJsonObject } from "@pims/agent/tools/helpers.ts";
 import {
@@ -6,6 +5,7 @@ import {
   type ToolDependencies,
   type ToolHandler,
 } from "@pims/agent/tools/registry.ts";
+import { sha256HexBytes } from "@pims/evidence/forensic-patterns.ts";
 import {
   type PimsAddActionArgs,
   PimsAddActionArgsSchema,
@@ -28,6 +28,7 @@ import {
   type PimsUploadAttachmentArgs,
   PimsUploadAttachmentArgsSchema,
 } from "@pims/types/agent.ts";
+import { assertAttachmentMeta } from "@pims/types/attachments.ts";
 import {
   ActionSequenceViolationError,
   AttachmentHashMismatchError,
@@ -362,12 +363,12 @@ export function createIncidentToolHandlers(
         code,
         args.file_name,
       );
-      const sha256 = crypto.createHash("sha256").update(bytes).digest("hex");
+      const sha256 = sha256HexBytes(bytes);
       if (sha256 !== args.bytes_ref.toLowerCase()) {
         throw new AttachmentHashMismatchError();
       }
 
-      deps.forensicScanner.validateAttachment(args.file_name, bytes.length);
+      assertAttachmentMeta(args.file_name, bytes.length);
 
       const uploaded = await deps.adapter.uploadIncidentAttachment(
         args.incident_id,
@@ -389,7 +390,10 @@ export function createIncidentToolHandlers(
         attachment.file,
         { incidentCode: code },
       );
-      deps.forensicScanner.verifyPostUploadHash(sha256, downloaded);
+      const downloadedSha = sha256HexBytes(downloaded);
+      if (downloadedSha.toLowerCase() !== sha256.toLowerCase()) {
+        throw new AttachmentHashMismatchError();
+      }
 
       await deps.evidenceStore.markStagedAttachmentUploaded(
         code,

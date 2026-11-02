@@ -27,7 +27,6 @@
         };
         shellPkgs = pkgs.lib.flatten [
           (with pkgs; [
-            sops
             postgresql
             docker
           ])

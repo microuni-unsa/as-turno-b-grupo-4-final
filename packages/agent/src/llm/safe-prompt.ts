@@ -1,5 +1,5 @@
+import net from "node:net";
 import { extractIocs, extractPii } from "@pims/evidence/forensic-patterns.ts";
-import { PII_PHONE_REGIONS } from "@pims/types/constants.ts";
 import { PromptPiiBlockedError } from "@pims/types/errors.ts";
 import type {
   ChatJsonArgs,
@@ -13,15 +13,9 @@ import type {
   VisionJsonArgs,
   VisionJsonResponse,
 } from "@pims/types/models.ts";
-import { findPhoneNumbersInText } from "libphonenumber-js";
 
-const EMAIL_PATTERN = /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/g;
-const DNI_PATTERN = /(?<!\d)\d{8}(?!\d)/g;
-const RUC_PATTERN = /(?<!\d)(?:10|15|17|20)\d{9}(?!\d)/g;
 const REDACTION_TOKEN_PATTERN =
   /^\[(?:REPORTANTE|CONTACTO|ID|SISTEMA|DESCRIPCION)\]$/;
-const HEX_DIGEST_PATTERN = /^[0-9a-fA-F]{32,64}$/;
-const IPV4_PATTERN = /^\d{1,3}(?:\.\d{1,3}){3}$/;
 
 export const REDACTION_TOKENS = {
   contact: "[CONTACTO]",
@@ -36,38 +30,14 @@ interface PiiHit {
   value: string;
 }
 
-function collectMatches(pattern: RegExp, text: string): string[] {
-  return Array.from(text.matchAll(pattern), (match) => match[0]);
-}
-
 function collectHits(text: string): PiiHit[] {
   const hits: PiiHit[] = [];
 
-  for (const value of collectMatches(EMAIL_PATTERN, text)) {
-    hits.push({ category: "email", value });
-  }
-
-  for (const region of PII_PHONE_REGIONS) {
-    for (const match of findPhoneNumbersInText(text, region)) {
-      if (match.number.isValid()) {
-        hits.push({ category: "phone", value: match.number.number });
-      }
-    }
-  }
-
-  for (const value of collectMatches(RUC_PATTERN, text)) {
-    hits.push({ category: "ruc", value });
-  }
-
-  for (const value of collectMatches(DNI_PATTERN, text)) {
-    hits.push({ category: "dni", value });
-  }
-
   for (const value of extractIocs(text)) {
-    if (HEX_DIGEST_PATTERN.test(value)) {
+    if (/^[0-9a-fA-F]{32,64}$/.test(value)) {
       continue;
     }
-    const isIp = value.includes(":") || IPV4_PATTERN.test(value);
+    const isIp = net.isIP(value) !== 0;
     hits.push({ category: isIp ? "ip" : "hostname", value });
   }
 
@@ -75,10 +45,15 @@ function collectHits(text: string): PiiHit[] {
     if (REDACTION_TOKEN_PATTERN.test(value)) {
       continue;
     }
-    const alreadyCovered = hits.some((hit) => hit.value === value);
-    if (!alreadyCovered) {
-      hits.push({ category: "email", value });
+    let category: PiiCategory = "email";
+    if (value.includes("@")) {
+      category = "email";
+    } else if (value.startsWith("+")) {
+      category = "phone";
+    } else if (/^[XYZxyz\d]/.test(value)) {
+      category = "dni";
     }
+    hits.push({ category, value });
   }
 
   return hits;
@@ -104,6 +79,12 @@ export function redactForPrompt(text: string): string {
     redacted = redacted.split(hit.value).join(tokenFor(hit.category));
   }
   return redacted;
+}
+
+export function redactOptionalForPrompt(
+  value: string | null | undefined,
+): string | null {
+  return value === null || value === undefined ? null : redactForPrompt(value);
 }
 
 export function assertPromptSafe(system: string, messages: Message[]): void {
