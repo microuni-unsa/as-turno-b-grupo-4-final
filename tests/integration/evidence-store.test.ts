@@ -538,6 +538,89 @@ describe("EvidenceStore Integration Suite (Testcontainers PostgreSQL)", {
     });
   });
 
+  describe("RAG retrieval persistence", () => {
+    it("stores encrypted retrieval records and lists them newest first", async () => {
+      const chunkSha = "d".repeat(64);
+      const basePassage = {
+        chunk_id: "gdpr-full:0001",
+        doc_id: "gdpr-full",
+        article_or_clause: "Article 33",
+        lines: "2171-2175",
+        text: "The controller shall notify within 72 hours.",
+        normative: true,
+        score: 0.91,
+        rank: 1,
+        chunk_sha256: chunkSha,
+        dense_score: 0.82,
+        dense_rank: 1,
+        bm25_score: 12.5,
+        bm25_rank: 2,
+        rrf_score: 0.031,
+        rerank_score: 0.91,
+      };
+      await store.saveRagRetrieval({
+        incident_code: "INC-RAG-1",
+        query: "first query",
+        corpus_version: "v1",
+        at_utc: "2026-10-01T10:00:00.000Z",
+        passages: [basePassage],
+        citations: ["gdpr-full:gdpr-full:0001:2171-2175"],
+      });
+      await store.saveRagRetrieval({
+        incident_code: "INC-RAG-1",
+        query: "second query",
+        corpus_version: "v1",
+        at_utc: "2026-10-01T11:00:00.000Z",
+        passages: [basePassage],
+        citations: ["gdpr-full:gdpr-full:0001:2171-2175"],
+      });
+
+      const records = await store.listRagRetrievals("INC-RAG-1");
+      expect(records).toHaveLength(2);
+      expect(records[0]?.query).toBe("second query");
+      expect(records[1]?.query).toBe("first query");
+      expect(records[0]?.passages[0]?.chunk_sha256).toBe(chunkSha);
+      expect(records[0]?.passages[0]?.dense_score).toBe(0.82);
+      expect(records[0]?.passages[0]?.bm25_rank).toBe(2);
+
+      const rows = await store.sql`
+        SELECT payload_encrypted FROM evidence.rag_retrievals
+        WHERE incident_code = 'INC-RAG-1';
+      `;
+      for (const row of rows) {
+        expect(String(row.payload_encrypted)).not.toContain("first query");
+        expect(String(row.payload_encrypted)).not.toContain("second query");
+      }
+    });
+
+    it("replaces an existing staged attachment instead of duplicating it", async () => {
+      await store.stageAttachment(
+        "unsa",
+        "INC-REPLACE-1",
+        "bundle.json",
+        Buffer.from('{"old":true}'),
+        "application/json",
+        "test",
+      );
+      await store.replaceStagedAttachment(
+        "unsa",
+        "INC-REPLACE-1",
+        "bundle.json",
+        Buffer.from('{"new":true}'),
+        "application/json",
+        "test",
+      );
+      const staged = await store.listStagedAttachments("INC-REPLACE-1");
+      expect(staged).toHaveLength(1);
+      const bytes = await store.getStagedAttachmentBytes(
+        "unsa",
+        "INC-REPLACE-1",
+        "bundle.json",
+      );
+      expect(bytes.toString("utf8")).toBe('{"new":true}');
+    });
+  });
+
   describe("Retention pruning", () => {
     it("executes pruneRetention without deleting fresh rows", async () => {
       const result = await store.pruneRetention(6);

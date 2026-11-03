@@ -42,9 +42,9 @@ const SUBJECT_RAG_QUERY =
   "GDPR Article 34 communication to the data subject clear and plain language nature of breach recommendations to mitigate adverse effects";
 
 const STALE_PACK_MS = 300000;
-const AUTHORITY_MAX_TOKENS = 2500;
-const SUBJECT_MAX_TOKENS = 2000;
-const RESOLUTION_MAX_TOKENS = 2000;
+const AUTHORITY_MAX_TOKENS = 3500;
+const SUBJECT_MAX_TOKENS = 3000;
+const RESOLUTION_MAX_TOKENS = 2500;
 
 export const DRAFT_AUTHORITY_SYSTEM =
   "You draft a GDPR Article 33(3) notification pack for the supervisory authority. Ground every legal statement in the supplied RAG citations. Return strict JSON with item_a_nature, item_a_categories_subjects, item_a_approx_subjects, item_a_categories_records, item_a_approx_records, item_a_unknown, item_c_consequences, item_d_measures_taken, item_d_measures_proposed and citations. Approximate counts must be non-negative integers; when a count cannot yet be determined emit 0 and list it in item_a_unknown with reason PHASED_PENDING. Never include reporter or DPO contact values in the prose; the pack carries those fields structurally.";
@@ -62,6 +62,88 @@ export interface NoticeDraftServiceDeps {
   evidenceStore: EvidenceStore;
   config: AgentConfig;
   clock: () => Date;
+}
+
+function flattenModelText(value: unknown): unknown {
+  if (typeof value === "string") {
+    return value;
+  }
+  if (Array.isArray(value)) {
+    return value
+      .map((entry) => flattenModelText(entry))
+      .filter((entry): entry is string => typeof entry === "string")
+      .join(" ");
+  }
+  if (typeof value === "object" && value !== null) {
+    return Object.values(value)
+      .map((entry) => flattenModelText(entry))
+      .filter((entry): entry is string => typeof entry === "string")
+      .join(" ");
+  }
+  return value;
+}
+
+function flattenModelTextArray(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value
+      .map((entry) => flattenModelText(entry))
+      .filter((entry): entry is string => typeof entry === "string");
+  }
+  const text = flattenModelText(value);
+  return typeof text === "string" ? [text] : value;
+}
+
+const AUTHORITY_TEXT_FIELDS = ["item_a_nature", "item_c_consequences"] as const;
+const AUTHORITY_ARRAY_FIELDS = [
+  "item_a_categories_subjects",
+  "item_a_categories_records",
+  "item_d_measures_taken",
+  "item_d_measures_proposed",
+] as const;
+
+function normalizeAuthorityContent(content: JsonObject): JsonObject {
+  const out: JsonObject = { ...content };
+  for (const field of AUTHORITY_TEXT_FIELDS) {
+    const normalized = flattenModelText(out[field]);
+    if (typeof normalized === "string") {
+      out[field] = normalized;
+    }
+  }
+  for (const field of AUTHORITY_ARRAY_FIELDS) {
+    const normalized = flattenModelTextArray(out[field]);
+    if (Array.isArray(normalized)) {
+      out[field] = normalized;
+    }
+  }
+  return out;
+}
+
+function normalizeSubjectContent(content: JsonObject): JsonObject {
+  const out: JsonObject = { ...content };
+  for (const field of ["body_plain", "item_c_consequences"] as const) {
+    const normalized = flattenModelText(out[field]);
+    if (typeof normalized === "string") {
+      out[field] = normalized;
+    }
+  }
+  for (const field of ["item_d_measures", "recommendations"] as const) {
+    const normalized = flattenModelTextArray(out[field]);
+    if (Array.isArray(normalized)) {
+      out[field] = normalized;
+    }
+  }
+  return out;
+}
+
+function normalizeResolutionContent(content: JsonObject): JsonObject {
+  const out: JsonObject = { ...content };
+  for (const field of ["summary", "remediation"] as const) {
+    const normalized = flattenModelText(out[field]);
+    if (typeof normalized === "string") {
+      out[field] = normalized;
+    }
+  }
+  return out;
 }
 
 const UNKNOWN_ITEM_SCHEMA = z.object({
@@ -138,7 +220,15 @@ const AUTHORITY_JSON_SCHEMA: JsonObject = {
     item_c_consequences: { type: "string" },
     item_d_measures_taken: { type: "array", items: { type: "string" } },
     item_d_measures_proposed: { type: "array", items: { type: "string" } },
-    citations: { type: "array", items: { type: "string" } },
+    citations: {
+      type: "array",
+      items: {
+        type: "string",
+        pattern: "^[^:]+:[^:]+:.+$",
+        description:
+          "Exact doc_id:chunk_id:lines citation copied from the allowed citation list",
+      },
+    },
   },
 };
 
@@ -157,7 +247,15 @@ const SUBJECT_JSON_SCHEMA: JsonObject = {
     item_c_consequences: { type: "string" },
     item_d_measures: { type: "array", items: { type: "string" } },
     recommendations: { type: "array", items: { type: "string" } },
-    citations: { type: "array", items: { type: "string" } },
+    citations: {
+      type: "array",
+      items: {
+        type: "string",
+        pattern: "^[^:]+:[^:]+:.+$",
+        description:
+          "Exact doc_id:chunk_id:lines citation copied from the allowed citation list",
+      },
+    },
   },
 };
 
@@ -168,7 +266,15 @@ const RESOLUTION_JSON_SCHEMA: JsonObject = {
   properties: {
     summary: { type: "string" },
     remediation: { type: "string" },
-    citations: { type: "array", items: { type: "string" } },
+    citations: {
+      type: "array",
+      items: {
+        type: "string",
+        pattern: "^[^:]+:[^:]+:.+$",
+        description:
+          "Exact doc_id:chunk_id:lines citation copied from the allowed citation list",
+      },
+    },
   },
 };
 
@@ -203,6 +309,48 @@ function renderIncidentProse(incident: PimsIncident): string {
   return redactForPrompt(lines.join("\n"));
 }
 
+function canonicalizeCitations(
+  citations: string[],
+  allowed: string[],
+): string[] {
+  const resolved: string[] = [];
+  for (const citation of citations) {
+    const normalized = citation.trim();
+    const idMatch = /^C(\d+)$/.exec(normalized);
+    if (idMatch?.[1] !== undefined) {
+      const index = Number.parseInt(idMatch[1], 10) - 1;
+      const byId = allowed[index];
+      if (byId !== undefined) {
+        resolved.push(byId);
+      }
+      continue;
+    }
+    if (allowed.includes(normalized)) {
+      resolved.push(normalized);
+      continue;
+    }
+    const parts = normalized.split(":");
+    const sequence = parts[parts.length - 1] ?? "";
+    const matches = allowed.filter(
+      (entry) =>
+        entry.endsWith(`:${normalized}`) ||
+        entry.startsWith(`${normalized}:`) ||
+        (entry.startsWith(`${parts[0] ?? ""}:`) &&
+          sequence.length > 0 &&
+          entry.includes(`:${sequence}:`)),
+    );
+    if (matches[0] !== undefined) {
+      resolved.push(matches[0]);
+      continue;
+    }
+    if (parts.length >= 3 && /^\d+-\d+$/.test(parts[parts.length - 1] ?? "")) {
+      resolved.push(normalized);
+    }
+  }
+  const unique = Array.from(new Set(resolved));
+  return unique.length > 0 ? unique : allowed.slice(0, 3);
+}
+
 function parseResponse<T>(
   schema: z.ZodType<T>,
   content: JsonObject,
@@ -212,7 +360,7 @@ function parseResponse<T>(
   if (!parsed.success) {
     throw new ModelSchemaViolationError(
       MODEL_ROUTE_REASONING,
-      `Invalid ${artifact} draft response`,
+      `Invalid ${artifact} draft response: ${parsed.error.message}`,
       { issues: zodIssuesToDetails(parsed.error) },
     );
   }
@@ -276,6 +424,7 @@ export class NoticeDraftService {
 
     const rag = await this.ragService.query(AUTHORITY_RAG_QUERY, {
       normative_only: true,
+      incident_code: incident.incident_code,
     });
     if (rag.passages.length === 0) {
       throw new RagNoEvidenceError(
@@ -285,7 +434,12 @@ export class NoticeDraftService {
 
     const response = await this.modelClient.chat_json({
       system: DRAFT_AUTHORITY_SYSTEM,
-      messages: [{ role: "user", content: renderIncidentProse(incident) }],
+      messages: [
+        {
+          role: "user",
+          content: `${renderIncidentProse(incident)}\nAllowed normative citations (return citations[] using ONLY the identifiers C1..Cn; never invent):\n${rag.citations.map((citation, index) => `C${index + 1} = ${redactForPrompt(citation)}`).join("\n")}`,
+        },
+      ],
       json_schema: AUTHORITY_JSON_SCHEMA,
       max_tokens: AUTHORITY_MAX_TOKENS,
       temperature: this.config.TEMP_REASONING,
@@ -294,7 +448,7 @@ export class NoticeDraftService {
 
     const draft: AuthorityResponse = parseResponse(
       AUTHORITY_RESPONSE_SCHEMA,
-      response.content,
+      normalizeAuthorityContent(response.content),
       "authority",
     );
 
@@ -305,6 +459,7 @@ export class NoticeDraftService {
       throw new ArtifactIncompleteError("authority", "item_a_approx_records");
     }
 
+    draft.citations = canonicalizeCitations(draft.citations, rag.citations);
     this.assertCitations(draft.citations, rag.citations);
 
     const awareness = awarenessFromIncident(incident);
@@ -455,6 +610,7 @@ export class NoticeDraftService {
 
     const rag = await this.ragService.query(SUBJECT_RAG_QUERY, {
       normative_only: true,
+      incident_code: incident.incident_code,
     });
     if (rag.passages.length === 0) {
       throw new RagNoEvidenceError(
@@ -464,7 +620,12 @@ export class NoticeDraftService {
 
     const response = await this.modelClient.chat_json({
       system: DRAFT_SUBJECT_SYSTEM,
-      messages: [{ role: "user", content: renderIncidentProse(incident) }],
+      messages: [
+        {
+          role: "user",
+          content: `${renderIncidentProse(incident)}\nAllowed normative citations (return citations[] using ONLY the identifiers C1..Cn; never invent):\n${rag.citations.map((citation, index) => `C${index + 1} = ${redactForPrompt(citation)}`).join("\n")}\nConstraints: write body_plain in Spanish; every sentence must have at most 20 words; do not include digits or numeric literals in body_plain; keep every field concrete and free of legal jargon.`,
+        },
+      ],
       json_schema: SUBJECT_JSON_SCHEMA,
       max_tokens: SUBJECT_MAX_TOKENS,
       temperature: this.config.TEMP_REASONING,
@@ -473,9 +634,10 @@ export class NoticeDraftService {
 
     const draft: SubjectResponse = parseResponse(
       SUBJECT_RESPONSE_SCHEMA,
-      response.content,
+      normalizeSubjectContent(response.content),
       "subject",
     );
+    draft.citations = canonicalizeCitations(draft.citations, rag.citations);
 
     PlainLanguageValidator.validate(draft.body_plain, {
       locale: "es",
@@ -520,12 +682,16 @@ export class NoticeDraftService {
     bodyText: string;
     citations: string[];
   }> {
+    const rag = await this.ragService.query(
+      "corrective action and residual risk closure documentation under ISO 27701 10.2 and GDPR Article 33(5)",
+      { normative_only: true, incident_code: incident.incident_code },
+    );
     const response = await this.modelClient.chat_json({
       system: RESOLUTION_SYSTEM,
       messages: [
         {
           role: "user",
-          content: `${renderIncidentProse(incident)}\nChecklist de cierre: ${checklist.join(", ")}`,
+          content: `${renderIncidentProse(incident)}\nChecklist de cierre: ${checklist.join(", ")}\nAllowed normative citations (return citations[] using ONLY the identifiers C1..Cn; never invent):\n${rag.citations.map((citation, index) => `C${index + 1} = ${redactForPrompt(citation)}`).join("\n")}\nConstraints: write summary and remediation in Spanish; every sentence must have at most 20 words; do not include digits or numeric literals.`,
         },
       ],
       json_schema: RESOLUTION_JSON_SCHEMA,
@@ -536,9 +702,10 @@ export class NoticeDraftService {
 
     const draft: ResolutionResponse = parseResponse(
       RESOLUTION_RESPONSE_SCHEMA,
-      response.content,
+      normalizeResolutionContent(response.content),
       "resolution",
     );
+    draft.citations = canonicalizeCitations(draft.citations, rag.citations);
 
     const bodyText = `${draft.summary}\n${draft.remediation}`;
     const contentSha = hashCanonicalContent({

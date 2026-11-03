@@ -116,6 +116,7 @@ export class CorpusLoader {
         normative: this.defaultNormative,
         header,
         token_count: countApproxTokens(text),
+        sha256: this.sha256(text),
       });
       seq++;
     }

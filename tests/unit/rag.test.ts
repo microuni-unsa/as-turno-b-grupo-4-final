@@ -10,6 +10,7 @@ import {
   RagIndexError,
   RagNoEvidenceError,
 } from "@pims/types";
+import type { RagRetrievalRecord } from "@pims/types/rag.ts";
 import type postgres from "postgres";
 import { describe, expect, it, vi } from "vitest";
 
@@ -57,6 +58,7 @@ describe("Tri-Modal RAG Subsystem Unit Suite", () => {
           /^\[DOC:[^|]+ \| CLAUSE:[^|]+ \| NORMATIVE:(true|false)\]$/,
         );
         expect(chunk.text.startsWith(chunk.header)).toBe(true);
+        expect(chunk.sha256).toMatch(/^[a-f0-9]{64}$/);
       }
 
       expect(corpus.docHashes["gdpr-full"]).toBeDefined();
@@ -269,6 +271,7 @@ Notify the designated Incident Commander within 30 minutes.
           normative: true,
           header: "[DOC:gdpr-full | CLAUSE:art33 | NORMATIVE:true]",
           token_count: 20,
+          sha256: "a".repeat(64),
         },
         {
           chunk_id: "c2",
@@ -279,6 +282,7 @@ Notify the designated Incident Commander within 30 minutes.
           normative: true,
           header: "[DOC:iso27701 | CLAUSE:b.3.12 | NORMATIVE:true]",
           token_count: 20,
+          sha256: "a".repeat(64),
         },
       ];
 
@@ -311,6 +315,7 @@ Notify the designated Incident Commander within 30 minutes.
             normative: true,
             header: "[DOC:gdpr-full | CLAUSE:art33 | NORMATIVE:true]",
             token_count: 10,
+            sha256: "a".repeat(64),
           },
         ],
         "v1",
@@ -378,6 +383,86 @@ Notify the designated Incident Commander within 30 minutes.
       await expect(ragService.query("unrelated question")).rejects.toThrow(
         RagNoEvidenceError,
       );
+    });
+
+    it("exposes verbatim chunk hashes and per-retriever scores", async () => {
+      const sqlStub = Object.assign(vi.fn().mockResolvedValue([]), {
+        unsafe: vi.fn().mockResolvedValue([]),
+      });
+      const indexer = new RagIndexer({
+        modelProvider: dummyProvider,
+        pgClient: sqlStub as unknown as postgres.Sql,
+      });
+
+      vi.spyOn(dummyProvider, "embed").mockResolvedValue({
+        vectors: [[0.1, 0.2, 0.3]],
+      });
+
+      const chunkSha = "b".repeat(64);
+      await indexer.indexCorpus(
+        [
+          {
+            chunk_id: "art33",
+            doc_id: "gdpr-full",
+            article_or_clause: "art33",
+            lines: "2171-2175",
+            text: "[DOC:gdpr-full | CLAUSE:art33 | NORMATIVE:true]\nThe controller shall notify the personal data breach to the supervisory authority within 72 hours",
+            normative: true,
+            header: "[DOC:gdpr-full | CLAUSE:art33 | NORMATIVE:true]",
+            token_count: 20,
+            sha256: chunkSha,
+          },
+        ],
+        "v-metadata",
+      );
+
+      sqlStub.mockResolvedValue([{ chunk_id: "art33", similarity: 0.82 }]);
+      vi.spyOn(dummyProvider, "rerank").mockResolvedValue({
+        ranked: [
+          {
+            chunk_id: "art33",
+            doc_id: "gdpr-full",
+            article_or_clause: "art33",
+            lines: "2171-2175",
+            text: "[DOC:gdpr-full | CLAUSE:art33 | NORMATIVE:true]\nThe controller shall notify the personal data breach to the supervisory authority within 72 hours",
+            normative: true,
+            score: 0.91,
+            rank: 1,
+          },
+        ],
+      });
+
+      const records: RagRetrievalRecord[] = [];
+      const ragService = new RAGService({
+        modelProvider: dummyProvider,
+        indexer,
+        config: testRagConfig,
+        onRetrieval: (record) => {
+          records.push(record);
+        },
+      });
+
+      const result = await ragService.query(
+        "personal data breach 72 hours supervisory authority",
+        { incident_code: "INC-001" },
+      );
+
+      const passage = result.passages[0];
+      if (passage === undefined) {
+        throw new Error("Expected one retrieval passage");
+      }
+      expect(passage.chunk_sha256).toBe(chunkSha);
+      expect(passage.dense_score).toBe(0.82);
+      expect(passage.dense_rank).toBe(1);
+      expect(passage.bm25_score).toBeGreaterThan(0);
+      expect(passage.bm25_rank).toBeGreaterThan(0);
+      expect(passage.rrf_score).toBeGreaterThan(0);
+      expect(passage.rerank_score).toBe(0.91);
+
+      expect(records).toHaveLength(1);
+      expect(records[0]?.incident_code).toBe("INC-001");
+      expect(records[0]?.passages[0]?.chunk_sha256).toBe(chunkSha);
+      expect(records[0]?.citations).toEqual(result.citations);
     });
   });
 });

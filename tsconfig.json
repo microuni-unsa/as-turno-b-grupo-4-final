@@ -28,6 +28,8 @@
       "@pims/notices/*": ["./packages/notices/src/*"],
       "@pims/agent": ["./packages/agent/src/index.ts"],
       "@pims/agent/*": ["./packages/agent/src/*"],
+      "@pims/cockpit": ["./packages/cockpit/src/index.ts"],
+      "@pims/cockpit/*": ["./packages/cockpit/src/*"],
       "@tests/*": ["./tests/*"]
     },
     "verbatimModuleSyntax": true,

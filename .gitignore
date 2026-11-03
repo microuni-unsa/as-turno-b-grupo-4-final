@@ -100,6 +100,9 @@ dist
 # vuepress build output
 .vuepress/dist
 
+# playwright mcp
+.playwright-mcp/
+
 # vuepress v2.x temp and cache directory
 .temp
 
@@ -139,3 +142,7 @@ dist
 
 # Nix
 .direnv
+
+# Local live-tenant secrets (never committed)
+data/site.md
+data/pims_password

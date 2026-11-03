@@ -186,16 +186,16 @@ Base URL `PIMS_BASE_URL` (default `https://unsa.27k.pe`). Auth: `Authorization: 
 | E07 | `GET /api/incidents/{id}/` | Incident detail | `view_incident` | — | full incident (57 keys, §3.4 + nested) | `capture/02` |
 | E08 | `PATCH /api/incidents/{id}/` | Partial update incl. status transitions and nested `actions[]` (nested write verified `capture/11`; REPLACE-vs-MERGE on repeat sends untested — the adapter MUST run one startup probe on a throwaway incident: PATCH `[{C}]` then PATCH `[{A}]`, then GET: if only `[A]` remains, server REPLACEs and the adapter MUST read-modify-write every append; if `[C,A]` remain, server MERGEs and single-item PATCH is allowed; probe result logged `NESTED_PROBE:<replace|merge>` and baked into adapter behavior) | `change_incident` | any writable key; `actions:[{action_type,responsible,action_date,description,evidence}]` (`position` system-assigned) | full incident | `capture/11`, `capture/30` → 200 |
 | E09 | `DELETE /api/incidents/{id}/` | Logical delete (`is_deleted=true`; UNIQUE stays occupied) | `delete_incident` (operator `grupob4` LACKS it — verified 403 `capture/25`; agent identity MUST be granted it per §3.3) | — | 204 empty on success | `capture/25` (403 shape) |
-| E10 | `GET /api/incidents/{id}/history/` | Immutable timeline, newest first | `view_incident` | — | `[{id,event_type,event_type_label,changed_at,actor,changed_by,changed_by_name,description,recipients_snapshot}]` | `capture/03`, `capture/28` |
-| E11 | `GET /api/incidents/{id}/attachments/` | List attachments | `view_incident` | — | `[{id,file,file_name,uploaded_at,uploaded_by,uploaded_by_name}]` (`file` is an authenticated tenant URL, never public) | `capture/29` |
-| E12 | `POST /api/incidents/{id}/attachments/` | Upload attachment (`multipart/form-data`, field `file`) | `change_incident` (per §4.4 attachments remap) | `file` binary; types `jpg,jpeg,png,tif,bmp,pdf,doc,docx,txt` (bundle `ow` allowlist), ≤10 MB | 201 `[{id,file,file_name,uploaded_at,uploaded_by,uploaded_by_name}]` | `capture/12` |
+| E10 | `GET /api/incidents/{id}/history/` | Immutable timeline, newest first | `view_incident` | — | `[{id,event_type,event_type_label,changed_at,actor,changed_by,changed_by_name,description,recipients_snapshot}]`; live serializers return `recipients_snapshot` as a comma-separated string, `null`, or an array (normalize to `string[] \| null`), and status transitions arrive as `event_type:"updated"` (live `grupob4` never emits `status_changed`; treat `created`+`updated` as registry evidence) | `capture/03`, `capture/28` |
+| E11 | `GET /api/incidents/{id}/attachments/` | List attachments | `view_incident` | — | `[{id,file,file_name,uploaded_at,uploaded_by,uploaded_by_name}]` (`file` is an authenticated tenant URL, never public; live media content-negotiation rejects `Accept: application/octet-stream` with 406, so downloads send `Accept: */*`) | `capture/29` |
+| E12 | `POST /api/incidents/{id}/attachments/` | Upload attachment (`multipart/form-data`, field `file`) | `change_incident` (per §4.4 attachments remap) | `file` binary; live-accepted types `jpg,jpeg,png,tif,bmp,pdf,doc,docx,txt` (bundle `ow` allowlist), ≤10 MB; live PIMS rejects `.json` with HTTP 400 `{"detail":...}` (verified 2026-11-02), so the sealed bundle is uploaded as `bundle.json.txt` with `text/plain` | 201 live single object `{id,file,file_name,uploaded_at,uploaded_by,uploaded_by_name}` (mock returns an array; the adapter normalizes both to an array) | `capture/12` |
 | E13 | `POST /api/incidents/{id}/notify/` | Send notification email to ALL active `core_incidentrecipient` rows; appends `notified` history with `recipients_snapshot`. Empty body `{}`. Does NOT set `measure_reported_authorities` (verified null after notify — the agent MUST set it explicitly via E08). Fails 400 `{"detail":"No hay destinatarios configurados para notificar."}` when zero active recipients. | `change_incident` (per §4.4 notify remap) | `{}` (no per-call recipient override exists) | 200 full incident | `capture/13` (400), `capture/15` (200) |
 | E14 | `GET /api/incident-recipients/` | List notify recipients | `view_incident` (recipients governed by Incidents perm, Anexo_05 §4.5) | — | paginated `[{id,email,label,is_active,created_at}]` | `capture/04` |
 | E15 | `POST /api/incident-recipients/` | Create recipient | `add_incident` | `email` (UNIQUE), `label`, `is_active` | 201 recipient | `capture/14` |
 | E16 | `DELETE /api/incident-recipients/{id}/` | Delete recipient (hard delete — table has no `is_deleted`) | `delete_incident` | — | 204 empty | `capture/27` |
 | E17 | `GET /api/audits/` | List audits (filter `status`) | `view_audit` | query `status,...` | paginated audits with nested `checklist[]`, `findings[]`, `findings_count` | `capture/05`, `capture/38` |
 | E18 | `POST /api/audits/` | Create audit | `add_audit` | `audit_type(I/E),name,status(P/R/C),scope,objective,start_date,end_date,lead_auditor,audit_team,involved_areas` (`audit_code` system `AUD-2026-###`, `progress` system) | 201 audit | `capture/16` |
-| E19 | `PATCH /api/audits/{id}/` | Update audit incl. nested findings+actions (sub-key for plans is `actions`, NOT `action_plans` — verified `capture/17` ignored vs `capture/18` accepted; REPLACE-vs-MERGE on repeat sends untested — same startup-probe rule as E08, probe on a throwaway audit, result `NESTED_PROBE:audit:<replace|merge>`) | `change_audit` | `findings:[{classification,description,evidence,actions:[{action_plan,responsible,due_date,status,progress,closed_at}]}]` | 200 audit | `capture/17`, `capture/18`, `capture/31` |
+| E19 | `PATCH /api/audits/{id}/` | Update audit incl. nested findings+actions (sub-key for plans is `actions`, NOT `action_plans` — verified `capture/17` ignored vs `capture/18` accepted; REPLACE-vs-MERGE on repeat sends untested — same startup-probe rule as E08, probe on a throwaway audit, result `NESTED_PROBE:audit:<replace|merge>`. Live detail serializer omits nested finding/action `id`; the tool links by array position and writes `AUDIT_LINK:<audit_id>:<finding_index>:<action_index>`) | `change_audit` | `findings:[{classification,description,evidence,actions:[{action_plan,responsible,due_date,status,progress,closed_at}]}]` | 200 audit | `capture/17`, `capture/18`, `capture/31` |
 | E20 | `GET /api/risk-evaluations/` | List risks (empty in tenant today: `{"count":0,...}`) | `view_riskevaluation` | — | paginated | `capture/06` |
 | E21 | `POST /api/risk-evaluations/` | Create risk (DRAFT signal). Verified requirement: ≥1 asset (`assets` 400 otherwise, `capture/19`). Body MUST include `description,controlled_probability,controlled_impact` + `assets:[{asset:<id>}]` + optional `threat_code,vulnerability_code,threat,vulnerability,risk_owner,response_strategy,status`. `risk_code` system (`R-001` per period), scores system. `period_id` NOT accepted (server pins to active period; closed period → write rejected per dictionary). | `add_riskevaluation` | as above | 201 risk, response keys `unverified — confirm first` (tenant has zero assets so no successful create was capturable; agent MUST re-GET the created row and use live keys) | `capture/19` (400), `capture/21` (eligible empty) |
 | E22 | `GET /api/risk-evaluations/catalogs/` | Risk methodology catalogs + periods | `view_riskevaluation` | — | `{periods[],current_period,threats[57],vulnerabilities[82],control_types[4],security_measure_types[3],estimated_times[3],asset_categories[7],asset_classifications[4],appraisal_bands[4],process_options,compliance_standard,annex_a_controls,applicable_annex_a_controls,active_matrix,risk_treatment_levels[],...,asset_scope_label}` (`capture/35`, 90 KB) | `capture/35` |
@@ -305,6 +305,18 @@ The system automatically extracts the user's role and permissions upon authentic
 - Security Log & Mutation Ledger (`view_securitylog`): Raw HTTP mutation streams and bitácora logs are visible exclusively to `Administrador` and `Operador`; hidden for `Editor` and `Lector`.
 - Audit Findings & Risk Treatments (`view_audit`, `view_riskevaluation`): Panels and metrics are filtered out if the user lacks the corresponding module permissions.
 - Role-Switching in AI Chat: Authenticated `Operador` or `Administrador` users can toggle the active chat persona at will (*"Viewing as: Auditor"*, *"Viewing as: Executive / Manager"*, *"Viewing as: DPO / Legal"*), adapting terminology, explanation depth, and proactive alert routing. Non-operator accounts are strictly pinned to their native PIMS role.
+
+Live role/permission resolution (exact, no invented defaults):
+
+| `platform_role` (accent-insensitive, normalized to `[a-z0-9_]+`) | Cockpit role | `default_persona` | `can_switch_persona` |
+|---|---|---|---|
+| `is_platform_admin=true` or `administrador` / `admin` / `platform_admin` | `Administrador` | `executive` | true |
+| `operador` / `operator` | `Operador` | `executive` | true |
+| `editor` / `dpo` / `oficial_de_proteccion_de_datos` / `oficial_proteccion_datos` | `Editor` | `dpo` | false |
+| `lector` / `auditor` / `consultor` / `auditor_consultor` / `external_advisor`, or `is_external_advisor=true` | `Lector` | `auditor` | false |
+| `null` / empty | `Operador` | `executive` | true |
+
+Any other non-null role → `COCKPIT_ROLE_UNKNOWN`. Cockpit permissions come only from the E01 `user.permissions[]` matrix (missing array → `COCKPIT_PERMISSIONS_MISSING`, never inferred): `view_incident←Incidentes.ver`, `change_incident←Incidentes.editar`, `view_securitylog←Seguridad.ver`, `view_audit←Auditorías.ver`, `view_riskevaluation←Riesgos (DPIIA).ver`, `manage_users←Usuarios y Roles.ver`. Missing module = permission false. `AUTO_NOTIFY=false` (default) parks approved packs at `AWAITING_APPROVAL` until a `change_incident` holder calls `POST /api/incidents/:id/approve`; the daemon never sends notices without that human approval in default mode.
 
 Agent service identity REQUIRED grants (least privilege; `view_securitylog` EXCLUDED — the agent MUST NOT read the security log):
 
@@ -590,7 +602,7 @@ Required by: B.3.11 (incident management processes with timing), B.3.12 (event�
 
 ### 6.1 Main loop
 
-Autonomous, no human-in-the-loop by default (`HUMAN_VETO_WINDOW_MIN=0`). `HUMAN_VETO_WINDOW_MIN>0` parks ONLY `pims_notify`; every other step stays autonomous. Kill-switch `OPERATOR_HALT` (console, §11.5) freezes new mutations while timers keep running.
+`AUTO_NOTIFY=false` (default): autonomous detection, triage, investigation, drafting, review and sealing continue without human input, but `pims_notify` is gated by a human `change_incident` approval (`POST /api/incidents/:id/approve`); until then the watcher parks at `AWAITING_APPROVAL`. `AUTO_NOTIFY=true`: notices send automatically; `HUMAN_VETO_WINDOW_MIN` then parks ONLY `pims_notify` for the window. Every other step stays autonomous in both modes. Kill-switch `OPERATOR_HALT` (console, §11.5) freezes new mutations while timers keep running.
 
 ```mermaid
 flowchart TD
@@ -650,8 +662,9 @@ Deadline timers: `armed → fired → satisfied | breached`. Breach is NEVER sil
 
 ### 6.3 Veto, halt, and re-evaluation
 
-- `HUMAN_VETO_WINDOW_MIN=0` (default): fully autonomous; `pims_notify` executes on `review_approval_id`.
-- `>0`: `notifier` parks approved packs for the window; operator may veto in console (appends `VETOED_BY:<op>:<reason>` to `evidence_refs` per the §9.1 marker rule, pack returns to `draft`); window expiry without veto = auto-send (appends `VETO_WINDOW_EXPIRED`, sends). Veto MUST NOT cancel timers or block other incidents.
+- `AUTO_NOTIFY=false` (default): `pims_notify` waits for explicit human approval via the Cockpit (`AWAITING_APPROVAL`), then executes on `review_approval_id`.
+- `AUTO_NOTIFY=true` + `HUMAN_VETO_WINDOW_MIN=0`: `pims_notify` executes immediately on `review_approval_id`.
+- `AUTO_NOTIFY=true` + `HUMAN_VETO_WINDOW_MIN>0`: `notifier` parks approved packs for the window; operator may veto in console (appends `VETOED_BY:<op>:<reason>` to `evidence_refs` per the §9.1 marker rule, pack returns to `draft`); window expiry without veto = auto-send (appends `VETO_WINDOW_EXPIRED`, sends). Veto MUST NOT cancel timers or block other incidents.
 - `OPERATOR_HALT`: console kill-switch. Effect: orchestrator stops dispatching NEW mutations within 5s; in-flight tool calls run to completion (never mid-write abort); timers keep running and firing (firing during halt queues the action for resume + pages); restart rule §6.6 applies on resume. Halt >24h with armed T72 timers → `HALT_RISK_72H` page every 6h until resumed or timers satisfied.
 - Re-evaluation triggers (monitor): new attachment, `num_affected_subjects` increase, new affected data type, authority instruction (Art 34(4) — overrides exemptions), linked audit/risk change, veto-window expiry. Each trigger re-runs ONLY the affected downstream steps (e.g. subject-count growth re-runs high-risk gate + pack phase, not full investigation) and appends `REEVALUATED:<trigger>:<steps>` to `evidence_refs` per the §9.1 marker rule.
 
@@ -796,7 +809,7 @@ The server provides a real-time Server-Sent Events stream emitting authenticated
 
 1. Role/Persona Language Adaptation:
    - The assistant dynamically configures its tone, terminology, and depth based on the authenticated user's native PIMS role (`Administrador`, `Operador`, `Editor / DPO`, `Lector / Auditor` per §3.3).
-   - Auditor persona: Speaks strictly in normative regulatory terms, delivering exact clause-by-clause verbatim quotes, cryptographic bundle hashes (`bundle.json`), and finding linkages.
+   - Auditor persona: Speaks strictly in normative regulatory terms, delivering exact clause-by-clause verbatim quotes, cryptographic bundle hashes (`bundle.json.txt`), and finding linkages.
    - Manager / Executive persona: Delivers high-level business risk summaries, SLA compliance statuses, and executive containment overviews.
    - DPO / Legal Counsel persona: Focuses on supervisory reporting deadlines, data subject rights, plain-language readability scores, and statutory exemption criteria.
 2. Operator Role-Switching:
@@ -865,11 +878,11 @@ Training trigger: `incident_type=HE` with People-bone causes → emit `training_
 
 Chain ONLY — no role may be skipped. Pack built by `notice-composer` from VALIDATED incident fields (re-GET before build; stale >5 min → re-GET again, `PACK_STALE_RETRY` max 3).
 
-Authority pack (§10.1): items (a)+(b)+(c)+(d) + `awareness_at_utc` + `deadline_at_utc` + `delay_reasons` (REQUIRED if now > awareness+72h: `{hours_late, reasons[]}` — MUST be factual, cited to history) + `phased` + `citations[]`. Unknown quantities → `unknown:PHASED_PENDING` + `T_PHASE_FOLLOWUP` armed (Art 33(4)). `drafter` writes draft to evidence-store (`pack:authority:<code>:<uuid>.json`); `compliance_reviewer` runs one adversarial challenge call plus deterministic legal-completeness, citation-existence, plain-language, PII, and close-checklist checks. Any check failure (up to `MAX_REVIEW_CYCLES`, §13) → `REVIEW_REJECTED:<judge>:<item>:<fix>`; a pass mints a single-use `review_approval_id` bound to `pack_content_sha256` (the SHA-256 of canonical JSON excluding envelope fields `state`, `review_approval_id`, and `submitted_at_utc`; any substantive edit invalidates the hash → `REVIEW_APPROVAL_INVALID`). Upon resolution approval (`review_approval_id`), `orchestrator` dispatches `investigator` in the `approve/notify` stage to record the `R` action(s) via `pims_add_action(action_type="R", review_approval_id=...)` prior to `monitor` close evaluation.
+Authority pack (§10.1): items (a)+(b)+(c)+(d) + `awareness_at_utc` + `deadline_at_utc` + `delay_reasons` (REQUIRED if now > awareness+72h: `{hours_late, reasons[]}` — MUST be factual, cited to history) + `phased` + `citations[]`. Unknown quantities → `unknown:PHASED_PENDING` + `T_PHASE_FOLLOWUP` armed (Art 33(4)). `drafter` writes draft to evidence-store (`pack:authority:<code>:<uuid>.json`); `compliance_reviewer` runs one adversarial challenge call plus deterministic legal-completeness, citation-existence, and PII checks. Plain-language and numeric-approval validation apply to the Art 34 subject notice and to the resolution record, not to the Article 33 authority pack (its addressee is the supervisory authority). With `REVIEW_CHALLENGE_BLOCKING=false`, model challenges are recorded as advisory; deterministic checks and close-checklist gates still block. Any check failure (up to `MAX_REVIEW_CYCLES`, §13) → `REVIEW_REJECTED:<judge>:<item>:<fix>`; a pass mints a single-use `review_approval_id` bound to `pack_content_sha256` (the SHA-256 of canonical JSON excluding envelope fields `state`, `review_approval_id`, and `submitted_at_utc`; any substantive edit invalidates the hash → `REVIEW_APPROVAL_INVALID`). Upon resolution approval (`review_approval_id`), `orchestrator` dispatches `investigator` in the `approve/notify` stage to record the `R` action(s) via `pims_add_action(action_type="R", review_approval_id=...)` prior to `monitor` close evaluation.
 
 Subject notice (§10.2): high-risk gate FIRST — `likely_high_risk` true when ANY of the typed triggers fire: `severity` enum = `C`, `impact` enum = `V`, a sensitive `affected_data_types` entry from either catalog (`categorias_especiales`, `economicos_financieros`, `datos_relativos_condenas_infracciones` in the ES catalog; `sensitive`, `health`, `biometric`, `minors`, `financial`, `credentials` in the bundle catalog — single source `SENSITIVE_AFFECTED_DATA_TYPES`), `num_affected_subjects ≥100` (null when unknown), `unencrypted_exfiltration`, or `authority_ordered` (Art 34(4)). Inputs are Zod-validated enums; out-of-catalog values fail fast (`PIMS_VALIDATION:high_risk_gate`). Gate false → state `not_required` with rationale + reviewer sign-off (no notice, no exemption needed). Gate true → evaluate Art 34(3) exemptions in order (a)→(b)→(c) with the §2.3 evidence table (each needs evidence + approval id; (c) needs the public-communication artifact attached FIRST). Exemption granted → state `exempted:<letter>:<approval_id>` + evidence pointers in bundle. No exemption → compose (b)+(c)+(d) in clear plain language (`es` default for UNSA subjects, `en` available; reading-level check: no sentence >25 words without reviewer waiver `PLAIN_LANGUAGE_WAIVER`), approval, then send.
 
-Send (`notifier` + `pims_notify`): preconditions §5.3 (approval, active recipients, `approved` state). `HUMAN_VETO_WINDOW_MIN>0` parks here ONLY (other steps autonomous). Zero active recipients → `NOTIFY_NO_RECIPIENTS`: block, keep `approved`, page operator, retry on recipient-created event. Post-send: verify `notified` history + snapshot; set `measure_reported_authorities=Y` (authority) — subject sends set NO measure flag (no field exists; append marker `SUBJECT_NOTIFIED:<count>:<channel>` per §9.1 marker rule — MUST NOT overload `measure_reported_authorities` for subjects); emit `notice_sent` event. Authority instruction per Art 34(4) received post-exemption → `AUTHORITY_OVERRIDE`: re-open notice state, force subject send path, record order as attachment.
+Send (`notifier` + `pims_notify`): preconditions §5.3 (approval, active recipients, `approved` state). `AUTO_NOTIFY=false` waits for the Cockpit human approval (`POST /api/incidents/:id/approve`) before sending; `AUTO_NOTIFY=true` with `HUMAN_VETO_WINDOW_MIN>0` parks here ONLY (other steps autonomous). Zero active recipients → `NOTIFY_NO_RECIPIENTS`: block, keep `approved`, page operator, retry on recipient-created event. Post-send: verify `notified` history + snapshot; set `measure_reported_authorities=Y` (authority) — subject sends set NO measure flag (no field exists; append marker `SUBJECT_NOTIFIED:<count>:<channel>` per §9.1 marker rule — MUST NOT overload `measure_reported_authorities` for subjects); emit `notice_sent` event. Authority instruction per Art 34(4) received post-exemption → `AUTHORITY_OVERRIDE`: re-open notice state, force subject send path, record order as attachment.
 
 ### 9.6 Monitoring and close (role: `monitor`; skills: `indicator-reporter`, `pims-incident-crud`)
 
@@ -971,7 +984,7 @@ Controlling controls: B.3.12 record list, Art 33(5), 10.2 evidence. One manifest
 }
 ```
 
-Every B.3.12 record element maps to an `incident.*` key (missing non-nullable → `ARTIFACT_INCOMPLETE`). Items list MUST match PIMS attachments (reconciled at seal; mismatch → `BUNDLE_PIMS_MISMATCH:<file>` blocks seal).
+Every B.3.12 record element maps to an `incident.*` key (missing non-nullable → `ARTIFACT_INCOMPLETE`). Items list MUST match PIMS attachments (reconciled at seal; mismatch → `BUNDLE_PIMS_MISMATCH:<file>` blocks seal). The sealed manifest is uploaded to E12 as **`bundle.json.txt`** (`text/plain`; live PIMS rejects `.json` attachments), its bytes equal `canonicalizeJson(manifest)`, and a re-run of close reuses the existing sealed manifest instead of re-sealing or duplicating the attachment.
 
 ### 10.4 History / audit-trail export (JSON)
 
@@ -1056,7 +1069,7 @@ Alerting: pages on `DEADLINE_MISSED_*`, `DOUBLE_NOTIFY`, `HALT_RISK_72H`, `CIRCU
 
 Continuous Autonomous Daemon Architecture:
 The system is deployed as a continuous background daemon (`bun run start`), fully governed by environment variables. No staged presentation scripts, no artificial test runners, and no bespoke demo runbooks are used.
-The watcher daemon continuously polls `GET /api/incidents/?status=O`. When an operator creates a personal data breach directly in the deployed PIMS application (`https://unsa.27k.pe`), the daemon detects, investigates, contains, links audit findings, drafts notices, requests approvals, seals evidence bundles, and closes the incident autonomously.
+The watcher daemon polls both `GET /api/incidents/?status=O` and `?status=P` every `WATCHER_POLL_INTERVAL_MS` (default 5000), paginating until a short page, ignoring `C`, and persisting stage state under `WATCHER:<incident_code>` in the evidence store. On restart it infers the stage from live PIMS + evidence: `O→detected`; `P` with a sealed bundle/status `C→closed`; with a draft pack → `drafted` (`AUTO_NOTIFY=true`) or `awaiting_approval` (default); with a root cause → `investigated`; otherwise `triaged`. When an operator creates a personal data breach directly in the deployed PIMS application (`https://unsa.27k.pe`), the daemon detects, triages, investigates, contains, links audit findings, drafts notices, requests human approval (default), seals and uploads the evidence bundle, and closes the incident.
 
 Production Build & Docker Packaging:
 - Build target (`bun run build`): Compiles the daemon and Cockpit service into a standalone distribution bundle.
@@ -1087,7 +1100,9 @@ Required by: B.3.11 (documented, communicated procedures — configuration IS pr
 |---|---|---|---|---|
 | `PIMS_BASE_URL` | url | `https://unsa.27k.pe` | Yes | PIMS base; no credential here |
 | `PIMS_SCHEMA` | string | `unsa` | Yes | Tenant schema; asserted on every session (§11.4) |
-| `PIMS_TOKEN_CMD` | argv | — | Yes | Helper printing a fresh PIMS session token; no arg → `CONFIG_MISSING` |
+| `PIMS_TOKEN_CMD` | argv | — | One auth mode | Helper printing a fresh PIMS session token; token mode is mutually exclusive with password mode |
+| `PIMS_USERNAME` | string | — | Password mode | PIMS service username; requires `PIMS_PASSWORD` |
+| `PIMS_PASSWORD` | string | — | Password mode | Plain PIMS password from the environment (never committed); setting both auth modes, or neither, → `CONFIG_REJECTED:PIMS_AUTH_MODE` / `CONFIG_MISSING:PIMS_AUTH` |
 | `PIMS_TIMEOUT_MS` | int | `15000` | No | Per-request timeout |
 | `PIMS_MAX_RETRIES` | int | `3` | No | §3.6/§12.2 retry cap |
 | `PIMS_PAGE_SIZE` | `default/max` | `50/100` | No | §5.3 pagination bounds for `core_incident` and related list queries |
@@ -1096,7 +1111,12 @@ Required by: B.3.11 (documented, communicated procedures — configuration IS pr
 | `IDEMPOTENCY_KEY_PREFIX` | string | `agi1` | No | Mutation key prefix (§5.3) |
 | `JURISDICTION_DEADLINES_JSON` | json | `{"EU_GDPR":{"authority_h":72,"processor_to_controller":"without_undue_delay"},"PE_PDP":{"authority_h":"48_unverified"}}` | Yes | Deadline table (§2.6); `48_unverified` enables advisory timer ONLY |
 | `SUBJECT_NOTICE_POLICY` | enum | `high_risk_only` | No | `high_risk_only` (Art 34 gate) ONLY — no other value exists today; unknown → `CONFIG_REJECTED` |
-| `HUMAN_VETO_WINDOW_MIN` | int | `0` | No | 0 = fully autonomous; >0 parks `pims_notify` only (§6.3) |
+| `AUTO_NOTIFY` | bool | `false` | No | `false` parks approved packs at `AWAITING_APPROVAL` until a human `change_incident` approval; `true` sends automatically (§6.1/§6.3) |
+| `MODEL_LOGPROBS` | bool | `true` | No | Request token logprobs from chat models; set `false` for providers/models that reject logprobs (free-tier Ministral). Semantic entropy is then absent, never fabricated |
+| `REVIEW_CHALLENGE_BLOCKING` | bool | `true` | No | `true` blocks approval on a high-severity model challenge; `false` records model challenges as advisory while deterministic legal, citation, plain-language and PII checks still block |
+| `PHASE_DUE_HOURS` | int | `24` | No | Due offset for a phased Art 33(4) authority notice (`T_PHASE_FOLLOWUP`) drafted by the watcher |
+| `HUMAN_VETO_WINDOW_MIN` | int | `0` | No | Only with `AUTO_NOTIFY=true`: >0 parks `pims_notify` for the window (§6.3) |
+| `WATCHER_POLL_INTERVAL_MS` | int | `5000` | No | Watcher poll cadence for `O` and `P` incidents; positive integer |
 | `ASSIGNEES` | string[] | `[]` | No | Round-robin `assigned_to` pool; empty → leave null + flag `UNASSIGNED` (never invent a name) |
 | `REASONING_MODEL` | `provider,model,endpoint,auth_env,timeout_ms,max_retries,fallback:none` | — | Yes | §4.3 investigation/drafting/review |
 | `FAST_MODEL` | same | — | Yes | §4.3 classification/extraction/triage |
@@ -1109,6 +1129,7 @@ Required by: B.3.11 (documented, communicated procedures — configuration IS pr
 | `SLA_PROCESSOR_H` / `SLA_SUBJECT_H` / `SLA_REVIEW_H` | ints | `1` / `4` / `4` | No | §2.4/§6.4 internal policy bounds (hours) |
 | `CORRECTIVE_DEFAULT_DUE_DAYS` | int | `30` | No | §9.4 default `due_date` offset from detection |
 | `CIRCUIT_BREAKER_FAILS` / `CIRCUIT_BREAKER_WINDOW_S` / `CIRCUIT_BREAKER_OPEN_S` | ints | `5` / `60` / `300` | No | §12.2 circuit breaker parameters |
+| `RAG_CORPUS_DIR` | path | `corpus` | No | Local corpus directory loaded at daemon start |
 | `RAG_CORPUS_PATHS` | map | §7.1 table | No | Override per `doc_id` only; corpus membership fixed |
 | `RAG_CHUNK_NORMATIVE` / `RAG_CHUNK_OTHER` | `size/overlap` | `512/64` / `1024/128` | No | §7.2 |
 | `RAG_TOP_K` / `RAG_RERANK_K` / `RAG_MIN_SCORE` | ints/float | `8` / `4` / `0.35` | No | §7.4 |
@@ -1116,6 +1137,7 @@ Required by: B.3.11 (documented, communicated procedures — configuration IS pr
 | `SCHEDULER_TICK_S` / `SCHEDULER_JITTER_S` / `SCHEDULER_MAX_TIMERS` | ints | `60` / `10` / `10000` | No | §6.4 |
 | `EVIDENCE_HASH` | enum | `sha256` | No | Only value; unknown → `CONFIG_REJECTED` |
 | `EVIDENCE_KEY_ENV` | string | `EVIDENCE_KEY` | Yes | AES-256-GCM key env name (§4.2) |
+| `EVIDENCE_DB_URL` | url | — | Yes | PostgreSQL connection URI for the evidence store and pgvector index |
 | `WEBHOOK_INGEST_SECRET_ENV` | string | `WEBHOOK_INGEST_SECRET` | No | §4.4 HMAC secret env var name for `/webhooks/intake` |
 | `ATTACHMENT_MAX_MB` | int | `10` | No | MUST be ≤ PIMS 10 MB; higher → `CONFIG_REJECTED` |
 | `RETENTION_NOTICE_YEARS` | int | `6` | No | §10.1–10.2 retention |
@@ -1151,6 +1173,7 @@ Required by: 9.2 (audit criteria need predefined checks), 9.3.2 (review inputs),
 | A14 | §7.6 Q01–Q10 eval | 10/10 PASS with expected citations; any miss → `RAG_EVAL_FAILED` blocks deploy |
 | A15 | E21 risk create in tenant with assets | `{risk_id, risk_code, period_name}` returned; closed period → `{queued:true, period_name, queued_at_utc}`, never dropped |
 | A16 | Full §14.3 mechanical gates | All six commands pass as specified |
+| A17 | Live watcher: create an `O` breach in `https://unsa.27k.pe` with `AUTO_NOTIFY=false` | Within one poll interval the daemon moves it to `P`, investigates/drafts, emits `role:transition`, `rag:retrieval` (verbatim `chunk_sha256` + dense/BM25/RRF/rerank scores), `review:approval_requested`, and `lifecycle:status_change`; `POST /api/incidents/:id/approve` sends authority/subject notices, uploads exactly one `bundle.json.txt`, and closes `P→C` with `BUNDLE_SEALED:<sha256>` |
 
 ### 14.2 Fixed dry-walk fixture (proof 1 input)
 

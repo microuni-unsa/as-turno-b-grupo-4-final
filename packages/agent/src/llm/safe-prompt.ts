@@ -1,5 +1,6 @@
 import net from "node:net";
 import { extractIocs, extractPii } from "@pims/evidence/forensic-patterns.ts";
+import { PII_PHONE_REGIONS } from "@pims/types/constants.ts";
 import { PromptPiiBlockedError } from "@pims/types/errors.ts";
 import type {
   ChatJsonArgs,
@@ -13,6 +14,7 @@ import type {
   VisionJsonArgs,
   VisionJsonResponse,
 } from "@pims/types/models.ts";
+import { findPhoneNumbersInText } from "libphonenumber-js";
 
 const REDACTION_TOKEN_PATTERN =
   /^\[(?:REPORTANTE|CONTACTO|ID|SISTEMA|DESCRIPCION)\]$/;
@@ -70,11 +72,34 @@ function tokenFor(category: PiiCategory): string {
 }
 
 export function redactForPrompt(text: string): string {
-  const hits = collectHits(text).sort(
+  const phoneSpans: Array<{ start: number; end: number }> = [];
+  for (const region of PII_PHONE_REGIONS) {
+    for (const match of findPhoneNumbersInText(text, region)) {
+      if (match.number.isValid()) {
+        phoneSpans.push({ start: match.startsAt, end: match.endsAt });
+      }
+    }
+  }
+
+  let redacted = text;
+  const uniqueSpans = new Map<string, { start: number; end: number }>();
+  for (const span of phoneSpans) {
+    uniqueSpans.set(`${span.start}:${span.end}`, span);
+  }
+  const orderedSpans = Array.from(uniqueSpans.values()).sort(
+    (a, b) => b.start - a.start,
+  );
+  for (const span of orderedSpans) {
+    redacted =
+      redacted.slice(0, span.start) +
+      REDACTION_TOKENS.contact +
+      redacted.slice(span.end);
+  }
+
+  const hits = collectHits(redacted).sort(
     (a, b) => b.value.length - a.value.length,
   );
 
-  let redacted = text;
   for (const hit of hits) {
     redacted = redacted.split(hit.value).join(tokenFor(hit.category));
   }

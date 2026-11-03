@@ -125,10 +125,24 @@ export const AuditModelSchema = z.object({
   created_by: z.number().nullable().optional(),
   updated_at: z.string(),
   updated_by: z.number().nullable().optional(),
-  is_deleted: z.boolean(),
+  is_deleted: z
+    .boolean()
+    .nullable()
+    .optional()
+    .transform((value) => value ?? false),
   deleted_at: z.string().nullable().optional(),
   deleted_by: z.number().nullable().optional(),
 });
+
+export const PimsPermissionSchema = z.object({
+  modulo: z.string(),
+  ver: z.boolean(),
+  crear: z.boolean(),
+  editar: z.boolean(),
+  eliminar: z.boolean(),
+  aprobar: z.boolean(),
+});
+export type PimsPermission = z.infer<typeof PimsPermissionSchema>;
 
 export const UserSummarySchema = z.object({
   id: z.number(),
@@ -137,16 +151,21 @@ export const UserSummarySchema = z.object({
   last_name: z.string().nullable().optional(),
   email: z.string().nullable().optional(),
   is_platform_admin: z.boolean().optional(),
+  must_change_password: z.boolean().optional(),
+  platform_role: z.string().nullable().optional(),
+  permissions: z.array(PimsPermissionSchema).optional(),
 });
 
 export const UserProfileSchema = z.object({
-  id: z.number(),
+  id: z.number().optional(),
   username: z.string(),
   email: z.string(),
   area: z.string().nullable().optional(),
   position: z.string().nullable().optional(),
   is_platform_admin: z.boolean(),
-  must_change_password: z.boolean(),
+  must_change_password: z.boolean().optional(),
+  is_external_advisor: z.boolean().optional(),
+  platform_role: z.string().nullable().optional(),
 });
 
 export const TenantInfoSchema = z.object({
@@ -172,6 +191,41 @@ export const TokenRefreshRequestSchema = z.object({
 export const TokenRefreshResponseSchema = z.object({
   access: z.string().min(1),
 });
+
+export const PimsJwtClaimsSchema = z.object({
+  token_type: z.string(),
+  exp: z.number(),
+  iat: z.number(),
+  jti: z.string(),
+  user_id: z.union([z.string(), z.number()]),
+  schema: z.string(),
+  platform_role: z.string().nullable(),
+  is_platform_admin: z.boolean(),
+});
+export type PimsJwtClaims = z.infer<typeof PimsJwtClaimsSchema>;
+
+export const PIMS_MUTATION_METHODS = [
+  "GET",
+  "POST",
+  "PATCH",
+  "DELETE",
+] as const;
+export type PimsMutationMethod = (typeof PIMS_MUTATION_METHODS)[number];
+
+export const PimsMutationRecordSchema = z.object({
+  at_utc: z.string().datetime(),
+  method: z.enum(PIMS_MUTATION_METHODS),
+  endpoint: z.string(),
+  operation: z.string(),
+  incident_code: z.string().nullable(),
+  idempotency_key: z.string().nullable(),
+  duration_ms: z.number().int().nonnegative(),
+  status: z.number().int().nonnegative(),
+  attempt: z.number().int().positive(),
+  payload_keys: z.array(z.string()),
+  error_code: z.string().nullable(),
+});
+export type PimsMutationRecord = z.infer<typeof PimsMutationRecordSchema>;
 
 export const PimsIncidentActionSchema = z.object({
   id: z.number().optional(),
@@ -214,7 +268,24 @@ export const PimsIncidentHistorySchema = z.object({
   new_value: z.string().nullable().optional(),
   comment: z.string().nullable().optional(),
   description: z.string().nullable().optional(),
-  recipients_snapshot: z.array(z.string()).nullable().optional(),
+  recipients_snapshot: z
+    .union([z.string(), z.array(z.string()), z.null()])
+    .optional()
+    .transform((value) => {
+      if (value === undefined) {
+        return undefined;
+      }
+      if (value === null) {
+        return null;
+      }
+      if (Array.isArray(value)) {
+        return value;
+      }
+      return value
+        .split(",")
+        .map((entry) => entry.trim())
+        .filter((entry) => entry.length > 0);
+    }),
 });
 
 export const PimsIncidentRecipientSchema = z.object({
@@ -389,7 +460,7 @@ export const PimsAuditFindingSchema = z.object({
 
 export const PimsAuditSchema = AuditModelSchema.extend({
   id: z.number(),
-  code: z.string(),
+  code: z.string().optional(),
   audit_code: z.string().optional(),
   name: z.string(),
   audit_type: z.enum(AUDIT_TYPES),

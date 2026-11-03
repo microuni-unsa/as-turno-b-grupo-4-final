@@ -4,7 +4,9 @@ import { describe, expect, it, vi } from "vitest";
 
 describe("Configuration Manager", () => {
   const baseValidEnv: Record<string, string> = {
-    PIMS_TOKEN_CMD: "bun -e console.log('token')",
+    PIMS_USERNAME: "grupob4",
+    PIMS_PASSWORD: "plain-test-password",
+    EVIDENCE_DB_URL: "postgres://pims:pims@localhost:5432/pims_evidence",
     REASONING_MODEL:
       "mistral,mistral-large-latest,https://api.mistral.ai,MISTRAL_API_KEY,30000,3,fallback:none",
     FAST_MODEL:
@@ -15,7 +17,7 @@ describe("Configuration Manager", () => {
       "mistral,mistral-embed,https://api.mistral.ai,MISTRAL_API_KEY,5000,3,fallback:none",
     RERANKER_MODEL:
       "cohere,rerank-v3.5,https://api.cohere.com,COHERE_API_KEY,5000,3,fallback:none",
-    MISTRAL_API_KEY: "V392gd36SfruU1rb7Lk5Z13TIWgnunwh",
+    MISTRAL_API_KEY: "dummy-mistral-key",
     COHERE_API_KEY: "dummy-key",
     EVIDENCE_KEY: "aes-256-gcm-secret-key-32-bytes",
   };
@@ -35,16 +37,122 @@ describe("Configuration Manager", () => {
     expect(config.EVIDENCE_HASH).toBe("sha256");
     expect(config.JURISDICTION_DEADLINES_JSON).toBeDefined();
     expect(config.JURISDICTION_DEADLINES_JSON.EU_GDPR?.authority_h).toBe(72);
+    expect(config.PIMS_USERNAME).toBe("grupob4");
+    expect(config.PIMS_PASSWORD).toBe("plain-test-password");
+    expect(config.PIMS_TOKEN_CMD).toBeUndefined();
+    expect(config.EVIDENCE_DB_URL).toBe(
+      "postgres://pims:pims@localhost:5432/pims_evidence",
+    );
+    expect(config.AUTO_NOTIFY).toBe(false);
+    expect(config.MODEL_LOGPROBS).toBe(true);
+    expect(config.WATCHER_POLL_INTERVAL_MS).toBe(5000);
+    expect(config.RAG_CORPUS_DIR).toBe("corpus");
   });
 
-  it("fails fast when PIMS_TOKEN_CMD is missing", () => {
-    const env = { ...baseValidEnv };
-    delete env.PIMS_TOKEN_CMD;
+  it("accepts token auth mode", () => {
+    const env: Record<string, string> = {
+      ...baseValidEnv,
+      PIMS_TOKEN_CMD: "echo dev-token",
+    };
+    delete env.PIMS_USERNAME;
+    delete env.PIMS_PASSWORD;
+    const config = loadConfig(env);
+    expect(config.PIMS_TOKEN_CMD).toEqual(["echo", "dev-token"]);
+    expect(config.PIMS_USERNAME).toBeUndefined();
+    expect(config.PIMS_PASSWORD).toBeUndefined();
+  });
+
+  it("rejects mixed token and password auth modes", () => {
+    const env = { ...baseValidEnv, PIMS_TOKEN_CMD: "echo dev-token" };
     expect(() => loadConfig(env)).toThrow(ConfigError);
     try {
       loadConfig(env);
     } catch (err) {
-      expect((err as ConfigError).code).toBe("CONFIG_MISSING:PIMS_TOKEN_CMD");
+      expect((err as ConfigError).code).toBe("CONFIG_REJECTED:PIMS_AUTH_MODE");
+    }
+  });
+
+  it("rejects missing PIMS authentication", () => {
+    const env = { ...baseValidEnv };
+    delete env.PIMS_USERNAME;
+    delete env.PIMS_PASSWORD;
+    expect(() => loadConfig(env)).toThrow(ConfigError);
+    try {
+      loadConfig(env);
+    } catch (err) {
+      expect((err as ConfigError).code).toBe("CONFIG_MISSING:PIMS_AUTH");
+    }
+  });
+
+  it("rejects password auth without a password", () => {
+    const env = { ...baseValidEnv };
+    delete env.PIMS_PASSWORD;
+    expect(() => loadConfig(env)).toThrow(ConfigError);
+    try {
+      loadConfig(env);
+    } catch (err) {
+      expect((err as ConfigError).code).toBe("CONFIG_MISSING:PIMS_AUTH");
+    }
+  });
+
+  it("rejects an invalid MODEL_LOGPROBS value", () => {
+    const env = { ...baseValidEnv, MODEL_LOGPROBS: "yes" };
+    expect(() => loadConfig(env)).toThrow(ConfigError);
+    try {
+      loadConfig(env);
+    } catch (err) {
+      expect((err as ConfigError).code).toBe("CONFIG_TYPE:MODEL_LOGPROBS");
+    }
+  });
+
+  it("rejects an invalid AUTO_NOTIFY value", () => {
+    const env = { ...baseValidEnv, AUTO_NOTIFY: "yes" };
+    expect(() => loadConfig(env)).toThrow(ConfigError);
+    try {
+      loadConfig(env);
+    } catch (err) {
+      expect((err as ConfigError).code).toBe("CONFIG_TYPE:AUTO_NOTIFY");
+    }
+  });
+
+  it("accepts AUTO_NOTIFY=true", () => {
+    expect(
+      loadConfig({ ...baseValidEnv, AUTO_NOTIFY: "true" }).AUTO_NOTIFY,
+    ).toBe(true);
+  });
+
+  it("rejects a non-positive WATCHER_POLL_INTERVAL_MS", () => {
+    for (const value of ["0", "-1", "1.5", "soon"]) {
+      const env = { ...baseValidEnv, WATCHER_POLL_INTERVAL_MS: value };
+      expect(() => loadConfig(env)).toThrow(ConfigError);
+      try {
+        loadConfig(env);
+      } catch (err) {
+        expect((err as ConfigError).code).toBe(
+          "CONFIG_TYPE:WATCHER_POLL_INTERVAL_MS",
+        );
+      }
+    }
+  });
+
+  it("rejects a missing EVIDENCE_DB_URL", () => {
+    const env = { ...baseValidEnv };
+    delete env.EVIDENCE_DB_URL;
+    expect(() => loadConfig(env)).toThrow(ConfigError);
+    try {
+      loadConfig(env);
+    } catch (err) {
+      expect((err as ConfigError).code).toBe("CONFIG_MISSING:EVIDENCE_DB_URL");
+    }
+  });
+
+  it("rejects a malformed EVIDENCE_DB_URL", () => {
+    const env = { ...baseValidEnv, EVIDENCE_DB_URL: "not-a-url" };
+    expect(() => loadConfig(env)).toThrow(ConfigError);
+    try {
+      loadConfig(env);
+    } catch (err) {
+      expect((err as ConfigError).code).toBe("CONFIG_TYPE:EVIDENCE_DB_URL");
     }
   });
 

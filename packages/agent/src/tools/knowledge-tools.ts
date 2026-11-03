@@ -22,10 +22,11 @@ export function createKnowledgeToolHandlers(
   deps: ToolDependencies,
 ): Partial<Record<string, ToolHandler>> {
   return {
-    rag_query: async (_ctx, rawArgs) => {
+    rag_query: async (ctx, rawArgs) => {
       const args = RagQueryArgsSchema.parse(rawArgs) as RagQueryArgs;
       const result = await deps.ragService.query(args.query, {
         normative_only: args.normative_only,
+        incident_code: ctx.incidentCode ?? undefined,
       });
 
       const minScore = args.min_score ?? deps.config.RAG_MIN_SCORE;

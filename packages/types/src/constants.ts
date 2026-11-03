@@ -19,6 +19,7 @@ export const ATTACHMENT_EXTENSIONS = [
   "doc",
   "docx",
   "txt",
+  "json",
 ] as const;
 
 export const ATTACHMENT_VISUAL_EXTENSIONS: ReadonlySet<string> = new Set([
@@ -79,6 +80,32 @@ export const RAG_BM25_K = 80;
 export const RAG_EMBED_BATCH_SIZE = 25;
 export const RAG_EMBED_CONCURRENCY = 2;
 export const DEFAULT_CORPUS_DIR = "corpus";
+export const DEFAULT_WATCHER_POLL_INTERVAL_MS = 5000;
+export const DEFAULT_AUTO_NOTIFY = false;
+export const DEFAULT_MODEL_LOGPROBS = true;
+export const DEFAULT_PHASE_DUE_HOURS = 24;
+export const DEFAULT_REVIEW_CHALLENGE_BLOCKING = true;
+export const BUNDLE_ATTACHMENT_NAME = "bundle.json.txt";
+
+export const PIMS_PERMISSION_MODULES = [
+  "Incidentes",
+  "Seguridad",
+  "Auditorías",
+  "Riesgos (DPIIA)",
+  "Usuarios y Roles",
+  "Activos",
+  "Amenazas",
+  "Vulnerabilidades",
+  "Salvaguardas",
+  "Controles Anexo A",
+  "Documentos",
+  "Consentimientos",
+  "ARCO-P",
+  "Periodos de Riesgo",
+  "Dashboard",
+  "Configuración",
+] as const;
+export type PimsPermissionModule = (typeof PIMS_PERMISSION_MODULES)[number];
 export const CORPUS_HEADER_PREFIX = "[DOC:";
 export const MAX_CHAT_MAX_TOKENS = 4096;
 export const AGENT_VERSION = "1.0.0";

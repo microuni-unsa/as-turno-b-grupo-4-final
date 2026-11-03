@@ -14,6 +14,7 @@ export const CorpusChunkSchema = z.object({
   normative: z.boolean(),
   header: z.string(),
   token_count: z.number().int().nonnegative(),
+  sha256: z.string().length(64),
 });
 export type CorpusChunk = z.infer<typeof CorpusChunkSchema>;
 
@@ -56,13 +57,41 @@ export const CorpusSourceSchema = z.discriminatedUnion("type", [
 ]);
 export type CorpusSource = z.infer<typeof CorpusSourceSchema>;
 
+export const RetrievalPassageSchema = RankedPassageSchema.extend({
+  chunk_sha256: z.string().length(64),
+  dense_score: z.number().nullable(),
+  dense_rank: z.number().int().positive().nullable(),
+  bm25_score: z.number().nullable(),
+  bm25_rank: z.number().int().positive().nullable(),
+  rrf_score: z.number(),
+  rerank_score: z.number(),
+});
+export type RetrievalPassage = z.infer<typeof RetrievalPassageSchema>;
+
+export const RagQueryOptionsSchema = z.object({
+  normative_only: z.boolean().optional(),
+  expected_version: z.string().optional(),
+  incident_code: z.string().optional(),
+});
+export type RagQueryOptions = z.infer<typeof RagQueryOptionsSchema>;
+
 export const RagQueryResultSchema = z.object({
   query: z.string(),
-  passages: z.array(RankedPassageSchema),
+  passages: z.array(RetrievalPassageSchema),
   citations: z.array(z.string()),
   corpus_version: z.string(),
 });
 export type RagQueryResult = z.infer<typeof RagQueryResultSchema>;
+
+export const RagRetrievalRecordSchema = z.object({
+  incident_code: z.string().nullable(),
+  query: z.string(),
+  corpus_version: z.string(),
+  at_utc: z.string().datetime(),
+  passages: z.array(RetrievalPassageSchema),
+  citations: z.array(z.string()),
+});
+export type RagRetrievalRecord = z.infer<typeof RagRetrievalRecordSchema>;
 
 export const EvalQueryDefSchema = z.object({
   qid: z.string(),

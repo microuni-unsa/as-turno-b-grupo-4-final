@@ -254,6 +254,7 @@ describe("Agent Tool Registry integration suite", {
           normative: true,
           header: "Article 33(3)",
           token_count: 12,
+          sha256: "a".repeat(64),
         },
       ],
       "tools-test-v1",

@@ -33,7 +33,10 @@ import {
   PimsRiskEvaluationCreateSchema,
 } from "@pims/types";
 import { assertAttachmentMeta } from "@pims/types/attachments.ts";
-import { MAX_ATTACHMENT_SIZE_MB } from "@pims/types/constants.ts";
+import {
+  MAX_ATTACHMENT_SIZE_MB,
+  PIMS_PERMISSION_MODULES,
+} from "@pims/types/constants.ts";
 import {
   AttachmentRejectedError,
   PathEscapeError,
@@ -316,7 +319,21 @@ export function buildPimsApp(
       .where(eq(coreUserProfile.user_id, user.id));
     const profile = profiles[0];
 
-    const access = `mock-access-${user.id}-${Date.now()}`;
+    const nowSeconds = Math.floor(Date.now() / 1000);
+    const jwtHeader = Buffer.from(
+      JSON.stringify({ alg: "none", typ: "JWT" }),
+    ).toString("base64url");
+    const jwtClaims = {
+      token_type: "access",
+      exp: nowSeconds + 3600,
+      iat: nowSeconds,
+      jti: crypto.randomUUID(),
+      user_id: String(user.id),
+      schema: "unsa",
+      platform_role: profile?.is_platform_admin ? "Administrador" : null,
+      is_platform_admin: profile?.is_platform_admin ?? false,
+    };
+    const access = `${jwtHeader}.${Buffer.from(JSON.stringify(jwtClaims)).toString("base64url")}.signature`;
     const refresh = `mock-refresh-${user.id}-${Date.now()}`;
 
     return c.json({
@@ -329,6 +346,16 @@ export function buildPimsApp(
         last_name: user.last_name,
         email: user.email,
         is_platform_admin: profile?.is_platform_admin ?? false,
+        must_change_password: profile?.must_change_password ?? false,
+        platform_role: profile?.is_platform_admin ? "Administrador" : null,
+        permissions: PIMS_PERMISSION_MODULES.map((modulo) => ({
+          modulo,
+          ver: true,
+          crear: true,
+          editar: true,
+          eliminar: true,
+          aprobar: true,
+        })),
       },
     });
   });
@@ -378,6 +405,8 @@ export function buildPimsApp(
       position: profile?.position ?? "Administrador",
       is_platform_admin: profile?.is_platform_admin ?? true,
       must_change_password: profile?.must_change_password ?? false,
+      is_external_advisor: false,
+      platform_role: profile?.is_platform_admin ? "Administrador" : null,
     });
   });
 

@@ -1,3 +1,4 @@
+import type { AgentEventEmitter } from "@pims/agent/events/agent-events.ts";
 import { IndicatorEmitter } from "@pims/agent/indicators/indicator-emitter.ts";
 import { CloseChecklistVerifier } from "@pims/agent/lifecycle/close-checklist.ts";
 import { AgentModelClient } from "@pims/agent/llm/safe-prompt.ts";
@@ -29,6 +30,7 @@ import type { PageAlert, ToolName } from "@pims/types/agent.ts";
 import { PimsClientBugError } from "@pims/types/errors.ts";
 import type { ModelProvider } from "@pims/types/models.ts";
 
+export * from "@pims/agent/events/agent-events.ts";
 export * from "@pims/agent/indicators/indicator-emitter.ts";
 export * from "@pims/agent/lifecycle/awareness.ts";
 export * from "@pims/agent/lifecycle/close-checklist.ts";
@@ -39,6 +41,7 @@ export * from "@pims/agent/orchestrator/lifecycle.ts";
 export * from "@pims/agent/orchestrator/orchestrator.ts";
 export * from "@pims/agent/orchestrator/roles.ts";
 export * from "@pims/agent/orchestrator/scheduler.ts";
+export * from "@pims/agent/orchestrator/watcher.ts";
 export * from "@pims/agent/review/draft-service.ts";
 export * from "@pims/agent/review/reviewer.ts";
 export * from "@pims/agent/tools/helpers.ts";
@@ -60,6 +63,7 @@ export interface CreateAgentDeps {
   clock?: () => Date;
   fetchImpl?: typeof fetch;
   page?: (alert: PageAlert) => void;
+  events?: AgentEventEmitter;
 }
 
 export interface CreateAgentOptions {
@@ -206,6 +210,7 @@ export async function createAgent(
     roles,
     indicator,
     page,
+    events: deps.events,
   });
   effectsHolder.current = orchestrator.timerEffects;
 

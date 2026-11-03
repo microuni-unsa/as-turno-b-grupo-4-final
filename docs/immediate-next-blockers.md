@@ -38,7 +38,7 @@ The Orchestrator currently executes lifecycle steps (`triage`, `investigate`, `d
      - Links qualifying corrective actions in `core_auditfinding` (E19).
      - Runs `draftAndReview()` (Dual-Modal RAG retrieval with verbatim quotes on ISO 27701 B.3.11/B.3.12 and GDPR Art 33/34, adversarial challenge review).
      - If auto-notify is disabled or human review required, pauses in state `AWAITING_APPROVAL` and emits an event to the Cockpit.
-     - Upon approval, invokes `approveAndNotify()`, uploads sealed evidence bundle (`bundle.json`) via E12, and invokes `close()` (`P -> C`).
+     - Upon approval, invokes `approveAndNotify()`, uploads sealed evidence bundle (`bundle.json.txt`) via E12, and invokes `close()` (`P -> C`).
 2. Implement typed event emitter (`packages/agent/src/events/agent-events.ts`) broadcasting each state change, tool call, verbatim RAG score, and countdown timer update.
 
 ---

@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import type { AgentEventEmitter } from "@pims/agent/events/agent-events.ts";
 import type { IndicatorEmitter } from "@pims/agent/indicators/indicator-emitter.ts";
 import type { CloseChecklistVerifier } from "@pims/agent/lifecycle/close-checklist.ts";
 import { findDedupeDecision } from "@pims/agent/lifecycle/dedupe.ts";
@@ -28,6 +29,7 @@ import type {
 import type { AgentConfig } from "@pims/config";
 import type { BundleSealer } from "@pims/evidence/bundle-sealer.ts";
 import type { EvidenceStore } from "@pims/evidence/evidence-store.ts";
+import { sha256HexBytes } from "@pims/evidence/forensic-patterns.ts";
 import type { ExemptionEngine } from "@pims/notices/exemption-engine.ts";
 import type { NoticeComposer } from "@pims/notices/notice-composer.ts";
 import type { PimsAdapter } from "@pims/pims-adapter";
@@ -54,13 +56,16 @@ import {
   RootCauseSchema,
   SchedulerArmResultSchema,
   type TimerKind,
+  TOT_METHODS,
   type ToolName,
   type TotEvidence,
   type TriageCalibrationMode,
   type TriageResult,
 } from "@pims/types/agent.ts";
 import { assertAttachmentMeta } from "@pims/types/attachments.ts";
+import { canonicalizeJson } from "@pims/types/canonical.ts";
 import {
+  BUNDLE_ATTACHMENT_NAME,
   CONFORMAL_ALPHA,
   CONFORMAL_MIN_SAMPLES,
   MODEL_ROUTE_EMBEDDINGS,
@@ -70,11 +75,14 @@ import {
 } from "@pims/types/constants.ts";
 import {
   ArtifactIncompleteError,
+  BundleAlreadySealedError,
+  BundlePimsMismatchError,
   CloseChecklistFailedError,
   ConfigError,
   DuplicateCreatedError,
   EscalateStuckReviewError,
   EvidenceNotFoundError,
+  ExemptionUngroundedError,
   HistoryGapError,
   IntakeDescriptionTooLongError,
   IntakeEmptyError,
@@ -93,10 +101,12 @@ import {
 } from "@pims/types/errors.ts";
 import type {
   EvidenceBundleIncident,
+  EvidenceBundleManifest,
   EvidenceBundleRootCause,
 } from "@pims/types/evidence.ts";
 import type { JsonObject, JsonValue } from "@pims/types/models.ts";
 import type {
+  ExemptionEvaluationInput,
   ExemptionEvaluationResult,
   NumericApproval,
 } from "@pims/types/notices.ts";
@@ -235,6 +245,7 @@ export interface IncidentOrchestratorDeps {
   roles: RoleRegistry;
   indicator: IndicatorEmitter;
   page: (alert: PageAlert) => void;
+  events?: AgentEventEmitter;
 }
 
 export class IncidentOrchestrator {
@@ -242,6 +253,7 @@ export class IncidentOrchestrator {
   private readonly holderId: string;
   private readonly effects: TimerEffects;
   private readonly leaseDepth = new Map<string, number>();
+  private readonly currentRoleByIncident = new Map<string, AgentRole>();
 
   constructor(deps: IncidentOrchestratorDeps) {
     this.deps = deps;
@@ -336,6 +348,7 @@ export class IncidentOrchestrator {
         decision.incident_id,
       );
       return this.withLease(existing.incident_code, async () => {
+        this.announceRole(existing.incident_code, "intake");
         const merged = await this.appendMarker(
           existing,
           `DEDUPE_MERGED:${payload.channel}`,
@@ -366,6 +379,7 @@ export class IncidentOrchestrator {
         is_deleted: false,
       });
       return this.withLease(restored.incident_code, async () => {
+        this.announceRole(restored.incident_code, "intake");
         const merged = await this.appendMarker(
           restored,
           `DEDUPE_MERGED:${payload.channel}`,
@@ -384,6 +398,7 @@ export class IncidentOrchestrator {
     });
 
     return this.withLease(created.incident_code, async () => {
+      this.announceRole(created.incident_code, "intake");
       let incident = created;
       if (markers.length > 0) {
         for (const marker of markers) {
@@ -708,6 +723,7 @@ export class IncidentOrchestrator {
   async triage(incidentId: number): Promise<TriageResult> {
     await this.assertNotHalted();
     const incident = await this.deps.adapter.getIncident(incidentId);
+    this.announceRole(incident.incident_code, "triage");
 
     const response = await this.deps.modelClient.chat_json({
       route: MODEL_ROUTE_FAST,
@@ -788,7 +804,7 @@ export class IncidentOrchestrator {
     if (calibration.conformal_set.length > 1) {
       const expanded = await this.deps.ragService.query(
         `incident type discrimination for candidates ${calibration.conformal_set.join(", ")} under GDPR Article 4(12) and associated breach risk criteria`,
-        { normative_only: true },
+        { normative_only: true, incident_code: incident.incident_code },
       );
       citations = Array.from(new Set([...citations, ...expanded.citations]));
     }
@@ -826,6 +842,7 @@ export class IncidentOrchestrator {
         },
         { incidentId: classified.id, incidentCode: classified.incident_code },
       );
+      this.emitLifecycleChange(classified.incident_code, "O", "P", "triage");
 
       if (classification.severity === "C" || classification.impact === "V") {
         await this.armTimer(
@@ -919,6 +936,28 @@ export class IncidentOrchestrator {
     const incident = await this.deps.adapter.getIncident(incidentId);
 
     return this.withLease(incident.incident_code, async () => {
+      this.announceRole(incident.incident_code, "investigator");
+
+      const storedRootCause = await this.deps.evidenceStore.getRootCause(
+        incident.incident_code,
+      );
+      const existingActions = incident.actions ?? [];
+      if (
+        storedRootCause !== null &&
+        existingActions.some((action) => action.action_type === "A")
+      ) {
+        const staged = await this.deps.evidenceStore.listStagedAttachments(
+          incident.incident_code,
+        );
+        return {
+          incident,
+          rootCause: storedRootCause,
+          auditLink: null,
+          riskSignal: null,
+          evidence: staged,
+        };
+      }
+
       const history = await this.deps.adapter.getIncidentHistory(incident.id);
 
       const containment = await this.deps.modelClient.chat_json({
@@ -976,6 +1015,11 @@ export class IncidentOrchestrator {
         });
       }
 
+      const gateRag = await this.deps.ragService.query(
+        "personal data breach risk to the rights and freedoms of natural persons under GDPR Article 34 and ISO 27701 B.3.12",
+        { normative_only: true, incident_code: incident.incident_code },
+      );
+      const gateCitations = gateRag.citations;
       const gate = await this.deps.modelClient.chat_json({
         route: MODEL_ROUTE_FAST,
         system: B3_12_SYSTEM,
@@ -989,6 +1033,13 @@ export class IncidentOrchestrator {
               involves_personal_data: incident.involves_personal_data,
               affected_cid: incident.affected_cid,
               affected_data_types: incident.affected_data_types,
+              retrieval_citations: gateCitations,
+              retrieval_passages: gateRag.passages.map((passage) => ({
+                citation: `${passage.doc_id}:${passage.chunk_id}:${passage.lines}`,
+                text: passage.text,
+              })),
+              citation_rule:
+                "Every citations[] entry MUST be copied verbatim from retrieval_citations; never invent or paraphrase a citation.",
             }),
           },
         ],
@@ -1097,6 +1148,7 @@ export class IncidentOrchestrator {
           },
         ],
         route: MODEL_ROUTE_REASONING,
+        json_schema: rootCauseJsonSchema(),
         max_tokens: 3000,
         temperature: this.deps.config.TEMP_REASONING,
       });
@@ -1188,6 +1240,7 @@ export class IncidentOrchestrator {
             },
           ],
           route: MODEL_ROUTE_REASONING,
+          json_schema: riskCatalogJsonSchema(),
           max_tokens: 500,
           temperature: this.deps.config.TEMP_REASONING,
         });
@@ -1327,6 +1380,7 @@ export class IncidentOrchestrator {
     const code = incident.incident_code;
 
     return this.withLease(code, async () => {
+      this.announceRole(code, "drafter");
       const gate = this.deps.composer.evaluateHighRiskGate({
         severity: incident.severity ?? "M",
         impact: incident.impact ?? "M",
@@ -1490,6 +1544,7 @@ export class IncidentOrchestrator {
     payload: object,
   ): Promise<string> {
     const code = incident.incident_code;
+    this.announceRole(code, "compliance_reviewer");
     for (let cycle = 0; cycle < this.deps.config.MAX_REVIEW_CYCLES; cycle++) {
       const result: ReviewResult = await this.deps.reviewer.review(
         {
@@ -1526,6 +1581,82 @@ export class IncidentOrchestrator {
     );
   }
 
+  async attestSubjectExemption(
+    incidentId: number,
+    input: ExemptionEvaluationInput,
+  ): Promise<{ pack_id: string; exemption: ExemptionEvaluationResult }> {
+    await this.assertNotHalted();
+    const incident = await this.deps.adapter.getIncident(incidentId);
+    const code = incident.incident_code;
+
+    return this.withLease(code, async () => {
+      this.announceRole(code, "drafter");
+      if (!incident.involves_personal_data) {
+        throw new PimsValidationError(
+          "exemption",
+          "SUBJECT_NOTICE_NOT_APPLICABLE",
+        );
+      }
+      if (incident.status !== "P") {
+        throw new PimsValidationError(
+          "exemption",
+          "SUBJECT_NOTICE_NOT_APPLICABLE",
+        );
+      }
+
+      const latest = await this.deps.evidenceStore.getDraftPack(
+        code,
+        "subject",
+      );
+      if (
+        latest !== null &&
+        (latest.state === "sent" || latest.state === "acknowledged")
+      ) {
+        throw new PimsValidationError(
+          "exemption",
+          "SUBJECT_NOTICE_ALREADY_SENT",
+        );
+      }
+
+      const exemption = this.deps.exemptionEngine.evaluate(input);
+      if (exemption.kind !== "exempted") {
+        throw new ExemptionUngroundedError("a", exemption.reason);
+      }
+
+      const gate = this.deps.composer.evaluateHighRiskGate({
+        severity: incident.severity ?? "M",
+        impact: incident.impact ?? "M",
+        affectedDataTypes: incident.affected_data_types,
+        numAffectedSubjects: incident.num_affected_subjects ?? null,
+        unencryptedExfiltration:
+          incident.affected_cid.includes("C") &&
+          !incident.security_measures_adopted.includes("encrypt_transit"),
+        authorityOrdered: false,
+        reviewer: "compliance_reviewer",
+      });
+      if (!gate.verdict) {
+        throw new PimsValidationError(
+          "exemption",
+          "SUBJECT_NOTICE_NOT_REQUIRED",
+        );
+      }
+
+      const draft = await this.deps.draftService.draftSubject(
+        incident,
+        gate,
+        exemption,
+        [],
+      );
+
+      await this.emitEvent("notice_exempted", incident, "drafter", {
+        exemption: exemption.exemption.letter,
+        reason: "ART34_3_EXEMPTION",
+      });
+
+      return { pack_id: draft.pack.pack_id, exemption };
+    });
+  }
+
   async approveAndNotify(
     incidentId: number,
     opts?: { vetoWindowMin?: number },
@@ -1535,6 +1666,7 @@ export class IncidentOrchestrator {
     const code = incident.incident_code;
 
     return this.withLease(code, async () => {
+      this.announceRole(code, "notifier");
       const actions = incident.actions ?? [];
       const baselineRaw = await this.deps.evidenceStore.getAgentState(
         `REOPEN_BASELINE:${code}`,
@@ -1611,15 +1743,36 @@ export class IncidentOrchestrator {
         throw new EvidenceNotFoundError("resolution_hash", code);
       }
 
-      const closeApproval = await this.deps.evidenceStore.mintReviewApproval({
-        incidentCode: code,
-        packType: "resolution",
-        contentSha256: hashState.data.content_sha256,
-        note: "resolution close",
-      });
+      const closeMarkers = readMarkers(incident.evidence_refs).filter(
+        (marker) => marker.startsWith("CLOSE_APPROVED:"),
+      );
+      let closeApprovalId: string | null = null;
+      const previousCloseMarker = closeMarkers.pop();
+      if (previousCloseMarker !== undefined) {
+        const previousApproval =
+          await this.deps.evidenceStore.getReviewApproval(
+            previousCloseMarker.slice("CLOSE_APPROVED:".length),
+          );
+        if (
+          previousApproval !== null &&
+          previousApproval.consumed_at_utc === null &&
+          previousApproval.content_sha256 === hashState.data.content_sha256
+        ) {
+          closeApprovalId = previousApproval.approval_id;
+        }
+      }
+      if (closeApprovalId === null) {
+        const closeApproval = await this.deps.evidenceStore.mintReviewApproval({
+          incidentCode: code,
+          packType: "resolution",
+          contentSha256: hashState.data.content_sha256,
+          note: "resolution close",
+        });
+        closeApprovalId = closeApproval.approval_id;
+      }
       const refreshed = await this.appendMarker(
         await this.deps.adapter.getIncident(incident.id),
-        `CLOSE_APPROVED:${closeApproval.approval_id}`,
+        `CLOSE_APPROVED:${closeApprovalId}`,
       );
 
       const vetoWindowMin = opts?.vetoWindowMin;
@@ -1802,6 +1955,7 @@ export class IncidentOrchestrator {
     const code = incident.incident_code;
 
     return this.withLease(code, async () => {
+      this.announceRole(code, "monitor");
       const attachments = await this.deps.adapter.getIncidentAttachments(
         incident.id,
       );
@@ -1884,7 +2038,17 @@ export class IncidentOrchestrator {
     const incident = await this.deps.adapter.getIncident(incidentId);
     const code = incident.incident_code;
 
+    if (incident.status === "C") {
+      const sealed = await this.deps.bundleSealer.getSealedBundle(code);
+      return {
+        incident,
+        sealSha256: sealed.sealSha256,
+        marker: sealed.marker,
+      };
+    }
+
     return this.withLease(code, async () => {
+      this.announceRole(code, "monitor");
       const today = limaDate(this.deps.clock());
       await this.callTool(
         "monitor",
@@ -1924,24 +2088,90 @@ export class IncidentOrchestrator {
       const packs = await this.bundlePackRefs(code);
       const citations = await this.bundleCitations(code);
 
-      await this.deps.bundleSealer.createManifest(
-        code,
-        facts,
-        rootCause,
-        citations,
-        packs,
-      );
+      const existingSealed =
+        await this.deps.evidenceStore.getBundleManifest(code);
+      let sealed: {
+        sealSha256: string;
+        marker: string;
+        manifest: EvidenceBundleManifest;
+      };
+      if (existingSealed !== null && existingSealed.seal_sha256 !== null) {
+        sealed = await this.deps.bundleSealer.getSealedBundle(code);
+      } else {
+        await this.deps.bundleSealer.createManifest(
+          code,
+          facts,
+          rootCause,
+          citations,
+          packs,
+        );
 
-      const attachments = await this.deps.adapter.getIncidentAttachments(
+        const attachments = await this.deps.adapter.getIncidentAttachments(
+          incident.id,
+        );
+        await this.deps.bundleSealer.reconcileWithPims(
+          code,
+          attachments.map((attachment) => attachment.id),
+        );
+
+        try {
+          sealed = await this.deps.bundleSealer.sealBundle(code);
+        } catch (error: unknown) {
+          if (error instanceof BundleAlreadySealedError) {
+            sealed = await this.deps.bundleSealer.getSealedBundle(code);
+          } else {
+            throw error;
+          }
+        }
+      }
+      await this.appendMarker(refreshed, sealed.marker);
+
+      const bundleBytes = Buffer.from(
+        canonicalizeJson(sealed.manifest),
+        "utf8",
+      );
+      const bundleSha = sha256HexBytes(bundleBytes);
+      const currentAttachments = await this.deps.adapter.getIncidentAttachments(
         incident.id,
       );
-      await this.deps.bundleSealer.reconcileWithPims(
-        code,
-        attachments.map((attachment) => attachment.id),
+      const bundleAttachment = currentAttachments.find(
+        (attachment) =>
+          attachment.file_name === BUNDLE_ATTACHMENT_NAME ||
+          attachment.original_name === BUNDLE_ATTACHMENT_NAME,
       );
-
-      const sealed = await this.deps.bundleSealer.sealBundle(code);
-      await this.appendMarker(refreshed, sealed.marker);
+      if (bundleAttachment === undefined) {
+        await this.deps.evidenceStore.replaceStagedAttachment(
+          this.deps.config.PIMS_SCHEMA,
+          code,
+          BUNDLE_ATTACHMENT_NAME,
+          bundleBytes,
+          "text/plain",
+          "monitor",
+        );
+        await this.callTool(
+          "investigator",
+          "pims_upload_attachment",
+          {
+            incident_id: incident.id,
+            bytes_ref: bundleSha,
+            file_name: BUNDLE_ATTACHMENT_NAME,
+            mime: "text/plain",
+          },
+          { incidentId: incident.id, incidentCode: code },
+        );
+        await this.appendMarker(
+          refreshed,
+          `file:${BUNDLE_ATTACHMENT_NAME}:${bundleSha.slice(0, 8)}`,
+        );
+      } else {
+        const downloaded = await this.deps.adapter.downloadAttachment(
+          bundleAttachment.file,
+          { incidentCode: code },
+        );
+        if (sha256HexBytes(downloaded) !== bundleSha) {
+          throw new BundlePimsMismatchError(BUNDLE_ATTACHMENT_NAME);
+        }
+      }
 
       const sealedIncident = await this.deps.adapter.getIncident(incident.id);
       const full = await this.deps.closeChecklist.verify(sealedIncident);
@@ -1956,6 +2186,7 @@ export class IncidentOrchestrator {
         { id: incident.id, to: "C", reason: `CLOSE:${code}` },
         { incidentId: incident.id, incidentCode: code },
       );
+      this.emitLifecycleChange(code, "P", "C", "monitor");
 
       const approvalMarker = readMarkers(sealedIncident.evidence_refs)
         .filter((marker) => marker.startsWith("CLOSE_APPROVED:"))
@@ -2103,6 +2334,7 @@ export class IncidentOrchestrator {
     }
 
     return this.withLease(incident.incident_code, async () => {
+      this.announceRole(incident.incident_code, "monitor");
       await this.callTool(
         "monitor",
         "pims_transition_status",
@@ -2113,6 +2345,7 @@ export class IncidentOrchestrator {
         },
         { incidentId: incident.id, incidentCode: incident.incident_code },
       );
+      this.emitLifecycleChange(incident.incident_code, "C", "P", "monitor");
 
       await this.deps.evidenceStore.revokeReviewApprovals(
         incident.incident_code,
@@ -2454,6 +2687,39 @@ export class IncidentOrchestrator {
     );
   }
 
+  private announceRole(incidentCode: string, role: AgentRole): void {
+    const events = this.deps.events;
+    if (events === undefined) {
+      return;
+    }
+    const previous = this.currentRoleByIncident.get(incidentCode) ?? null;
+    this.currentRoleByIncident.set(incidentCode, role);
+    events.emit({
+      type: "role:transition",
+      at_utc: this.deps.clock().toISOString(),
+      incident_code: incidentCode,
+      role,
+      previous_role: previous,
+      lease_holder: this.holderId,
+    });
+  }
+
+  private emitLifecycleChange(
+    incidentCode: string,
+    from: PimsIncident["status"],
+    to: PimsIncident["status"],
+    actorRole: AgentRole,
+  ): void {
+    this.deps.events?.emit({
+      type: "lifecycle:status_change",
+      at_utc: this.deps.clock().toISOString(),
+      incident_code: incidentCode,
+      from,
+      to,
+      actor_role: actorRole,
+    });
+  }
+
   private async emitEvent(
     event:
       | "incident_opened"
@@ -2702,23 +2968,30 @@ function triageJsonSchema(): JsonObject {
   return {
     type: "object",
     properties: {
-      incident_type: { type: "string" },
+      incident_type: { type: "string", enum: [...INCIDENT_TYPES] },
       candidate_probabilities: {
         type: "array",
         items: {
           type: "object",
           properties: {
-            type: { type: "string" },
+            type: { type: "string", enum: [...INCIDENT_TYPES] },
             probability: { type: "number" },
           },
           required: ["type", "probability"],
           additionalProperties: false,
         },
       },
-      severity: { type: "string" },
-      impact: { type: "string" },
-      affected_cid: { type: "array", items: { type: "string" } },
-      rationale: { type: "array", items: { type: "string" } },
+      severity: { type: "string", enum: [...INCIDENT_SEVERITIES] },
+      impact: { type: "string", enum: [...INCIDENT_IMPACTS] },
+      affected_cid: {
+        type: "array",
+        items: { type: "string", enum: [...AFFECTED_CID] },
+      },
+      rationale: {
+        type: "array",
+        maxItems: 3,
+        items: { type: "string" },
+      },
       citations: { type: "array", items: { type: "string" } },
     },
     required: [
@@ -2730,6 +3003,41 @@ function triageJsonSchema(): JsonObject {
       "rationale",
       "citations",
     ],
+    additionalProperties: false,
+  };
+}
+
+function rootCauseJsonSchema(): JsonObject {
+  return {
+    type: "object",
+    properties: {
+      method: { type: "string", enum: [...TOT_METHODS] },
+      cause: { type: "string" },
+      evidence_refs: { type: "array", items: { type: "string" } },
+      systemic: { type: "boolean" },
+      remediation: { type: "string" },
+      root_cause_unproven: { type: "boolean" },
+    },
+    required: [
+      "method",
+      "cause",
+      "evidence_refs",
+      "systemic",
+      "remediation",
+      "root_cause_unproven",
+    ],
+    additionalProperties: false,
+  };
+}
+
+function riskCatalogJsonSchema(): JsonObject {
+  return {
+    type: "object",
+    properties: {
+      threat_code: { type: ["string", "null"] },
+      vulnerability_code: { type: ["string", "null"] },
+    },
+    required: ["threat_code", "vulnerability_code"],
     additionalProperties: false,
   };
 }
@@ -2763,7 +3071,15 @@ function gateJsonSchema(): JsonObject {
     properties: {
       breach_requiring_response: { type: "boolean" },
       rationale: { type: "string" },
-      citations: { type: "array", items: { type: "string" } },
+      citations: {
+        type: "array",
+        items: {
+          type: "string",
+          pattern: "^[^:]+:[^:]+:.+$",
+          description:
+            "Exact doc_id:chunk_id:lines citation copied from retrieval_citations",
+        },
+      },
     },
     required: ["breach_requiring_response", "rationale", "citations"],
     additionalProperties: false,

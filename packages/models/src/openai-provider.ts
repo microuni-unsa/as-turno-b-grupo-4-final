@@ -26,7 +26,6 @@ import {
   type RankedPassage,
   type RerankArgs,
   type RerankResponse,
-  RerankResponseSchema,
   type VisionJsonArgs,
   type VisionJsonResponse,
   VisionJsonResponseSchema,
@@ -43,6 +42,7 @@ export interface OpenAIProviderOptions {
   apiKey: string;
   baseURL?: string;
   cohereApiKey?: string;
+  requestLogprobs?: boolean;
 }
 
 const OpenAIProviderOptionsSchema = z.object({
@@ -52,6 +52,16 @@ const OpenAIProviderOptionsSchema = z.object({
 });
 
 const TOP_LOGPROBS = 5;
+
+const RerankModelResponseSchema = z.object({
+  ranked: z.array(
+    z.object({
+      chunk_id: z.string(),
+      score: z.number(),
+      rank: z.number().int().positive(),
+    }),
+  ),
+});
 
 export function computeTopLogprobEntropy(
   positions: Array<Array<{ logprob: number }>>,
@@ -107,6 +117,7 @@ export class OpenAIModelProvider implements ModelProvider {
   private readonly apiKey: string;
   private readonly defaultBaseURL?: string;
   private readonly cohereApiKey?: string;
+  private readonly requestLogprobs: boolean;
 
   constructor(options: OpenAIProviderOptions) {
     if (!options.apiKey || options.apiKey.trim() === "") {
@@ -164,6 +175,7 @@ export class OpenAIModelProvider implements ModelProvider {
     this.apiKey = options.apiKey;
     this.defaultBaseURL = options.baseURL;
     this.cohereApiKey = options.cohereApiKey;
+    this.requestLogprobs = options.requestLogprobs ?? true;
   }
 
   private resolveEndpoint(config: ModelConfig, route: string): string {
@@ -257,14 +269,22 @@ export class OpenAIModelProvider implements ModelProvider {
     ];
 
     try {
+      const systemWithSchema =
+        args.json_schema === undefined
+          ? args.system
+          : `${args.system}\nReturn one JSON object that matches this JSON Schema exactly and includes every required key: ${JSON.stringify(args.json_schema)}`;
       const response = await client.chat.completions.create({
         model: config.model,
-        messages,
+        messages: [
+          { role: "system", content: systemWithSchema },
+          ...messages.slice(1),
+        ],
         temperature: args.temperature,
         max_tokens: args.max_tokens,
         response_format: { type: "json_object" },
-        logprobs: true,
-        top_logprobs: TOP_LOGPROBS,
+        ...(this.requestLogprobs
+          ? { logprobs: true, top_logprobs: TOP_LOGPROBS }
+          : {}),
       });
 
       const rawContent = response.choices?.[0]?.message?.content;
@@ -557,7 +577,7 @@ export class OpenAIModelProvider implements ModelProvider {
           `Reranker model output is not valid JSON: ${String(err)}`,
         );
       }
-      const validation = RerankResponseSchema.safeParse(parsed);
+      const validation = RerankModelResponseSchema.safeParse(parsed);
       if (!validation.success) {
         throw new ModelSchemaViolationError(route, validation.error.message);
       }

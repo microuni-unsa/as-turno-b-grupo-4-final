@@ -6,11 +6,7 @@ import {
   type TotMethod,
   TotMethodSchema,
 } from "@pims/types/evidence.ts";
-import {
-  type JsonObject,
-  JsonObjectSchema,
-  RankedPassageSchema,
-} from "@pims/types/models.ts";
+import { type JsonObject, JsonObjectSchema } from "@pims/types/models.ts";
 import {
   Art34ExemptionLetterSchema,
   ExemptionEvaluationInputSchema,
@@ -30,6 +26,7 @@ import {
   INCIDENT_SEVERITIES,
   INCIDENT_STATUSES,
   INCIDENT_TYPES,
+  PIMS_MUTATION_METHODS,
   PimsIncidentActionSchema,
   PimsIncidentCreateSchema,
   PimsIncidentHistorySchema,
@@ -39,6 +36,7 @@ import {
   PimsRiskEvaluationSchema,
   paginatedResultSchema,
 } from "@pims/types/pims.ts";
+import { RetrievalPassageSchema } from "@pims/types/rag.ts";
 import { z } from "zod";
 
 export const AGENT_ROLES = [
@@ -104,6 +102,128 @@ export const TIMER_KINDS = [
 ] as const;
 export const TimerKindSchema = z.enum(TIMER_KINDS);
 export type TimerKind = z.infer<typeof TimerKindSchema>;
+
+export const AGENT_EVENT_TYPES = [
+  "lifecycle:status_change",
+  "scheduler:timer_tick",
+  "role:transition",
+  "rag:retrieval",
+  "tool:mutation",
+  "review:approval_requested",
+  "agent:blocked",
+  "agent:error",
+] as const;
+export const AgentEventTypeSchema = z.enum(AGENT_EVENT_TYPES);
+export type AgentEventType = z.infer<typeof AgentEventTypeSchema>;
+
+export const REVIEW_APPROVAL_KINDS = [
+  "notice_approval",
+  "recipient_required",
+  "revision_required",
+] as const;
+export const ReviewApprovalKindSchema = z.enum(REVIEW_APPROVAL_KINDS);
+export type ReviewApprovalKind = z.infer<typeof ReviewApprovalKindSchema>;
+
+export const AgentEventSchema = z.discriminatedUnion("type", [
+  z.object({
+    type: z.literal("lifecycle:status_change"),
+    at_utc: z.string().datetime(),
+    incident_code: z.string().min(1),
+    from: z.enum(INCIDENT_STATUSES),
+    to: z.enum(INCIDENT_STATUSES),
+    actor_role: AgentRoleSchema,
+  }),
+  z.object({
+    type: z.literal("scheduler:timer_tick"),
+    at_utc: z.string().datetime(),
+    incident_code: z.string().min(1),
+    timer_id: z.string().min(1),
+    timer_kind: TimerKindSchema,
+    fire_at_utc: z.string().datetime(),
+    remaining_ms: z.number().int(),
+    state: z.enum(["armed", "due"]),
+  }),
+  z.object({
+    type: z.literal("role:transition"),
+    at_utc: z.string().datetime(),
+    incident_code: z.string().min(1),
+    role: AgentRoleSchema,
+    previous_role: AgentRoleSchema.nullable(),
+    lease_holder: z.string().min(1),
+  }),
+  z.object({
+    type: z.literal("rag:retrieval"),
+    at_utc: z.string().datetime(),
+    incident_code: z.string().nullable(),
+    query: z.string(),
+    corpus_version: z.string(),
+    passages: z.array(RetrievalPassageSchema),
+    citations: z.array(z.string()),
+  }),
+  z.object({
+    type: z.literal("tool:mutation"),
+    at_utc: z.string().datetime(),
+    incident_code: z.string().nullable(),
+    method: z.enum(PIMS_MUTATION_METHODS),
+    endpoint: z.string(),
+    operation: z.string(),
+    idempotency_key: z.string().nullable(),
+    duration_ms: z.number().int().nonnegative(),
+    status: z.number().int().nonnegative(),
+    attempt: z.number().int().positive(),
+    payload_keys: z.array(z.string()),
+    error_code: z.string().nullable(),
+  }),
+  z.object({
+    type: z.literal("review:approval_requested"),
+    at_utc: z.string().datetime(),
+    incident_code: z.string().min(1),
+    kind: ReviewApprovalKindSchema,
+    pack_type: z.enum(["authority", "subject"]).nullable(),
+    pack_id: z.string().nullable(),
+    approval_id: z.string().nullable(),
+  }),
+  z.object({
+    type: z.literal("agent:blocked"),
+    at_utc: z.string().datetime(),
+    incident_code: z.string().min(1),
+    code: z.string().min(1),
+    message: z.string().min(1),
+  }),
+  z.object({
+    type: z.literal("agent:error"),
+    at_utc: z.string().datetime(),
+    incident_code: z.string().nullable(),
+    code: z.string().min(1),
+    message: z.string().min(1),
+  }),
+]);
+export type AgentEvent = z.infer<typeof AgentEventSchema>;
+
+export const WATCHER_STAGES = [
+  "detected",
+  "triaged",
+  "investigated",
+  "drafted",
+  "awaiting_approval",
+  "notified",
+  "closed",
+  "blocked",
+] as const;
+export const WatcherStageSchema = z.enum(WATCHER_STAGES);
+export type WatcherStage = z.infer<typeof WatcherStageSchema>;
+
+export const WatcherStateSchema = z.object({
+  incident_id: z.number().int().positive(),
+  incident_code: z.string().min(1),
+  stage: WatcherStageSchema,
+  blocked_at_stage: WatcherStageSchema.nullable(),
+  blocked_reason: z.string().nullable(),
+  parked_until_utc: z.string().datetime().nullable(),
+  last_error_code: z.string().nullable(),
+  updated_at_utc: z.string().datetime(),
+});
+export type WatcherState = z.infer<typeof WatcherStateSchema>;
 
 export const LIFECYCLE_STAGES = [
   "capture",
@@ -528,7 +648,7 @@ export type PimsCreateAuditActionResult = z.infer<
 export const RagQueryResultToolSchema = z
   .object({
     query: z.string().min(1),
-    passages: z.array(RankedPassageSchema),
+    passages: z.array(RetrievalPassageSchema),
     citations: z.array(z.string().min(1)),
     eval: z.boolean(),
   })
@@ -581,16 +701,61 @@ export const TotEvidenceSchema = z
   .strict();
 export type TotEvidence = z.infer<typeof TotEvidenceSchema>;
 
-export const RootCauseSchema = z
-  .object({
-    method: TotMethodSchema,
-    cause: z.string().min(1),
-    evidence_refs: z.array(z.string().min(1)),
-    systemic: z.boolean(),
-    remediation: z.string().min(1),
-    root_cause_unproven: z.boolean(),
-  })
-  .strict();
+function normalizeTotMethod(value: unknown): unknown {
+  if (typeof value !== "string") {
+    return value;
+  }
+  const normalized = value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+  if (normalized === "5_whys" || normalized === "five_whys") {
+    return "5-whys";
+  }
+  if (normalized === "fault_tree") {
+    return "fault-tree";
+  }
+  if (normalized === "fishbone" || normalized === "ishikawa") {
+    return "fishbone";
+  }
+  return value;
+}
+
+function normalizeRemediation(value: unknown): unknown {
+  if (typeof value === "string") {
+    return value;
+  }
+  if (Array.isArray(value)) {
+    return value.filter((entry) => typeof entry === "string").join(" ");
+  }
+  if (typeof value === "object" && value !== null) {
+    const parts: string[] = [];
+    for (const entry of Object.values(value)) {
+      if (typeof entry === "string") {
+        parts.push(entry);
+        continue;
+      }
+      if (Array.isArray(entry)) {
+        for (const item of entry) {
+          if (typeof item === "string") {
+            parts.push(item);
+          }
+        }
+      }
+    }
+    return parts.join(" ");
+  }
+  return value;
+}
+
+export const RootCauseSchema = z.object({
+  method: z.preprocess(normalizeTotMethod, TotMethodSchema),
+  cause: z.string().min(1),
+  evidence_refs: z.array(z.string().min(1)).default([]),
+  systemic: z.boolean(),
+  remediation: z.preprocess(normalizeRemediation, z.string().min(1)),
+  root_cause_unproven: z.boolean().default(false),
+});
 export type RootCause = z.infer<typeof RootCauseSchema>;
 
 export const RiskCatalogCodesSchema = z

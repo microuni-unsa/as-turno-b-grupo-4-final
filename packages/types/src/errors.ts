@@ -908,3 +908,72 @@ export class PeruAdvisoryError extends PimsBaseError {
     super(message, "PERU_48H_ADVISORY", details);
   }
 }
+
+export class CockpitRoleUnknownError extends PimsBaseError {
+  readonly role: string;
+
+  constructor(role: string, details?: PimsErrorDetails) {
+    super(
+      `Unknown PIMS platform role: ${role}`,
+      "COCKPIT_ROLE_UNKNOWN",
+      details,
+    );
+    this.role = role;
+  }
+}
+
+export class CockpitRoleConflictError extends PimsBaseError {
+  constructor(message: string, details?: PimsErrorDetails) {
+    super(message, "COCKPIT_ROLE_CONFLICT", details);
+  }
+}
+
+export class CockpitPermissionDeniedError extends PimsBaseError {
+  readonly permission: string;
+
+  constructor(permission: string, details?: PimsErrorDetails) {
+    super(
+      `Cockpit permission denied: ${permission}`,
+      "COCKPIT_PERMISSION_DENIED",
+      details,
+    );
+    this.permission = permission;
+  }
+}
+
+export class CockpitSessionInvalidError extends PimsBaseError {
+  constructor(
+    message = "Cockpit session is invalid or expired",
+    details?: PimsErrorDetails,
+  ) {
+    super(message, "COCKPIT_SESSION_INVALID", details);
+  }
+}
+
+export class CockpitPermissionsMissingError extends PimsBaseError {
+  constructor(
+    message = "PIMS login response did not include the permissions matrix",
+    details?: PimsErrorDetails,
+  ) {
+    super(message, "COCKPIT_PERMISSIONS_MISSING", details);
+  }
+}
+
+export class CockpitPiiBlockedError extends PimsBaseError {
+  readonly fields: string[];
+
+  constructor(fields: string[], details?: PimsErrorDetails) {
+    super(
+      `Cockpit chat response blocked by the PII gate for fields: ${fields.join(",")}`,
+      "COCKPIT_PII_BLOCKED",
+      details,
+    );
+    this.fields = fields;
+  }
+}
+
+export class CockpitChatInvalidError extends PimsBaseError {
+  constructor(message: string, details?: PimsErrorDetails) {
+    super(message, "COCKPIT_CHAT_INVALID", details);
+  }
+}

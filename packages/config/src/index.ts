@@ -1,9 +1,15 @@
 import {
+  DEFAULT_AUTO_NOTIFY,
+  DEFAULT_CORPUS_DIR,
   DEFAULT_IDEMPOTENCY_KEY_PREFIX,
+  DEFAULT_MODEL_LOGPROBS,
+  DEFAULT_PHASE_DUE_HOURS,
   DEFAULT_PIMS_BASE_URL,
   DEFAULT_PIMS_MAX_RETRIES,
   DEFAULT_PIMS_SCHEMA,
   DEFAULT_PIMS_TIMEOUT_MS,
+  DEFAULT_REVIEW_CHALLENGE_BLOCKING,
+  DEFAULT_WATCHER_POLL_INTERVAL_MS,
   MAX_ATTACHMENT_SIZE_MB,
 } from "@pims/types/constants.ts";
 import { ConfigError } from "@pims/types/errors.ts";
@@ -32,7 +38,9 @@ export type JurisdictionDeadlines = z.infer<typeof JurisdictionDeadlinesSchema>;
 export interface AgentConfig {
   PIMS_BASE_URL: string;
   PIMS_SCHEMA: string;
-  PIMS_TOKEN_CMD: string[];
+  PIMS_TOKEN_CMD?: string[];
+  PIMS_USERNAME?: string;
+  PIMS_PASSWORD?: string;
   PIMS_TIMEOUT_MS: number;
   PIMS_MAX_RETRIES: number;
   PIMS_PAGE_SIZE: { default: number; max: number };
@@ -64,6 +72,7 @@ export interface AgentConfig {
   RAG_CORPUS_PATHS: Record<string, string>;
   RAG_CHUNK_NORMATIVE: { size: number; overlap: number };
   RAG_CHUNK_OTHER: { size: number; overlap: number };
+  RAG_CORPUS_DIR: string;
   RAG_TOP_K: number;
   RAG_RERANK_K: number;
   RAG_MIN_SCORE: number;
@@ -73,6 +82,12 @@ export interface AgentConfig {
   SCHEDULER_MAX_TIMERS: number;
   EVIDENCE_HASH: "sha256";
   EVIDENCE_KEY_ENV: string;
+  EVIDENCE_DB_URL: string;
+  AUTO_NOTIFY: boolean;
+  MODEL_LOGPROBS: boolean;
+  PHASE_DUE_HOURS: number;
+  REVIEW_CHALLENGE_BLOCKING: boolean;
+  WATCHER_POLL_INTERVAL_MS: number;
   WEBHOOK_INGEST_SECRET_ENV: string;
   ATTACHMENT_MAX_MB: number;
   RETENTION_NOTICE_YEARS: number;
@@ -228,13 +243,35 @@ export function loadConfig(
 
   const pimsSchema = env.PIMS_SCHEMA ?? DEFAULT_PIMS_SCHEMA;
 
-  if (!env.PIMS_TOKEN_CMD) {
+  const tokenCmdRaw = env.PIMS_TOKEN_CMD?.trim();
+  const usernameRaw = env.PIMS_USERNAME?.trim();
+  const passwordRaw = env.PIMS_PASSWORD;
+  const hasTokenCmd = tokenCmdRaw !== undefined && tokenCmdRaw !== "";
+  const hasUsername = usernameRaw !== undefined && usernameRaw !== "";
+  const hasPassword = passwordRaw !== undefined && passwordRaw.trim() !== "";
+
+  if (hasTokenCmd && (hasUsername || hasPassword)) {
     throw new ConfigError(
-      "PIMS_TOKEN_CMD is required",
-      "CONFIG_MISSING:PIMS_TOKEN_CMD",
+      "PIMS auth is ambiguous: configure either PIMS_TOKEN_CMD or PIMS_USERNAME with PIMS_PASSWORD, never both",
+      "CONFIG_REJECTED:PIMS_AUTH_MODE",
     );
   }
-  const tokenCmdParts = env.PIMS_TOKEN_CMD.trim().split(/\s+/);
+  if (!hasTokenCmd && !hasUsername && !hasPassword) {
+    throw new ConfigError(
+      "PIMS auth is required: configure PIMS_TOKEN_CMD or PIMS_USERNAME with PIMS_PASSWORD",
+      "CONFIG_MISSING:PIMS_AUTH",
+    );
+  }
+  if (!hasTokenCmd && (!hasUsername || !hasPassword)) {
+    throw new ConfigError(
+      "Password auth requires both PIMS_USERNAME and PIMS_PASSWORD",
+      "CONFIG_MISSING:PIMS_AUTH",
+    );
+  }
+
+  const tokenCmdParts = hasTokenCmd
+    ? (tokenCmdRaw as string).split(/\s+/)
+    : undefined;
 
   let jurisdictionDeadlines: JurisdictionDeadlines;
   const rawJurisdiction =
@@ -307,6 +344,99 @@ export function loadConfig(
       `CONFIG_MISSING:${evidenceKeyEnv}`,
     );
   }
+
+  const evidenceDbUrlRaw = env.EVIDENCE_DB_URL?.trim();
+  if (evidenceDbUrlRaw === undefined || evidenceDbUrlRaw === "") {
+    throw new ConfigError(
+      "EVIDENCE_DB_URL is required",
+      "CONFIG_MISSING:EVIDENCE_DB_URL",
+    );
+  }
+  try {
+    new URL(evidenceDbUrlRaw);
+  } catch {
+    throw new ConfigError(
+      "EVIDENCE_DB_URL must be a valid URL",
+      "CONFIG_TYPE:EVIDENCE_DB_URL",
+    );
+  }
+
+  const modelLogprobsRaw = env.MODEL_LOGPROBS;
+  if (
+    modelLogprobsRaw !== undefined &&
+    modelLogprobsRaw !== "true" &&
+    modelLogprobsRaw !== "false"
+  ) {
+    throw new ConfigError(
+      "MODEL_LOGPROBS must be either 'true' or 'false'",
+      "CONFIG_TYPE:MODEL_LOGPROBS",
+    );
+  }
+  const modelLogprobs =
+    modelLogprobsRaw === undefined
+      ? DEFAULT_MODEL_LOGPROBS
+      : modelLogprobsRaw === "true";
+
+  const phaseDueHours = env.PHASE_DUE_HOURS
+    ? Number.parseInt(env.PHASE_DUE_HOURS, 10)
+    : DEFAULT_PHASE_DUE_HOURS;
+  if (!Number.isInteger(phaseDueHours) || phaseDueHours <= 0) {
+    throw new ConfigError(
+      "PHASE_DUE_HOURS must be a positive integer",
+      "CONFIG_TYPE:PHASE_DUE_HOURS",
+    );
+  }
+
+  const reviewChallengeBlockingRaw = env.REVIEW_CHALLENGE_BLOCKING;
+  if (
+    reviewChallengeBlockingRaw !== undefined &&
+    reviewChallengeBlockingRaw !== "true" &&
+    reviewChallengeBlockingRaw !== "false"
+  ) {
+    throw new ConfigError(
+      "REVIEW_CHALLENGE_BLOCKING must be either 'true' or 'false'",
+      "CONFIG_TYPE:REVIEW_CHALLENGE_BLOCKING",
+    );
+  }
+  const reviewChallengeBlocking =
+    reviewChallengeBlockingRaw === undefined
+      ? DEFAULT_REVIEW_CHALLENGE_BLOCKING
+      : reviewChallengeBlockingRaw === "true";
+
+  const autoNotifyRaw = env.AUTO_NOTIFY;
+  if (
+    autoNotifyRaw !== undefined &&
+    autoNotifyRaw !== "true" &&
+    autoNotifyRaw !== "false"
+  ) {
+    throw new ConfigError(
+      "AUTO_NOTIFY must be either 'true' or 'false'",
+      "CONFIG_TYPE:AUTO_NOTIFY",
+    );
+  }
+  const autoNotify =
+    autoNotifyRaw === undefined
+      ? DEFAULT_AUTO_NOTIFY
+      : autoNotifyRaw === "true";
+
+  const watcherPollRaw = env.WATCHER_POLL_INTERVAL_MS;
+  let watcherPollIntervalMs = DEFAULT_WATCHER_POLL_INTERVAL_MS;
+  if (watcherPollRaw !== undefined) {
+    const parsed = Number(watcherPollRaw);
+    if (!Number.isInteger(parsed) || parsed <= 0) {
+      throw new ConfigError(
+        "WATCHER_POLL_INTERVAL_MS must be a positive integer",
+        "CONFIG_TYPE:WATCHER_POLL_INTERVAL_MS",
+      );
+    }
+    watcherPollIntervalMs = parsed;
+  }
+
+  const ragCorpusDirRaw = env.RAG_CORPUS_DIR?.trim();
+  const ragCorpusDir =
+    ragCorpusDirRaw === undefined || ragCorpusDirRaw === ""
+      ? DEFAULT_CORPUS_DIR
+      : ragCorpusDirRaw;
 
   const subjectNoticePolicy = env.SUBJECT_NOTICE_POLICY ?? "high_risk_only";
   if (subjectNoticePolicy !== "high_risk_only") {
@@ -442,6 +572,8 @@ export function loadConfig(
     PIMS_BASE_URL: pimsBaseUrl,
     PIMS_SCHEMA: pimsSchema,
     PIMS_TOKEN_CMD: tokenCmdParts,
+    PIMS_USERNAME: hasUsername ? (usernameRaw as string) : undefined,
+    PIMS_PASSWORD: hasPassword ? (passwordRaw as string) : undefined,
     PIMS_TIMEOUT_MS: pimsTimeoutMs,
     PIMS_MAX_RETRIES: pimsMaxRetries,
     PIMS_PAGE_SIZE: pimsPageSize,
@@ -500,6 +632,7 @@ export function loadConfig(
     RAG_CORPUS_PATHS: env.RAG_CORPUS_PATHS
       ? JSON.parse(env.RAG_CORPUS_PATHS)
       : {},
+    RAG_CORPUS_DIR: ragCorpusDir,
     RAG_CHUNK_NORMATIVE: { size: 512, overlap: 64 },
     RAG_CHUNK_OTHER: { size: 1024, overlap: 128 },
     RAG_TOP_K: env.RAG_TOP_K ? Number.parseInt(env.RAG_TOP_K, 10) : 8,
@@ -521,6 +654,12 @@ export function loadConfig(
       : 10000,
     EVIDENCE_HASH: "sha256",
     EVIDENCE_KEY_ENV: evidenceKeyEnv,
+    EVIDENCE_DB_URL: evidenceDbUrlRaw,
+    AUTO_NOTIFY: autoNotify,
+    MODEL_LOGPROBS: modelLogprobs,
+    PHASE_DUE_HOURS: phaseDueHours,
+    REVIEW_CHALLENGE_BLOCKING: reviewChallengeBlocking,
+    WATCHER_POLL_INTERVAL_MS: watcherPollIntervalMs,
     WEBHOOK_INGEST_SECRET_ENV:
       env.WEBHOOK_INGEST_SECRET_ENV ?? "WEBHOOK_INGEST_SECRET",
     ATTACHMENT_MAX_MB: attachmentMaxMb,

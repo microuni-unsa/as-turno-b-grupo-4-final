@@ -21,7 +21,7 @@ Establish the definitive autonomous production deployment of the incident respon
     - Synthesizes dynamic 5-whys root-cause analysis and pushes containment actions (`C`) directly into `core_incidentaction` via E08.
     - Creates qualifying corrective action findings in `core_auditfinding` (E19).
     - Drafts GDPR Art 33/34 notices, runs plain-language token validation, and evaluates statutory exemptions.
-    - Upon DPO approval (or configured auto-approval policy), dispatches the notice, seals the canonical cryptographic evidence bundle (`bundle.json`), uploads it to `core_incidentattachment` (E12), and transitions status to `C` (Closed).
+    - Upon DPO approval (or configured auto-approval policy), dispatches the notice, seals the canonical cryptographic evidence bundle (`bundle.json.txt`), uploads it to `core_incidentattachment` (E12), and transitions status to `C` (Closed).
 - **Zero-Touch Verification**:
   - Refreshing `https://unsa.27k.pe` confirms the incident is closed, actions are listed, attachments contain the sealed bundle, and `core_incidenthistory` reflects the full audit trail.
 
@@ -40,7 +40,7 @@ Establish the definitive autonomous production deployment of the incident respon
     PIMS_BASE_URL="https://unsa.27k.pe"
     PIMS_TENANT="unsa"
     PIMS_USERNAME="grupob4"
-    PIMS_PASSWORD_CMD="cat /run/secrets/pims_password"
+    PIMS_PASSWORD="<plain-password-from-secret-store>"
     LLM_API_KEY_CMD="cat /run/secrets/llm_key"
     EVIDENCE_DB_URL="postgres://pims:pims@db:5432/pims_evidence"
     ```

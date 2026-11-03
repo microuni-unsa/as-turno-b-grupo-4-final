@@ -15,6 +15,7 @@ import {
 } from "@pims/types";
 import { PIMS_TEST_SEED_PASSWORD } from "@pims/types/constants.ts";
 import { PimsGateBlockedError } from "@pims/types/errors.ts";
+import type { PimsMutationRecord } from "@pims/types/pims.ts";
 import {
   PostgreSqlContainer,
   type StartedPostgreSqlContainer,
@@ -643,6 +644,53 @@ describe("PIMS Client Adapter & Reverse-Engineered DRF API Integration Suite", (
 
       const downloaded = await adapter.downloadAttachment(attachment.file);
       expect(downloaded.equals(bytes)).toBe(true);
+    });
+  });
+
+  describe("Mutation observer", () => {
+    it("emits redacted per-attempt records without payload values", async () => {
+      const records: PimsMutationRecord[] = [];
+      const observed = new PimsAdapter({
+        baseUrl: serverInstance.url,
+        schema: "unsa",
+        username: "admin",
+        password: PIMS_TEST_SEED_PASSWORD,
+        timeoutMs: 15000,
+        onMutation: (record) => {
+          records.push(record);
+        },
+      });
+
+      await observed.login();
+      const loginRecord = records.find(
+        (record) => record.operation === "login",
+      );
+      expect(loginRecord?.payload_keys.sort()).toEqual([
+        "password",
+        "username",
+      ]);
+      expect(JSON.stringify(loginRecord)).not.toContain(
+        PIMS_TEST_SEED_PASSWORD,
+      );
+
+      const incident = await observed.createIncident({
+        title: "mutation observer fixture",
+        involves_personal_data: false,
+        incident_date: "2026-10-01",
+        incident_type: "OT",
+        status: "O",
+      });
+      await observed.updateIncident(incident.id, { severity: "L" });
+      const updateRecord = records.find(
+        (record) => record.operation === "update_incident",
+      );
+      expect(updateRecord?.method).toBe("PATCH");
+      expect(updateRecord?.endpoint).toBe(`/api/incidents/${incident.id}/`);
+      expect(updateRecord?.payload_keys).toEqual(["severity"]);
+      expect(updateRecord?.idempotency_key).not.toBeNull();
+      expect(updateRecord?.status).toBe(200);
+      expect(updateRecord?.error_code).toBeNull();
+      expect(updateRecord?.at_utc.endsWith("Z")).toBe(true);
     });
   });
 });

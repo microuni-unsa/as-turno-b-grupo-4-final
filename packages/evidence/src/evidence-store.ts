@@ -9,6 +9,7 @@ import {
   draftPacksTable,
   indicatorSpoolTable,
   leasesTable,
+  ragRetrievalsTable,
   reviewApprovalsTable,
   riskQueueTable,
   rootCausesTable,
@@ -29,6 +30,7 @@ import {
   assertSafeFileName,
   parseStorageSegment,
 } from "@pims/types/attachments.ts";
+import { canonicalizeJson } from "@pims/types/canonical.ts";
 import {
   AttachmentHashMismatchError,
   EvidenceNotFoundError,
@@ -66,6 +68,10 @@ import {
   JsonValueSchema,
 } from "@pims/types/models.ts";
 import { type NoticeState, NoticeStateSchema } from "@pims/types/notices.ts";
+import {
+  type RagRetrievalRecord,
+  RagRetrievalRecordSchema,
+} from "@pims/types/rag.ts";
 import { zodIssuesToDetails } from "@pims/types/validation.ts";
 import {
   and,
@@ -313,6 +319,15 @@ export class EvidenceStore {
         updated_at_utc TIMESTAMPTZ NOT NULL
       );
 
+      CREATE TABLE IF NOT EXISTS evidence.rag_retrievals (
+        id SERIAL PRIMARY KEY,
+        incident_code VARCHAR(64),
+        at_utc TIMESTAMPTZ NOT NULL,
+        query TEXT NOT NULL,
+        corpus_version VARCHAR(64) NOT NULL,
+        payload_encrypted TEXT NOT NULL
+      );
+
       CREATE UNIQUE INDEX IF NOT EXISTS tool_ledger_incident_idem_idx
         ON evidence.tool_ledger (incident_code, idempotency_key);
     `);
@@ -497,6 +512,109 @@ export class EvidenceStore {
           ? {}
           : { pims_attachment_id: row.pims_attachment_id }),
       };
+    });
+  }
+
+  async replaceStagedAttachment(
+    schema: string,
+    incidentCode: string,
+    fileName: string,
+    fileBytes: Buffer,
+    mime: string,
+    uploader: string,
+  ): Promise<EvidenceAttachment> {
+    const safeFileName = assertSafeFileName(fileName);
+    this.assertSafePath(schema, incidentCode);
+    const existing = await this.db
+      .select()
+      .from(stagedAttachmentsTable)
+      .where(
+        and(
+          eq(stagedAttachmentsTable.incident_code, incidentCode),
+          eq(stagedAttachmentsTable.file_name, safeFileName),
+        ),
+      );
+
+    for (const row of existing) {
+      const storagePath = resolveInsideRoot(
+        this.baseStorageDir,
+        row.storage_path,
+      );
+      await fs.promises.rm(storagePath, { force: true });
+      await this.db
+        .delete(stagedAttachmentsTable)
+        .where(eq(stagedAttachmentsTable.id, row.id));
+    }
+
+    return this.stageAttachment(
+      schema,
+      incidentCode,
+      safeFileName,
+      fileBytes,
+      mime,
+      uploader,
+    );
+  }
+
+  async saveRagRetrieval(record: RagRetrievalRecord): Promise<number> {
+    const parsed = RagRetrievalRecordSchema.safeParse(record);
+    if (!parsed.success) {
+      throw new EvidenceStoreWriteError("Invalid RAG retrieval record", {
+        issues: zodIssuesToDetails(parsed.error),
+      });
+    }
+    const encryptedPayload = encryptPayload(
+      canonicalizeJson(parsed.data),
+      this.keyHex,
+    ).toString("base64");
+    const inserted = await this.db
+      .insert(ragRetrievalsTable)
+      .values({
+        incident_code: parsed.data.incident_code,
+        at_utc: new Date(parsed.data.at_utc),
+        query: parsed.data.query,
+        corpus_version: parsed.data.corpus_version,
+        payload_encrypted: encryptedPayload,
+      })
+      .returning({ id: ragRetrievalsTable.id });
+    const insertedId = inserted[0]?.id;
+    if (insertedId === undefined) {
+      throw new EvidenceStoreWriteError("RAG retrieval insert returned no id");
+    }
+    return insertedId;
+  }
+
+  async listRagRetrievals(
+    incidentCode: string,
+    limit = 20,
+  ): Promise<RagRetrievalRecord[]> {
+    if (!Number.isInteger(limit) || limit <= 0) {
+      throw new PimsValidationError(
+        "rag_retrievals.limit",
+        "limit must be a positive integer",
+      );
+    }
+    const rows = await this.db
+      .select()
+      .from(ragRetrievalsTable)
+      .where(eq(ragRetrievalsTable.incident_code, incidentCode))
+      .orderBy(desc(ragRetrievalsTable.at_utc), desc(ragRetrievalsTable.id))
+      .limit(limit);
+
+    return rows.map((row) => {
+      const decrypted = decryptPayload(
+        Buffer.from(row.payload_encrypted, "base64"),
+        this.keyHex,
+      );
+      const parsed = RagRetrievalRecordSchema.safeParse(
+        parseDecryptedJson(decrypted.toString("utf8"), "rag_retrieval.payload"),
+      );
+      if (!parsed.success) {
+        throw new EvidenceStoreWriteError("Invalid RAG retrieval payload", {
+          issues: zodIssuesToDetails(parsed.error),
+        });
+      }
+      return parsed.data;
     });
   }
 

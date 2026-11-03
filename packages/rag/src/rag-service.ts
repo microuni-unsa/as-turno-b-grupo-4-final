@@ -18,12 +18,19 @@ import {
   RagNoEvidenceError,
 } from "@pims/types/errors.ts";
 import type { ModelProvider, Passage } from "@pims/types/models.ts";
-import type { CorpusChunk, RagQueryResult } from "@pims/types/rag.ts";
+import type {
+  CorpusChunk,
+  RagQueryOptions,
+  RagQueryResult,
+  RagRetrievalRecord,
+  RetrievalPassage,
+} from "@pims/types/rag.ts";
 
 export interface RAGServiceOptions {
   modelProvider: ModelProvider;
   indexer: RagIndexer;
   config: AgentConfig;
+  onRetrieval?: (record: RagRetrievalRecord) => void | Promise<void>;
 }
 
 export class RAGService {
@@ -33,6 +40,9 @@ export class RAGService {
   private readonly rerankK: number;
   private readonly minScore: number;
   private readonly timeoutMs: number;
+  private readonly onRetrieval?: (
+    record: RagRetrievalRecord,
+  ) => void | Promise<void>;
 
   constructor(options: RAGServiceOptions) {
     if (!options.config)
@@ -46,6 +56,7 @@ export class RAGService {
     this.rerankK = options.config.RAG_RERANK_K;
     this.minScore = options.config.RAG_MIN_SCORE;
     this.timeoutMs = options.config.RAG_TIMEOUT_MS;
+    this.onRetrieval = options.onRetrieval;
   }
 
   private calculateRRF(
@@ -129,12 +140,13 @@ export class RAGService {
     }
   }
 
+  getVersion(): string {
+    return this.indexer.getVersion();
+  }
+
   async query(
     userQuery: string,
-    options: {
-      normative_only?: boolean;
-      expected_version?: string;
-    } = {},
+    options: RagQueryOptions = {},
   ): Promise<RagQueryResult> {
     const startTime = Date.now();
     const normativeOnly = Boolean(options.normative_only);
@@ -167,9 +179,17 @@ export class RAGService {
 
     const pgvectorHits = await this.indexer.searchPgvector(qVec, RAG_DENSE_K);
     const denseRankings = pgvectorHits.map((h) => h.chunk_id);
+    const denseMetadata = new Map<string, { score: number; rank: number }>();
+    pgvectorHits.forEach((hit, index) => {
+      denseMetadata.set(hit.chunk_id, { score: hit.score, rank: index + 1 });
+    });
 
     const bm25Hits = this.indexer.searchBM25(userQuery, RAG_BM25_K);
     const bm25Rankings = bm25Hits.map((h) => h.chunk_id);
+    const bm25Metadata = new Map<string, { score: number; rank: number }>();
+    bm25Hits.forEach((hit, index) => {
+      bm25Metadata.set(hit.chunk_id, { score: hit.score, rank: index + 1 });
+    });
 
     const rrfMap = this.calculateRRF(denseRankings, bm25Rankings);
     const fusedCandidateIds = Array.from(rrfMap.entries())
@@ -213,15 +233,60 @@ export class RAGService {
     }
 
     const citations: string[] = [];
+    const retrievalPassages: RetrievalPassage[] = [];
     for (const p of passedPassages) {
       const cite = this.formatCitation(p);
       this.validateCitation(cite, normativeOnly);
       citations.push(cite);
+
+      const chunk = this.indexer.getChunk(p.chunk_id);
+      if (!chunk) {
+        throw new CitationFabricatedError(
+          p.chunk_id,
+          `Reranked chunk id not in index: ${p.chunk_id}`,
+        );
+      }
+      const rrfScore = rrfMap.get(p.chunk_id);
+      if (rrfScore === undefined) {
+        throw new RagIndexError(
+          `Reranked chunk ${p.chunk_id} missing from the RRF fusion map`,
+        );
+      }
+      const dense = denseMetadata.get(p.chunk_id);
+      const bm25 = bm25Metadata.get(p.chunk_id);
+      retrievalPassages.push({
+        chunk_id: chunk.chunk_id,
+        doc_id: chunk.doc_id,
+        article_or_clause: chunk.article_or_clause,
+        lines: chunk.lines,
+        text: chunk.text,
+        normative: chunk.normative,
+        score: p.score,
+        rank: p.rank,
+        chunk_sha256: chunk.sha256,
+        dense_score: dense?.score ?? null,
+        dense_rank: dense?.rank ?? null,
+        bm25_score: bm25?.score ?? null,
+        bm25_rank: bm25?.rank ?? null,
+        rrf_score: rrfScore,
+        rerank_score: p.score,
+      });
+    }
+
+    if (this.onRetrieval !== undefined) {
+      await this.onRetrieval({
+        incident_code: options.incident_code ?? null,
+        query: userQuery,
+        corpus_version: activeVersion,
+        at_utc: new Date().toISOString(),
+        passages: retrievalPassages,
+        citations,
+      });
     }
 
     return {
       query: userQuery,
-      passages: passedPassages,
+      passages: retrievalPassages,
       citations,
       corpus_version: activeVersion,
     };

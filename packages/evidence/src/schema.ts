@@ -158,6 +158,15 @@ export const rootCausesTable = evidenceSchema.table("root_causes", {
   }).notNull(),
 });
 
+export const ragRetrievalsTable = evidenceSchema.table("rag_retrievals", {
+  id: serial("id").primaryKey(),
+  incident_code: varchar("incident_code", { length: 64 }),
+  at_utc: timestamp("at_utc", { withTimezone: true }).notNull(),
+  query: text("query").notNull(),
+  corpus_version: varchar("corpus_version", { length: 64 }).notNull(),
+  payload_encrypted: text("payload_encrypted").notNull(),
+});
+
 export const agentStateTable = evidenceSchema.table("agent_state", {
   key: varchar("key", { length: 128 }).primaryKey(),
   value: jsonb("value").$type<JsonValue>().notNull(),

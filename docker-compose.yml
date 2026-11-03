@@ -1,0 +1,39 @@
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: pims
+      POSTGRES_PASSWORD: pims
+      POSTGRES_DB: pims_evidence
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pims -d pims_evidence"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  app:
+    build: .
+    env_file:
+      - .env
+    environment:
+      EVIDENCE_DB_URL: postgres://pims:pims@db:5432/pims_evidence
+      DEPLOY_PORT: "8080"
+      DEPLOY_DATA_DIR: /app/data
+      HOME: /tmp
+    ports:
+      - "8080:8080"
+    volumes:
+      - /app/data
+    read_only: true
+    tmpfs:
+      - /tmp
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  pgdata:

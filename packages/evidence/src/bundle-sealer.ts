@@ -124,6 +124,25 @@ export class BundleSealer {
     };
   }
 
+  async getSealedBundle(incidentCode: string): Promise<{
+    manifest: EvidenceBundleManifest;
+    sealSha256: string;
+    marker: string;
+  }> {
+    const manifest = await this.evidenceStore.getBundleManifest(incidentCode);
+    if (!manifest) {
+      throw new EvidenceNotFoundError("bundle_manifest", incidentCode);
+    }
+    if (manifest.seal_sha256 === null) {
+      throw new ArtifactIncompleteError("evidence-bundle", "seal_sha256");
+    }
+    return {
+      manifest,
+      sealSha256: manifest.seal_sha256,
+      marker: `BUNDLE_SEALED:${manifest.seal_sha256}`,
+    };
+  }
+
   async exportAuditTrail(
     incidentCode: string,
     timeline: JsonObject[],

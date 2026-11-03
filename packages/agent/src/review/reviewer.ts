@@ -30,6 +30,9 @@ import type { PimsIncident } from "@pims/types/pims.ts";
 export const REVIEW_CHALLENGE_SYSTEM =
   "You review a breach notice pack for legal completeness, ungrounded claims, plain-language failures, and personal data leakage. Return one challenge per weakness with target, challenge, severity (low, medium, high), and the evidence a human reviewer must supply. Never invent facts absent from the pack; severity high blocks approval.";
 
+export const REVIEW_CHALLENGE_AUTHORITY_SYSTEM =
+  "You review an Article 33 supervisory-authority notification pack for legal completeness, ungrounded claims, and personal data leakage. The addressee is the supervisory authority, so do NOT reject for data-subject plain-language style. Return one challenge per weakness with target, challenge, severity (low, medium, high), and the evidence a human reviewer must supply. Never invent facts absent from the pack; severity high blocks approval.";
+
 export interface ReviewerDeps {
   modelClient: AgentModelClient;
   ragService: RAGService;
@@ -208,7 +211,7 @@ export class NoticeReviewer {
       }
     }
 
-    if (ctx.body_text.trim().length > 0) {
+    if (ctx.body_text.trim().length > 0 && ctx.pack_type !== "authority") {
       try {
         PlainLanguageValidator.validate(ctx.body_text, {
           locale: "es",
@@ -244,8 +247,12 @@ export class NoticeReviewer {
       }
     }
 
+    const challengeSystem =
+      ctx.pack_type === "authority"
+        ? REVIEW_CHALLENGE_AUTHORITY_SYSTEM
+        : REVIEW_CHALLENGE_SYSTEM;
     const challengeResponse = await this.deps.modelClient.chat_json({
-      system: REVIEW_CHALLENGE_SYSTEM,
+      system: challengeSystem,
       messages: [
         {
           role: "user",
@@ -257,7 +264,36 @@ export class NoticeReviewer {
           }),
         },
       ],
-      max_tokens: 2000,
+      json_schema: {
+        type: "object",
+        properties: {
+          challenges: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                target: { type: "string" },
+                challenge: { type: "string" },
+                severity: {
+                  type: "string",
+                  enum: ["low", "medium", "high"],
+                },
+                evidence_required: { type: "string" },
+              },
+              required: [
+                "target",
+                "challenge",
+                "severity",
+                "evidence_required",
+              ],
+              additionalProperties: false,
+            },
+          },
+        },
+        required: ["challenges"],
+        additionalProperties: false,
+      },
+      max_tokens: 2500,
       temperature: this.deps.config.TEMP_REASONING,
       route: MODEL_ROUTE_REASONING,
     });
@@ -272,7 +308,9 @@ export class NoticeReviewer {
     }
     const challenges = parsedProsecutor.data.challenges;
 
-    const highChallenge = challenges.find((c) => c.severity === "high");
+    const highChallenge = this.deps.config.REVIEW_CHALLENGE_BLOCKING
+      ? challenges.find((c) => c.severity === "high")
+      : undefined;
     if (highChallenge) {
       return NoticeReviewer.reject(challenges, {
         judge: "reviewer",

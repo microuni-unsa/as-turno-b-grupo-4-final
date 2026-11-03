@@ -358,24 +358,25 @@ export function createRiskAuditToolHandlers(
       if (afterAudit === undefined) {
         throw new AuditLinkFailedError("post_write_missing");
       }
-      const writtenFinding = (afterAudit.findings ?? []).find((finding) =>
+      const writtenFindings = afterAudit.findings ?? [];
+      const writtenFindingIndex = writtenFindings.findIndex((finding) =>
         finding.description.startsWith(prefix),
       );
-      if (writtenFinding === undefined) {
+      const writtenFinding = writtenFindings[writtenFindingIndex];
+      if (writtenFinding === undefined || writtenFindingIndex < 0) {
         throw new AuditLinkFailedError("post_write_missing");
       }
-      const writtenAction = (writtenFinding.actions ?? []).find(
+      const writtenActions = writtenFinding.actions ?? [];
+      const writtenActionIndex = writtenActions.findIndex(
         (action) => action.action_plan === args.action_plan,
       );
-      if (writtenAction === undefined || writtenAction.id === undefined) {
-        throw new AuditLinkFailedError("post_write_missing");
-      }
-      if (writtenFinding.id === undefined) {
+      const writtenAction = writtenActions[writtenActionIndex];
+      if (writtenAction === undefined || writtenActionIndex < 0) {
         throw new AuditLinkFailedError("post_write_missing");
       }
 
-      const findingId = writtenFinding.id;
-      const actionPlanId = writtenAction.id;
+      const findingId = writtenFinding.id ?? writtenFindingIndex;
+      const actionPlanId = writtenAction.id ?? writtenActionIndex;
 
       await appendEvidenceMarker(
         deps.adapter,

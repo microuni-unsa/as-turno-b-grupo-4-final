@@ -10,6 +10,7 @@ import {
   DRAFT_AUTHORITY_SYSTEM,
   DRAFT_SUBJECT_SYSTEM,
   RESOLUTION_SYSTEM,
+  REVIEW_CHALLENGE_AUTHORITY_SYSTEM,
   REVIEW_CHALLENGE_SYSTEM,
   RISK_CATALOG_SYSTEM,
   ROOT_CAUSE_SYSTEM,
@@ -335,7 +336,10 @@ describe("Phase 4 autonomous lifecycle loop (§6, §9, §14.2)", {
           citations: [authorityCitation],
         });
       }
-      if (args.system === REVIEW_CHALLENGE_SYSTEM) {
+      if (
+        args.system === REVIEW_CHALLENGE_SYSTEM ||
+        args.system === REVIEW_CHALLENGE_AUTHORITY_SYSTEM
+      ) {
         return respond(reviewChallengePayload);
       }
       throw new Error(
@@ -347,6 +351,7 @@ describe("Phase 4 autonomous lifecycle loop (§6, §9, §14.2)", {
       PIMS_BASE_URL: server.url,
       PIMS_SCHEMA: "unsa",
       PIMS_TOKEN_CMD: "true",
+      EVIDENCE_DB_URL: container.getConnectionUri(),
       OPENAI_API_KEY: "lifecycle-loop-test-key",
       REASONING_MODEL:
         "openai,gpt-4o,https://api.openai.com/v1,OPENAI_API_KEY,20000,0,fallback:none",

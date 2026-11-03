@@ -11,7 +11,9 @@
     "test:unit": "vitest run tests/unit",
     "test:integration": "vitest run tests/integration",
     "check": "biome check && tsc --noEmit",
-    "check:fix": "biome check --write && tsc --noEmit"
+    "check:fix": "biome check --write && tsc --noEmit",
+    "start": "bun run packages/cockpit/src/server.ts",
+    "build": "bun build packages/cockpit/src/server.ts --outdir dist --target bun"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.6.4",

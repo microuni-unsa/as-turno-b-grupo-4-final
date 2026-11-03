@@ -31,6 +31,21 @@
         "zod": "^3.24.2",
       },
     },
+    "packages/cockpit": {
+      "name": "@pims/cockpit",
+      "version": "1.0.0",
+      "dependencies": {
+        "@pims/agent": "workspace:*",
+        "@pims/config": "workspace:*",
+        "@pims/evidence": "workspace:*",
+        "@pims/models": "workspace:*",
+        "@pims/pims-adapter": "workspace:*",
+        "@pims/rag": "workspace:*",
+        "@pims/types": "workspace:*",
+        "hono": "^4.13.14",
+        "zod": "^3.24.2",
+      },
+    },
     "packages/config": {
       "name": "@pims/config",
       "version": "1.0.0",
@@ -263,6 +278,8 @@
     "@oxc-project/types": ["@oxc-project/types@0.156.0", "", {}, "sha512-1Duyg48TdJNdyhEB8Xn1L36bT9Pv6GUtlKjHxOys8xkaF/rQq3XJE+bAurSK/AgIz5mGFsb77cn9Pb20+WCScw=="],
 
     "@pims/agent": ["@pims/agent@workspace:packages/agent"],
+
+    "@pims/cockpit": ["@pims/cockpit@workspace:packages/cockpit"],
 
     "@pims/config": ["@pims/config@workspace:packages/config"],
 
