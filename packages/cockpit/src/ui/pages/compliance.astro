@@ -90,7 +90,9 @@ import {
 </AppLayout>
 
 <script>
+  import { authenticatedFetch } from "@pims/cockpit/ui/lib/api.ts";
   import { getSession, hasPermission } from "@pims/cockpit/ui/lib/session.ts";
+  import { sseClient } from "@pims/cockpit/ui/lib/sse-client.ts";
   import type { CockpitTimer, PendingDecision, StreamSnapshot } from "@pims/types/cockpit.ts";
   import type { AgentEvent } from "@pims/types/agent.ts";
   import { formatRemainingTime } from "@pims/cockpit/ui/lib/utils.ts";
@@ -98,15 +100,15 @@ import {
   const session = getSession();
   const canChangeIncident = hasPermission(session, "change_incident");
 
-  const timersGrid = document.getElementById("timers-grid");
-  const pendingContainer = document.getElementById("pending-decisions-container");
-  const pendingCountBadge = document.getElementById("pending-count-badge");
-  const ragContainer = document.getElementById("rag-citations-container");
+  function getEl<T extends HTMLElement>(id: string): T | null {
+    return document.getElementById(id) as T | null;
+  }
 
   let activeTimers: CockpitTimer[] = [];
   let pendingDecisions: PendingDecision[] = [];
 
   function renderTimers() {
+    const timersGrid = getEl<HTMLDivElement>("timers-grid");
     if (!timersGrid) return;
     if (activeTimers.length === 0) {
       timersGrid.innerHTML = `
@@ -120,9 +122,11 @@ import {
     timersGrid.innerHTML = activeTimers
       .map((timer) => {
         let label = timer.timer_type;
-        if (timer.timer_type === "T_AUTHORITY_72H") label = "Plazo Legal Art. 33 GDPR (72h)";
-        if (timer.timer_type === "T_INTERNAL_SLA") label = "SLA de Revisión Interna (4h)";
+        if (timer.timer_type === "T_AUTHORITY_72H" || timer.timer_type === "T72_AUTHORITY") label = "Plazo Legal Art. 33 GDPR (72h)";
+        if (timer.timer_type === "T_INTERNAL_SLA" || timer.timer_type === "T_REVIEW_SLA") label = "SLA de Revisión Interna (4h)";
         if (timer.timer_type === "T_PHASE_FOLLOWUP") label = "Seguimiento por Fases (48h)";
+        if (timer.timer_type === "T_SUBJECT") label = "Notificación a Titulares Art. 34";
+        if (timer.timer_type === "T_PROCESSOR") label = "Notificación a Encargados";
 
         return `
           <div class="bg-slate-900 border border-slate-800 rounded-xl p-4 flex flex-col justify-between space-y-3 shadow-sm hover:border-slate-700 transition-colors">
@@ -170,6 +174,8 @@ import {
   }
 
   function renderPendingDecisions() {
+    const pendingContainer = getEl<HTMLDivElement>("pending-decisions-container");
+    const pendingCountBadge = getEl<HTMLSpanElement>("pending-count-badge");
     if (!pendingContainer) return;
     if (pendingCountBadge) {
       pendingCountBadge.textContent = `${pendingDecisions.length} pendientes`;
@@ -278,6 +284,42 @@ import {
     }
   }, 1000);
 
+  // Initialize with current snapshot if available or proactive fetch
+  async function initCompliancePage() {
+    const existingSnapshot = sseClient.getState().snapshot;
+    if (existingSnapshot) {
+      activeTimers = existingSnapshot.timers;
+      pendingDecisions = existingSnapshot.pending_decisions;
+      renderTimers();
+      renderPendingDecisions();
+    } else {
+      try {
+        const response = await authenticatedFetch("/api/compliance");
+        if (response.ok) {
+          const data = (await response.json()) as {
+            timers: CockpitTimer[];
+            pending_decisions: PendingDecision[];
+          };
+          if (activeTimers.length === 0 && Array.isArray(data.timers)) {
+            activeTimers = data.timers;
+          }
+          if (pendingDecisions.length === 0 && Array.isArray(data.pending_decisions)) {
+            pendingDecisions = data.pending_decisions;
+          }
+          renderTimers();
+          renderPendingDecisions();
+        }
+      } catch {
+        // SSE snapshot will hydrate
+      }
+    }
+  }
+
+  document.addEventListener("astro:page-load", () => {
+    void initCompliancePage();
+  });
+  void initCompliancePage();
+
   // SSE snapshot listener
   window.addEventListener("cockpit:snapshot", ((e: CustomEvent<StreamSnapshot>) => {
     activeTimers = e.detail.timers;
@@ -303,8 +345,10 @@ import {
         });
       }
       renderTimers();
-    } else if (event.type === "rag:retrieval" && ragContainer) {
-      for (const p of event.passages) {
+    } else if (event.type === "rag:retrieval") {
+      const ragContainer = getEl<HTMLDivElement>("rag-citations-container");
+      if (ragContainer) {
+        for (const p of event.passages) {
         const div = document.createElement("div");
         div.className = "bg-slate-900 border border-slate-800 rounded-xl p-4 space-y-3";
         div.innerHTML = `
@@ -337,6 +381,7 @@ import {
           </div>
         `;
         ragContainer.prepend(div);
+        }
       }
     }
   }) as EventListener);

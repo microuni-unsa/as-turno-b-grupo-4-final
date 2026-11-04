@@ -43,6 +43,7 @@ export class RAGService {
   private readonly onRetrieval?: (
     record: RagRetrievalRecord,
   ) => void | Promise<void>;
+  private readonly queryEmbeddingCache = new Map<string, number[]>();
 
   constructor(options: RAGServiceOptions) {
     if (!options.config)
@@ -168,13 +169,24 @@ export class RAGService {
       );
     }
 
-    const embRes = await this.modelProvider.embed({ texts: [userQuery] });
-    const qVec = embRes.vectors[0];
+    let qVec = this.queryEmbeddingCache.get(userQuery);
     if (!qVec) {
-      throw new ModelUnavailableError(
-        MODEL_ROUTE_RAG,
-        "Failed to compute query vector for dense retrieval",
-      );
+      const embRes = await this.modelProvider.embed({ texts: [userQuery] });
+      const computed = embRes.vectors[0];
+      if (!computed) {
+        throw new ModelUnavailableError(
+          MODEL_ROUTE_RAG,
+          "Failed to compute query vector for dense retrieval",
+        );
+      }
+      qVec = computed;
+      if (this.queryEmbeddingCache.size >= 100) {
+        const firstKey = this.queryEmbeddingCache.keys().next().value;
+        if (firstKey !== undefined) {
+          this.queryEmbeddingCache.delete(firstKey);
+        }
+      }
+      this.queryEmbeddingCache.set(userQuery, qVec);
     }
 
     const pgvectorHits = await this.indexer.searchPgvector(qVec, RAG_DENSE_K);

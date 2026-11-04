@@ -27,6 +27,12 @@ import { Lock, LogIn, Shield, User } from "lucide-astro";
         class="hidden p-3 rounded-lg text-xs font-medium bg-rose-950/70 text-rose-300 border border-rose-800/80"
       ></div>
 
+      <!-- Info notice -->
+      <div
+        id="login-notice"
+        class="hidden p-3 rounded-lg text-xs font-medium bg-amber-950/70 text-amber-300 border border-amber-800/80"
+      ></div>
+
       <!-- Login Form -->
       <form id="form-login" class="space-y-4">
         <div class="space-y-1.5">
@@ -93,40 +99,55 @@ import { Lock, LogIn, Shield, User } from "lucide-astro";
   import { login } from "@pims/cockpit/ui/lib/api.ts";
   import { clearSession, getSession, saveSession } from "@pims/cockpit/ui/lib/session.ts";
 
-  // If already logged in, redirect
-  if (getSession()) {
-    window.location.href = "/incidents";
+  function initLoginPage() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const noticeEl = document.getElementById("login-notice");
+    if (urlParams.get("expired") === "1") {
+      clearSession();
+      if (noticeEl) {
+        noticeEl.textContent = "Su sesión previa ha caducado. Ingrese sus credenciales para reanudar el acceso.";
+        noticeEl.classList.remove("hidden");
+      }
+    } else if (getSession()) {
+      window.location.href = "/incidents";
+      return;
+    }
+
+    const form = document.getElementById("form-login") as HTMLFormElement | null;
+    const errorEl = document.getElementById("login-error");
+    const submitBtn = document.getElementById("btn-submit");
+
+    if (form) {
+      form.onsubmit = async (e) => {
+        e.preventDefault();
+        if (errorEl) errorEl.classList.add("hidden");
+        if (submitBtn) {
+          submitBtn.setAttribute("disabled", "true");
+          submitBtn.textContent = "Autenticando...";
+        }
+
+        const username = ((document.getElementById("username") as HTMLInputElement | null)?.value || "").trim();
+        const password = (document.getElementById("password") as HTMLInputElement | null)?.value || "";
+
+        try {
+          const session = await login({ username, password });
+          saveSession(session);
+          window.location.href = "/incidents";
+        } catch (err: unknown) {
+          if (errorEl) {
+            errorEl.textContent = err instanceof Error ? err.message : "Error al autenticar con el servidor PIMS.";
+            errorEl.classList.remove("hidden");
+          }
+        } finally {
+          if (submitBtn) {
+            submitBtn.removeAttribute("disabled");
+            submitBtn.innerHTML = `<span>Acceder a la Consola</span>`;
+          }
+        }
+      };
+    }
   }
 
-  const form = document.getElementById("form-login") as HTMLFormElement;
-  const errorEl = document.getElementById("login-error");
-  const submitBtn = document.getElementById("btn-submit");
-
-  form.addEventListener("submit", async (e) => {
-    e.preventDefault();
-    if (errorEl) errorEl.classList.add("hidden");
-    if (submitBtn) {
-      submitBtn.setAttribute("disabled", "true");
-      submitBtn.textContent = "Autenticando...";
-    }
-
-    const username = (document.getElementById("username") as HTMLInputElement).value.trim();
-    const password = (document.getElementById("password") as HTMLInputElement).value;
-
-    try {
-      const session = await login({ username, password });
-      saveSession(session);
-      window.location.href = "/incidents";
-    } catch (err: any) {
-      if (errorEl) {
-        errorEl.textContent = err.message || "Error al autenticar con el servidor PIMS.";
-        errorEl.classList.remove("hidden");
-      }
-    } finally {
-      if (submitBtn) {
-        submitBtn.removeAttribute("disabled");
-        submitBtn.innerHTML = `<span>Acceder a la Consola</span>`;
-      }
-    }
-  });
+  document.addEventListener("astro:page-load", initLoginPage);
+  initLoginPage();
 </script>

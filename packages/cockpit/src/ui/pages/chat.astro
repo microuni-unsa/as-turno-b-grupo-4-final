@@ -127,102 +127,150 @@ import {
 
 <script>
   import { sendChat } from "@pims/cockpit/ui/lib/api.ts";
+  import { chatStore } from "@pims/cockpit/ui/lib/chat-store.ts";
   import { canSwitchPersona, getSession } from "@pims/cockpit/ui/lib/session.ts";
+  import { sseClient } from "@pims/cockpit/ui/lib/sse-client.ts";
   import type { ChatCitation, ChatPersona, StreamSnapshot } from "@pims/types/cockpit.ts";
 
   const session = getSession();
-  let currentPersona: ChatPersona = session?.default_persona || "auditor";
+  let currentPersona: ChatPersona = chatStore.getPersona() || session?.default_persona || "auditor";
 
-  const personaBtns = document.querySelectorAll(".persona-btn");
-  const messagesContainer = document.getElementById("chat-messages") as HTMLDivElement;
-  const chatForm = document.getElementById("chat-form") as HTMLFormElement;
-  const chatInput = document.getElementById("chat-input") as HTMLTextAreaElement;
-  const chatIncidentContext = document.getElementById("chat-incident-context") as HTMLInputElement;
-  const btnSendChat = document.getElementById("btn-send-chat");
-  const warningBanner = document.getElementById("chat-warning-banner");
-  const warningText = document.getElementById("chat-warning-text");
+  function initChatPage() {
+    const personaBtns = document.querySelectorAll(".persona-btn");
+    const messagesContainer = document.getElementById("chat-messages") as HTMLDivElement | null;
+    const chatForm = document.getElementById("chat-form") as HTMLFormElement | null;
+    const chatInput = document.getElementById("chat-input") as HTMLTextAreaElement | null;
+    const chatIncidentContext = document.getElementById("chat-incident-context") as HTMLInputElement | null;
+    const btnSendChat = document.getElementById("btn-send-chat");
+    const warningBanner = document.getElementById("chat-warning-banner");
+    const warningText = document.getElementById("chat-warning-text");
 
-  // Persona switching logic
-  if (!canSwitchPersona(session)) {
-    personaBtns.forEach((btn) => {
-      const p = btn.getAttribute("data-persona");
-      if (p !== currentPersona) {
-        (btn as HTMLButtonElement).style.display = "none";
+    if (!messagesContainer || !chatForm || !chatInput) return;
+
+    // Restore previous messages from store
+    const stored = chatStore.getMessages();
+    if (stored.length > 0) {
+      messagesContainer.innerHTML = "";
+      for (const m of stored) {
+        appendMessage(m.sender, m.text, m.response?.citations || [], m.response?.tool_calls || [], false);
       }
-    });
-  } else {
-    personaBtns.forEach((btn) => {
-      btn.addEventListener("click", () => {
-        const p = btn.getAttribute("data-persona") as ChatPersona;
-        if (p) {
-          currentPersona = p;
-          personaBtns.forEach((b) => {
-            b.className = "persona-btn px-3 py-1 rounded-lg font-medium transition-colors text-slate-300 hover:text-white hover:bg-slate-800";
-          });
-          btn.className = "persona-btn px-3 py-1 rounded-lg font-medium transition-colors bg-blue-600 text-white";
+    }
+
+    // Persona switching logic
+    if (!canSwitchPersona(session)) {
+      personaBtns.forEach((btn) => {
+        const p = btn.getAttribute("data-persona");
+        if (p !== currentPersona) {
+          (btn as HTMLButtonElement).style.display = "none";
         }
       });
-    });
-  }
-
-  async function handleSendMessage(): Promise<void> {
-    const query = chatInput.value.trim();
-    if (!query) return;
-
-    const incidentCode = chatIncidentContext.value.trim() || undefined;
-    appendMessage("user", query);
-    chatInput.value = "";
-
-    // Show typing placeholder
-    const typingIndicator = document.createElement("div");
-    typingIndicator.id = "typing-indicator";
-    typingIndicator.className = "flex items-center space-x-2 text-xs text-slate-500 italic py-2";
-    typingIndicator.innerHTML = `
-      <div class="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-      <span>El agente está consultando los registros normativos y evidencia...</span>
-    `;
-    messagesContainer.appendChild(typingIndicator);
-    messagesContainer.scrollTop = messagesContainer.scrollHeight;
-
-    try {
-      const response = await sendChat(query, incidentCode, currentPersona);
-      typingIndicator.remove();
-      appendMessage("bot", response.reply, response.citations, response.tool_calls);
-
-      if (response.pending_decisions && response.pending_decisions.length > 0) {
-        if (warningBanner && warningText) {
-          warningText.textContent = `Atención: Hay ${response.pending_decisions.length} decisiones regulatorias pendientes de aprobación humana.`;
-          warningBanner.classList.remove("hidden");
+    } else {
+      personaBtns.forEach((btn) => {
+        const p = btn.getAttribute("data-persona") as ChatPersona;
+        if (p === currentPersona) {
+          btn.className = "persona-btn px-3 py-1 rounded-lg font-medium transition-colors bg-blue-600 text-white";
+        } else {
+          btn.className = "persona-btn px-3 py-1 rounded-lg font-medium transition-colors text-slate-300 hover:text-white hover:bg-slate-800";
         }
+        btn.onclick = () => {
+          if (p) {
+            currentPersona = p;
+            chatStore.setPersona(p);
+            personaBtns.forEach((b) => {
+              b.className = "persona-btn px-3 py-1 rounded-lg font-medium transition-colors text-slate-300 hover:text-white hover:bg-slate-800";
+            });
+            btn.className = "persona-btn px-3 py-1 rounded-lg font-medium transition-colors bg-blue-600 text-white";
+          }
+        };
+      });
+    }
+
+    async function handleSendMessage(): Promise<void> {
+      if (!chatInput || !messagesContainer) return;
+      const query = chatInput.value.trim();
+      if (!query) return;
+
+      const incidentCode = chatIncidentContext?.value.trim() || undefined;
+      appendMessage("user", query, [], [], true);
+      chatInput.value = "";
+
+      // Show typing placeholder
+      const typingIndicator = document.createElement("div");
+      typingIndicator.id = "typing-indicator";
+      typingIndicator.className = "flex items-center space-x-2 text-xs text-slate-500 italic py-2";
+      typingIndicator.innerHTML = `
+        <div class="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+        <span>El agente está consultando los registros normativos y evidencia...</span>
+      `;
+      messagesContainer.appendChild(typingIndicator);
+      messagesContainer.scrollTop = messagesContainer.scrollHeight;
+
+      try {
+        const response = await sendChat(query, incidentCode, currentPersona);
+        typingIndicator.remove();
+        appendMessage("assistant", response.reply, response.citations, response.tool_calls, true, response);
+
+        if (response.pending_decisions && response.pending_decisions.length > 0) {
+          if (warningBanner && warningText) {
+            warningText.textContent = `Atención: Hay ${response.pending_decisions.length} decisiones regulatorias pendientes de aprobación humana.`;
+            warningBanner.classList.remove("hidden");
+          }
+        }
+      } catch (err: unknown) {
+        typingIndicator.remove();
+        const message = err instanceof Error ? err.message : "Error desconocido";
+        appendMessage("assistant", `Error al procesar la consulta: ${message}`, [], [], true, undefined, true);
       }
-    } catch (err: unknown) {
-      typingIndicator.remove();
-      const message = err instanceof Error ? err.message : "Error desconocido";
-      appendMessage("bot", `Error al procesar la consulta: ${message}`);
+    }
+
+    chatInput.onkeydown = (e) => {
+      if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        void handleSendMessage();
+      }
+    };
+
+    if (btnSendChat) {
+      btnSendChat.onclick = (e) => {
+        e.preventDefault();
+        void handleSendMessage();
+      };
+    }
+
+    chatForm.onsubmit = (e) => {
+      e.preventDefault();
+      void handleSendMessage();
+    };
+
+    const snapshot = sseClient.getState().snapshot;
+    if (snapshot?.pending_decisions && snapshot.pending_decisions.length > 0 && warningBanner && warningText) {
+      warningText.textContent = `Atención: Hay ${snapshot.pending_decisions.length} incidentes pendientes de firma DPO en el sistema.`;
+      warningBanner.classList.remove("hidden");
     }
   }
 
-  // Handle Enter to submit
-  chatInput.addEventListener("keydown", (e) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      void handleSendMessage();
+  function appendMessage(
+    sender: "user" | "assistant",
+    text: string,
+    citations: ChatCitation[] = [],
+    tools: string[] = [],
+    persist = true,
+    response?: any,
+    error?: boolean,
+  ) {
+    const messagesContainer = document.getElementById("chat-messages");
+    if (!messagesContainer) return;
+
+    if (persist) {
+      chatStore.addMessage({
+        sender,
+        text,
+        persona: currentPersona,
+        response,
+        error,
+      });
     }
-  });
 
-  if (btnSendChat) {
-    btnSendChat.addEventListener("click", (e) => {
-      e.preventDefault();
-      void handleSendMessage();
-    });
-  }
-
-  chatForm.addEventListener("submit", (e) => {
-    e.preventDefault();
-    void handleSendMessage();
-  });
-
-  function appendMessage(sender: "user" | "bot", text: string, citations: ChatCitation[] = [], tools: string[] = []) {
     const msgDiv = document.createElement("div");
     msgDiv.className = `flex items-start space-x-3 ${sender === "user" ? "justify-end" : ""}`;
 
@@ -298,11 +346,14 @@ import {
     messagesContainer.scrollTop = messagesContainer.scrollHeight;
   }
 
-
+  document.addEventListener("astro:page-load", initChatPage);
+  initChatPage();
 
   // Listen for SSE snapshot to show pending warnings
   window.addEventListener("cockpit:snapshot", ((e: CustomEvent<StreamSnapshot>) => {
     const pendings = e.detail.pending_decisions;
+    const warningBanner = document.getElementById("chat-warning-banner");
+    const warningText = document.getElementById("chat-warning-text");
     if (pendings && pendings.length > 0 && warningBanner && warningText) {
       warningText.textContent = `Atención: Hay ${pendings.length} incidentes pendientes de firma DPO en el sistema.`;
       warningBanner.classList.remove("hidden");

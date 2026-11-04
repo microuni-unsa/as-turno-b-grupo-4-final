@@ -1,0 +1,58 @@
+---
+import { LogIn, ShieldAlert } from "lucide-astro";
+---
+
+<div
+  id="session-expired-modal"
+  class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4 animate-in fade-in duration-200"
+  role="dialog"
+  aria-modal="true"
+  aria-labelledby="session-expired-title"
+>
+  <div class="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl p-6 text-center space-y-4">
+    <div class="w-14 h-14 rounded-2xl bg-amber-950/80 border border-amber-800/80 text-amber-400 flex items-center justify-center mx-auto shadow-inner">
+      <ShieldAlert class="w-7 h-7" />
+    </div>
+
+    <div class="space-y-1.5">
+      <h3 id="session-expired-title" class="text-lg font-bold text-white tracking-tight">
+        Sesión Expirada
+      </h3>
+      <p id="session-expired-message" class="text-xs text-slate-400 leading-relaxed">
+        Su sesión de acceso con PIMS ha expirado o se ha revocado en el servidor. Debe identificarse nuevamente para continuar operando en el Cockpit.
+      </p>
+    </div>
+
+    <div class="pt-2">
+      <button
+        id="btn-re-login"
+        type="button"
+        class="w-full py-2.5 px-4 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold shadow-md shadow-blue-600/30 transition-all flex items-center justify-center space-x-2"
+      >
+        <LogIn class="w-4 h-4" />
+        <span>Iniciar Sesión Nuevamente</span>
+      </button>
+    </div>
+  </div>
+</div>
+
+<script>
+  const modal = document.getElementById("session-expired-modal");
+  const btnLogin = document.getElementById("btn-re-login");
+
+  function showExpiredModal(reason?: string) {
+    if (!modal) return;
+    modal.classList.remove("hidden");
+    modal.classList.add("flex");
+  }
+
+  window.addEventListener("cockpit:session-expired", ((e: CustomEvent) => {
+    showExpiredModal(e.detail?.reason);
+  }) as EventListener);
+
+  if (btnLogin) {
+    btnLogin.addEventListener("click", () => {
+      window.location.href = "/login?expired=1";
+    });
+  }
+</script>

@@ -13,7 +13,7 @@ const { breadcrumb } = Astro.props;
   <div class="flex items-center space-x-2 text-xs font-medium text-slate-400">
     <span class="text-slate-500">Módulo Activo</span>
     <span class="text-slate-600">/</span>
-    <span class="text-slate-200 font-semibold">{breadcrumb}</span>
+    <span id="header-breadcrumb-label" class="text-slate-200 font-semibold">{breadcrumb}</span>
   </div>
 
   <!-- Right status indicators -->
@@ -51,13 +51,10 @@ const { breadcrumb } = Astro.props;
   import { sseClient } from "@pims/cockpit/ui/lib/sse-client.ts";
   import { formatRemainingTime } from "@pims/cockpit/ui/lib/utils.ts";
 
-  const statusBadge = document.getElementById("sse-status-badge");
-  const pulseDot = document.getElementById("sse-pulse-dot");
-  const statusText = document.getElementById("sse-status-text");
-  const urgentTimer = document.getElementById("header-urgent-timer");
-  const urgentLabel = document.getElementById("header-urgent-label");
-
   function updateStatus(status: string) {
+    const statusBadge = document.getElementById("sse-status-badge");
+    const pulseDot = document.getElementById("sse-pulse-dot");
+    const statusText = document.getElementById("sse-status-text");
     if (!statusBadge || !pulseDot || !statusText) return;
     if (status === "connected") {
       pulseDot.className = "w-2 h-2 rounded-full bg-emerald-400 animate-pulse";
@@ -81,8 +78,14 @@ const { breadcrumb } = Astro.props;
   // Listen to timer ticks
   window.addEventListener("cockpit:agent-event", ((e: CustomEvent) => {
     const event = e.detail;
+    const urgentTimer = document.getElementById("header-urgent-timer");
+    const urgentLabel = document.getElementById("header-urgent-label");
     if (event.type === "scheduler:timer_tick" && urgentTimer && urgentLabel) {
-      if (event.timer_kind === "T_AUTHORITY_72H" && event.remaining_ms < 12 * 3600 * 1000) {
+      if (
+        (event.timer_kind === "T_AUTHORITY_72H" ||
+          event.timer_kind === "T72_AUTHORITY") &&
+        event.remaining_ms < 12 * 3600 * 1000
+      ) {
         urgentTimer.classList.remove("hidden");
         urgentTimer.classList.add("flex");
         urgentLabel.textContent = `Art. 33: ${formatRemainingTime(event.remaining_ms)}`;
@@ -90,6 +93,18 @@ const { breadcrumb } = Astro.props;
     }
   }) as EventListener);
 
-  // Initialize
-  updateStatus(sseClient.getState().status);
+  function syncHeaderOnPageLoad() {
+    updateStatus(sseClient.getState().status);
+    const path = window.location.pathname;
+    const breadcrumbLabel = document.getElementById("header-breadcrumb-label");
+    if (breadcrumbLabel) {
+      if (path.startsWith("/incidents")) breadcrumbLabel.textContent = "Incidentes";
+      else if (path.startsWith("/compliance")) breadcrumbLabel.textContent = "Cumplimiento DPO";
+      else if (path.startsWith("/security-log")) breadcrumbLabel.textContent = "Bitácora de Seguridad";
+      else if (path.startsWith("/chat")) breadcrumbLabel.textContent = "Asistente IA";
+    }
+  }
+
+  document.addEventListener("astro:page-load", syncHeaderOnPageLoad);
+  syncHeaderOnPageLoad();
 </script>

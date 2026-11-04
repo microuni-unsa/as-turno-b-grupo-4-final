@@ -1,4 +1,7 @@
-import { getSession } from "@pims/cockpit/ui/lib/session.ts";
+import {
+  getSession,
+  notifySessionExpired,
+} from "@pims/cockpit/ui/lib/session.ts";
 import type {
   ApproveResponse,
   ChatPersona,
@@ -11,13 +14,53 @@ import type {
   RevisionRequest,
 } from "@pims/types/cockpit.ts";
 
-function getAuthHeader(): Record<string, string> {
+export class SessionExpiredError extends Error {
+  constructor(message = "La sesión ha expirado o no es válida") {
+    super(message);
+    this.name = "SessionExpiredError";
+  }
+}
+
+export async function authenticatedFetch(
+  path: string,
+  init: RequestInit = {},
+): Promise<Response> {
   const session = getSession();
   if (session === null || session.access_token === "") {
-    return {};
+    notifySessionExpired("NO_SESSION");
+    throw new SessionExpiredError("No hay sesión activa");
   }
-  return {
-    Authorization: `Bearer ${session.access_token}`,
+
+  const headers = new Headers(init.headers);
+  headers.set("Authorization", `Bearer ${session.access_token}`);
+
+  const response = await fetch(path, {
+    ...init,
+    headers,
+  });
+
+  if (response.status === 401) {
+    notifySessionExpired("UNAUTHORIZED_RESPONSE");
+    throw new SessionExpiredError("Sesión expirada o no autorizada");
+  }
+
+  return response;
+}
+
+export async function checkSession(): Promise<
+  CockpitSession & { remaining_seconds: number }
+> {
+  const response = await authenticatedFetch("/api/session", {
+    method: "GET",
+    headers: {
+      Accept: "application/json",
+    },
+  });
+  if (!response.ok) {
+    throw new Error(`Error al verificar sesión (${response.status})`);
+  }
+  return (await response.json()) as CockpitSession & {
+    remaining_seconds: number;
   };
 }
 
@@ -45,13 +88,15 @@ export async function login(
 export async function approveIncident(
   incidentId: number,
 ): Promise<ApproveResponse> {
-  const response = await fetch(`/api/incidents/${incidentId}/approve`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      ...getAuthHeader(),
+  const response = await authenticatedFetch(
+    `/api/incidents/${incidentId}/approve`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
     },
-  });
+  );
   if (!response.ok) {
     const err = (await response.json().catch(() => ({}))) as {
       message?: string;
@@ -67,14 +112,16 @@ export async function requestRevision(
   incidentId: number,
   payload: RevisionRequest,
 ): Promise<{ ok: boolean }> {
-  const response = await fetch(`/api/incidents/${incidentId}/revision`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      ...getAuthHeader(),
+  const response = await authenticatedFetch(
+    `/api/incidents/${incidentId}/revision`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
     },
-    body: JSON.stringify(payload),
-  });
+  );
   if (!response.ok) {
     const err = (await response.json().catch(() => ({}))) as {
       message?: string;
@@ -90,14 +137,16 @@ export async function attestExemption(
   incidentId: number,
   payload: ExemptionAttestationRequest,
 ): Promise<ExemptionAttestationResponse> {
-  const response = await fetch(`/api/incidents/${incidentId}/exemption`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      ...getAuthHeader(),
+  const response = await authenticatedFetch(
+    `/api/incidents/${incidentId}/exemption`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
     },
-    body: JSON.stringify(payload),
-  });
+  );
   if (!response.ok) {
     const err = (await response.json().catch(() => ({}))) as {
       message?: string;
@@ -119,11 +168,10 @@ export async function sendChat(
     incident_code: incidentCode,
     persona,
   };
-  const response = await fetch("/api/chat", {
+  const response = await authenticatedFetch("/api/chat", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      ...getAuthHeader(),
     },
     body: JSON.stringify(body),
   });

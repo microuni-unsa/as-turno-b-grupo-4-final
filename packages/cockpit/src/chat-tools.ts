@@ -90,22 +90,55 @@ export async function listActiveIncidents(
   return summaries;
 }
 
+let incidentCache: { data: CockpitIncidentSummary[]; at: number } | null = null;
+const INCIDENT_CACHE_TTL_MS = 5000;
+
+export function invalidateIncidentCache(): void {
+  incidentCache = null;
+}
+
 export async function listAllIncidents(
   adapter: PimsAdapter,
 ): Promise<CockpitIncidentSummary[]> {
+  const now = Date.now();
+  if (
+    incidentCache !== null &&
+    now - incidentCache.at < INCIDENT_CACHE_TTL_MS
+  ) {
+    return [...incidentCache.data];
+  }
   const summaries: CockpitIncidentSummary[] = [];
+  const seenIds = new Set<number>();
   let page = 1;
-  while (true) {
-    const res = await adapter.listIncidents({ page, page_size: 100 });
-    for (const incident of res.results) {
-      summaries.push(summarizeIncident(incident));
+  const MAX_PAGES = 50;
+
+  while (page <= MAX_PAGES) {
+    let res: { results: PimsIncident[]; next: string | null };
+    try {
+      res = await adapter.listIncidents({ page, page_size: 100 });
+    } catch (err) {
+      // If page > 1 and PIMS returned 404/invalid page, pagination is exhausted
+      if (page > 1) {
+        break;
+      }
+      throw err;
     }
-    if (res.next === null || res.results.length === 0) {
+    let addedCount = 0;
+    for (const incident of res.results) {
+      if (!seenIds.has(incident.id)) {
+        seenIds.add(incident.id);
+        summaries.push(summarizeIncident(incident));
+        addedCount += 1;
+      }
+    }
+    if (res.next === null || res.results.length === 0 || addedCount === 0) {
       break;
     }
     page += 1;
   }
-  return summaries.sort((a, b) => b.id - a.id);
+  const sorted = summaries.sort((a, b) => b.id - a.id);
+  incidentCache = { data: sorted, at: now };
+  return [...sorted];
 }
 
 export async function getRegulatoryTimers(
@@ -202,33 +235,63 @@ export async function checkPendingDecisions(
   adapter: PimsAdapter,
   store: EvidenceStore,
   session: CockpitSession,
+  activeIncidentList?: Array<{
+    id: number;
+    incident_code: string;
+    status: string;
+  }>,
 ): Promise<PendingDecision[]> {
   const actionable = session.permissions.includes("change_incident");
+  const candidates: Array<{
+    id: number;
+    incident_code: string;
+    status: string;
+  }> = [];
+
+  if (activeIncidentList !== undefined) {
+    for (const inc of activeIncidentList) {
+      if (inc.status === "O" || inc.status === "P") {
+        candidates.push(inc);
+      }
+    }
+  } else {
+    for (const status of ["O", "P"] as const) {
+      const page = await adapter.listIncidents({ status });
+      for (const incident of page.results) {
+        if (incident.status === status) {
+          candidates.push(incident);
+        }
+      }
+    }
+  }
+
   const decisions: PendingDecision[] = [];
 
-  for (const status of ["O", "P"] as const) {
-    const page = await adapter.listIncidents({ status });
-    for (const incident of page.results) {
-      if (incident.status !== status) {
-        continue;
-      }
+  const checks = await Promise.all(
+    candidates.map(async (incident) => {
       const state = await loadWatcherState(store, incident.incident_code);
       if (state === null) {
-        continue;
+        return null;
       }
 
       if (state.blocked_reason === "NOTIFY_NO_RECIPIENTS") {
-        decisions.push({
-          incident_id: incident.id,
-          incident_code: incident.incident_code,
-          kind: "recipient_required",
-          pack_type: null,
-          approval_id: null,
-          blocked_reason: state.blocked_reason,
-          actionable,
-        });
-        continue;
+        return [
+          {
+            incident_id: incident.id,
+            incident_code: incident.incident_code,
+            kind: "recipient_required" as const,
+            pack_type: null,
+            approval_id: null,
+            blocked_reason: state.blocked_reason,
+            actionable,
+          },
+        ];
       }
+
+      const [authRow, subjRow] = await Promise.all([
+        store.getDraftPack(incident.incident_code, "authority"),
+        store.getDraftPack(incident.incident_code, "subject"),
+      ]);
 
       const draftPacks: Array<{
         pack_type: "authority" | "subject";
@@ -236,8 +299,11 @@ export async function checkPendingDecisions(
         approval_id: string | null;
         state: string;
       }> = [];
-      for (const packType of ["authority", "subject"] as const) {
-        const row = await store.getDraftPack(incident.incident_code, packType);
+
+      for (const [packType, row] of [
+        ["authority", authRow] as const,
+        ["subject", subjRow] as const,
+      ]) {
         if (row !== null) {
           draftPacks.push({
             pack_type: packType,
@@ -256,46 +322,52 @@ export async function checkPendingDecisions(
       }
 
       if (draftPacks.some((pack) => pack.state === "draft")) {
-        decisions.push({
-          incident_id: incident.id,
-          incident_code: incident.incident_code,
-          kind: "revision_required",
-          pack_type: null,
-          approval_id: null,
-          blocked_reason: null,
-          actionable,
-        });
-        continue;
+        return [
+          {
+            incident_id: incident.id,
+            incident_code: incident.incident_code,
+            kind: "revision_required" as const,
+            pack_type: null,
+            approval_id: null,
+            blocked_reason: null,
+            actionable,
+          },
+        ];
       }
 
       if (state.stage !== "awaiting_approval") {
-        continue;
+        return null;
       }
 
       const approved = draftPacks.filter((pack) => pack.state === "approved");
       if (approved.length === 0) {
-        decisions.push({
-          incident_id: incident.id,
-          incident_code: incident.incident_code,
-          kind: "notice_approval",
-          pack_type: null,
-          approval_id: null,
-          blocked_reason: null,
-          actionable,
-        });
-        continue;
+        return [
+          {
+            incident_id: incident.id,
+            incident_code: incident.incident_code,
+            kind: "notice_approval" as const,
+            pack_type: null,
+            approval_id: null,
+            blocked_reason: null,
+            actionable,
+          },
+        ];
       }
-      for (const pack of approved) {
-        decisions.push({
-          incident_id: incident.id,
-          incident_code: incident.incident_code,
-          kind: "notice_approval",
-          pack_type: pack.pack_type,
-          approval_id: pack.approval_id,
-          blocked_reason: null,
-          actionable,
-        });
-      }
+      return approved.map((pack) => ({
+        incident_id: incident.id,
+        incident_code: incident.incident_code,
+        kind: "notice_approval" as const,
+        pack_type: pack.pack_type,
+        approval_id: pack.approval_id,
+        blocked_reason: null,
+        actionable,
+      }));
+    }),
+  );
+
+  for (const item of checks) {
+    if (item !== null) {
+      decisions.push(...item);
     }
   }
 

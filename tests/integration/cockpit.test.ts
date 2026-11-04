@@ -164,6 +164,25 @@ describe("Cockpit backend", { timeout: 240_000 }, () => {
     expect(session.expires_at_utc.length).toBeGreaterThan(0);
   });
 
+  it("validates session and returns remaining seconds over /api/session", async () => {
+    const session = await login();
+    const response = await app.request("/api/session", {
+      headers: { Authorization: `Bearer ${session.access_token}` },
+    });
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as {
+      username: string;
+      native_role: string;
+      remaining_seconds: number;
+    };
+    expect(body.username).toBe(session.username);
+    expect(body.native_role).toBe(session.native_role);
+    expect(body.remaining_seconds).toBeGreaterThan(0);
+
+    const unauth = await app.request("/api/session");
+    expect(unauth.status).toBe(401);
+  });
+
   it("streams a snapshot and live agent events over SSE", async () => {
     const session = await login();
     const controller = new AbortController();
@@ -213,6 +232,20 @@ describe("Cockpit backend", { timeout: 240_000 }, () => {
     expect(text).toContain('"type":"tool:mutation"');
     controller.abort();
     await reader.cancel();
+  });
+
+  it("fetches compliance timers and pending decisions over /api/compliance", async () => {
+    const session = await login();
+    const response = await app.request("/api/compliance", {
+      headers: { Authorization: `Bearer ${session.access_token}` },
+    });
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as {
+      timers: unknown[];
+      pending_decisions: unknown[];
+    };
+    expect(Array.isArray(body.timers)).toBe(true);
+    expect(Array.isArray(body.pending_decisions)).toBe(true);
   });
 
   it("approves drafted notices through the cockpit endpoint", async () => {

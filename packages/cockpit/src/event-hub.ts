@@ -2,12 +2,19 @@ import type { AgentEventEmitter } from "@pims/agent/events/agent-events.ts";
 import {
   checkPendingDecisions,
   getRegulatoryTimers,
+  invalidateIncidentCache,
   listAllIncidents,
 } from "@pims/cockpit/chat-tools.ts";
 import type { EvidenceStore } from "@pims/evidence/evidence-store.ts";
 import type { PimsAdapter } from "@pims/pims-adapter";
 import type { AgentEvent } from "@pims/types/agent.ts";
-import type { CockpitSession, StreamSnapshot } from "@pims/types/cockpit.ts";
+import type {
+  CockpitIncidentSummary,
+  CockpitSession,
+  CockpitTimer,
+  PendingDecision,
+  StreamSnapshot,
+} from "@pims/types/cockpit.ts";
 
 export interface CockpitHubSubscriber {
   session: CockpitSession;
@@ -63,6 +70,12 @@ export class CockpitEventHub {
   }
 
   broadcast(event: AgentEvent): void {
+    if (
+      event.type === "tool:mutation" ||
+      event.type === "lifecycle:status_change"
+    ) {
+      invalidateIncidentCache();
+    }
     for (const subscriber of this.subscribers) {
       if (!canReceiveEvent(subscriber.session, event)) {
         continue;
@@ -83,9 +96,32 @@ export async function buildSnapshot(
   clock: () => Date,
   session: CockpitSession,
 ): Promise<StreamSnapshot> {
-  const incidents = await listAllIncidents(adapter);
-  const timers = await getRegulatoryTimers(store, clock);
-  const pendingDecisions = await checkPendingDecisions(adapter, store, session);
+  let incidents: CockpitIncidentSummary[] = [];
+  try {
+    incidents = await listAllIncidents(adapter);
+  } catch (error) {
+    console.error("BUILD_SNAPSHOT_INCIDENTS_ERROR:", error);
+  }
+
+  let timers: CockpitTimer[] = [];
+  try {
+    timers = await getRegulatoryTimers(store, clock);
+  } catch (error) {
+    console.error("BUILD_SNAPSHOT_TIMERS_ERROR:", error);
+  }
+
+  let pendingDecisions: PendingDecision[] = [];
+  try {
+    pendingDecisions = await checkPendingDecisions(
+      adapter,
+      store,
+      session,
+      incidents,
+    );
+  } catch (error) {
+    console.error("BUILD_SNAPSHOT_PENDING_DECISIONS_ERROR:", error);
+  }
+
   return {
     incidents,
     timers,

@@ -224,6 +224,8 @@ import { AlertCircle, AlertTriangle, ArrowRight, CheckCircle2, Clock, Eye, Filte
 </AppLayout>
 
 <script>
+  import { authenticatedFetch } from "@pims/cockpit/ui/lib/api.ts";
+  import { sseClient } from "@pims/cockpit/ui/lib/sse-client.ts";
   import type { CockpitIncidentSummary, StreamSnapshot } from "@pims/types/cockpit.ts";
   import {
     formatDateTime,
@@ -237,33 +239,18 @@ import { AlertCircle, AlertTriangle, ArrowRight, CheckCircle2, Clock, Eye, Filte
   let allIncidents: CockpitIncidentSummary[] = [];
   let selectedIncident: CockpitIncidentSummary | null = null;
 
-  const tbody = document.getElementById("incidents-tbody") as HTMLTableSectionElement;
-  const searchInput = document.getElementById("search-input") as HTMLInputElement;
-  const filterStatus = document.getElementById("filter-status") as HTMLSelectElement;
-  const filterSeverity = document.getElementById("filter-severity") as HTMLSelectElement;
-  const footerCount = document.getElementById("footer-count");
-
-  // Metrics elements
-  const statTotal = document.getElementById("stat-total");
-  const statOpen = document.getElementById("stat-open");
-  const statInProgress = document.getElementById("stat-in-progress");
-  const statClosed = document.getElementById("stat-closed");
-  const statCritical = document.getElementById("stat-critical");
-
-  // Drawer elements
-  const drawer = document.getElementById("detail-drawer");
-  const drawerCode = document.getElementById("drawer-code");
-  const drawerTitle = document.getElementById("drawer-title");
-  const drawerStatus = document.getElementById("drawer-status-badge");
-  const drawerSeverity = document.getElementById("drawer-severity");
-  const drawerImpact = document.getElementById("drawer-impact");
-  const drawerType = document.getElementById("drawer-type");
-  const drawerDate = document.getElementById("drawer-date");
-  const btnCloseDrawer = document.getElementById("btn-close-drawer");
-  const btnCompliance = document.getElementById("drawer-btn-compliance");
+  function getEl<T extends HTMLElement>(id: string): T | null {
+    return document.getElementById(id) as T | null;
+  }
 
   function renderTable() {
+    const tbody = getEl<HTMLTableSectionElement>("incidents-tbody");
     if (!tbody) return;
+    const searchInput = getEl<HTMLInputElement>("search-input");
+    const filterStatus = getEl<HTMLSelectElement>("filter-status");
+    const filterSeverity = getEl<HTMLSelectElement>("filter-severity");
+    const footerCount = getEl("footer-count");
+
     const query = (searchInput?.value || "").toLowerCase().trim();
     const statusVal = filterStatus?.value || "ALL";
     const severityVal = filterSeverity?.value || "ALL";
@@ -338,6 +325,12 @@ import { AlertCircle, AlertTriangle, ArrowRight, CheckCircle2, Clock, Eye, Filte
   }
 
   function updateMetrics() {
+    const statTotal = getEl("stat-total");
+    const statOpen = getEl("stat-open");
+    const statInProgress = getEl("stat-in-progress");
+    const statClosed = getEl("stat-closed");
+    const statCritical = getEl("stat-critical");
+
     if (!statTotal) return;
     const total = allIncidents.length;
     const open = allIncidents.filter((x) => x.status === "O").length;
@@ -356,6 +349,15 @@ import { AlertCircle, AlertTriangle, ArrowRight, CheckCircle2, Clock, Eye, Filte
 
   function openDrawer(inc: CockpitIncidentSummary) {
     selectedIncident = inc;
+    const drawer = getEl("detail-drawer");
+    const drawerCode = getEl("drawer-code");
+    const drawerTitle = getEl("drawer-title");
+    const drawerStatus = getEl("drawer-status-badge");
+    const drawerSeverity = getEl("drawer-severity");
+    const drawerImpact = getEl("drawer-impact");
+    const drawerType = getEl("drawer-type");
+    const drawerDate = getEl("drawer-date");
+
     if (!drawer) return;
     if (drawerCode) drawerCode.textContent = inc.incident_code;
     if (drawerTitle) drawerTitle.textContent = inc.title;
@@ -372,27 +374,77 @@ import { AlertCircle, AlertTriangle, ArrowRight, CheckCircle2, Clock, Eye, Filte
   }
 
   function closeDrawer() {
+    const drawer = getEl("detail-drawer");
     if (drawer) drawer.classList.add("translate-x-full");
     selectedIncident = null;
   }
 
-  if (btnCloseDrawer) btnCloseDrawer.addEventListener("click", closeDrawer);
-  if (btnCompliance) {
-    btnCompliance.addEventListener("click", () => {
-      window.location.href = "/compliance";
-    });
+  async function initIncidentsPage() {
+    const existingSnapshot = sseClient.getState().snapshot;
+    if (existingSnapshot && existingSnapshot.incidents) {
+      allIncidents = existingSnapshot.incidents;
+      updateMetrics();
+      renderTable();
+    } else {
+      try {
+        const response = await authenticatedFetch("/api/incidents");
+        if (response.ok) {
+          const data = (await response.json()) as { incidents: CockpitIncidentSummary[] };
+          if (allIncidents.length === 0 && Array.isArray(data.incidents)) {
+            allIncidents = data.incidents;
+            updateMetrics();
+            renderTable();
+          }
+        }
+      } catch {
+        // SSE snapshot will hydrate
+      }
+    }
+
+    const drawerCloseBtn = getEl("btn-close-drawer");
+    if (drawerCloseBtn) drawerCloseBtn.onclick = closeDrawer;
+
+    const complianceBtn = getEl("drawer-btn-compliance");
+    if (complianceBtn) {
+      complianceBtn.onclick = () => {
+        window.location.href = "/compliance";
+      };
+    }
+
+    const sInput = getEl<HTMLInputElement>("search-input");
+    const fStatus = getEl<HTMLSelectElement>("filter-status");
+    const fSeverity = getEl<HTMLSelectElement>("filter-severity");
+    if (sInput) sInput.oninput = renderTable;
+    if (fStatus) fStatus.onchange = renderTable;
+    if (fSeverity) fSeverity.onchange = renderTable;
+
+    const btnRefresh = getEl("btn-refresh-list");
+    if (btnRefresh) {
+      btnRefresh.onclick = async () => {
+        try {
+          const response = await authenticatedFetch("/api/incidents");
+          if (response.ok) {
+            const data = (await response.json()) as { incidents: CockpitIncidentSummary[] };
+            allIncidents = data.incidents;
+            updateMetrics();
+            renderTable();
+          }
+        } catch {
+          const snap = sseClient.getState().snapshot;
+          if (snap) {
+            allIncidents = snap.incidents;
+            updateMetrics();
+            renderTable();
+          }
+        }
+      };
+    }
   }
 
-  if (searchInput) searchInput.addEventListener("input", renderTable);
-  if (filterStatus) filterStatus.addEventListener("change", renderTable);
-  if (filterSeverity) filterSeverity.addEventListener("change", renderTable);
-
-  const btnRefresh = document.getElementById("btn-refresh-list");
-  if (btnRefresh) {
-    btnRefresh.addEventListener("click", () => {
-      window.location.reload();
-    });
-  }
+  document.addEventListener("astro:page-load", () => {
+    void initIncidentsPage();
+  });
+  void initIncidentsPage();
 
   // Handle SSE Snapshot
   window.addEventListener("cockpit:snapshot", ((e: CustomEvent<StreamSnapshot>) => {

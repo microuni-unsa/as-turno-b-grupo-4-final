@@ -1,12 +1,52 @@
 import type { CockpitPermission, CockpitSession } from "@pims/types/cockpit.ts";
 
 const SESSION_STORAGE_KEY = "pims_cockpit_session";
+let watchdogTimer: ReturnType<typeof setTimeout> | null = null;
+
+export function notifySessionExpired(reason = "SESSION_EXPIRED"): void {
+  clearSession();
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(
+      new CustomEvent("cockpit:session-expired", {
+        detail: { reason },
+      }),
+    );
+  }
+}
+
+export function startSessionWatchdog(): void {
+  stopSessionWatchdog();
+  if (typeof window === "undefined") {
+    return;
+  }
+  const session = getSession();
+  if (!session) {
+    return;
+  }
+  const expiresAt = new Date(session.expires_at_utc).getTime();
+  const msRemaining = expiresAt - Date.now();
+  if (msRemaining <= 0) {
+    notifySessionExpired("TOKEN_EXPIRED");
+    return;
+  }
+  watchdogTimer = setTimeout(() => {
+    notifySessionExpired("TOKEN_EXPIRED");
+  }, msRemaining);
+}
+
+export function stopSessionWatchdog(): void {
+  if (watchdogTimer !== null) {
+    clearTimeout(watchdogTimer);
+    watchdogTimer = null;
+  }
+}
 
 export function saveSession(session: CockpitSession): void {
   if (typeof window === "undefined") {
     return;
   }
   window.localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(session));
+  startSessionWatchdog();
 }
 
 export function getSession(): CockpitSession | null {
@@ -32,6 +72,7 @@ export function getSession(): CockpitSession | null {
 }
 
 export function clearSession(): void {
+  stopSessionWatchdog();
   if (typeof window === "undefined") {
     return;
   }

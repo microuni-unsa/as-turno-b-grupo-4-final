@@ -134,31 +134,56 @@ const navItems = [
 <script>
   import { clearSession, getSession, hasPermission } from "@pims/cockpit/ui/lib/session.ts";
 
-  const session = getSession();
-  if (session) {
-    const avatar = document.getElementById("user-avatar");
-    const nameEl = document.getElementById("user-name");
-    const roleBadge = document.getElementById("user-role-badge");
+  function syncSidebar() {
+    const session = getSession();
+    if (session) {
+      const avatar = document.getElementById("user-avatar");
+      const nameEl = document.getElementById("user-name");
+      const roleBadge = document.getElementById("user-role-badge");
 
-    if (avatar) avatar.textContent = session.username.charAt(0).toUpperCase();
-    if (nameEl) nameEl.textContent = session.username;
-    if (roleBadge) roleBadge.textContent = session.native_role;
+      if (avatar) avatar.textContent = session.username.charAt(0).toUpperCase();
+      if (nameEl) nameEl.textContent = session.username;
+      if (roleBadge) roleBadge.textContent = session.native_role;
 
-    // Filter nav items based on permissions
-    const navLinks = document.querySelectorAll("#cockpit-nav a[data-permission]");
-    for (const link of navLinks) {
-      const permission = link.getAttribute("data-permission") as any;
-      if (permission && !hasPermission(session, permission)) {
-        (link as HTMLElement).style.display = "none";
+      // Filter nav items based on permissions
+      const navLinks = document.querySelectorAll("#cockpit-nav a[data-permission]");
+      for (const link of navLinks) {
+        const permission = link.getAttribute("data-permission") as any;
+        if (permission && !hasPermission(session, permission)) {
+          (link as HTMLElement).style.display = "none";
+        }
       }
+    }
+
+    // Update active state based on current location
+    const currentPath = window.location.pathname;
+    const links = document.querySelectorAll("#cockpit-nav a");
+    links.forEach((link) => {
+      const href = link.getAttribute("href");
+      const isActive =
+        currentPath === href ||
+        (href !== "/" && href !== null && currentPath.startsWith(href));
+      const icon = link.querySelector("svg");
+
+      if (isActive) {
+        link.className =
+          "w-full flex items-center space-x-3 rounded-lg text-sm font-medium transition-all duration-150 px-3 py-2.5 bg-blue-600 text-white shadow-sm shadow-blue-600/30";
+        if (icon) icon.className = "w-4 h-4 shrink-0 text-white";
+      } else {
+        link.className =
+          "w-full flex items-center space-x-3 rounded-lg text-sm font-medium transition-all duration-150 px-3 py-2.5 text-slate-300 hover:bg-slate-800/70 hover:text-white";
+        if (icon) icon.className = "w-4 h-4 shrink-0 text-slate-400";
+      }
+    });
+    const logoutBtn = document.getElementById("btn-logout");
+    if (logoutBtn) {
+      logoutBtn.onclick = () => {
+        clearSession();
+        window.location.href = "/login";
+      };
     }
   }
 
-  const logoutBtn = document.getElementById("btn-logout");
-  if (logoutBtn) {
-    logoutBtn.addEventListener("click", () => {
-      clearSession();
-      window.location.href = "/login";
-    });
-  }
+  document.addEventListener("astro:page-load", syncSidebar);
+  syncSidebar();
 </script>

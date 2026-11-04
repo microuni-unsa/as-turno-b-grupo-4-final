@@ -6,7 +6,11 @@ import {
   type SessionRegistry,
 } from "@pims/cockpit/auth.ts";
 import { handleChat } from "@pims/cockpit/chat.ts";
-import { listAllIncidents } from "@pims/cockpit/chat-tools.ts";
+import {
+  checkPendingDecisions,
+  getRegulatoryTimers,
+  listAllIncidents,
+} from "@pims/cockpit/chat-tools.ts";
 import { buildSnapshot, CockpitEventHub } from "@pims/cockpit/event-hub.ts";
 import type { AgentConfig } from "@pims/config";
 import type { EvidenceStore } from "@pims/evidence/evidence-store.ts";
@@ -20,6 +24,7 @@ import {
   ExemptionAttestationRequestSchema,
   type ExemptionAttestationResponse,
   RevisionRequestSchema,
+  type StreamSnapshot,
 } from "@pims/types/cockpit.ts";
 import {
   CitationFabricatedError,
@@ -53,7 +58,7 @@ import { streamSSE } from "hono/streaming";
 import { ZodError } from "zod";
 
 const READINESS_CACHE_TTL_MS = 10_000;
-const SSE_HEARTBEAT_MS = 15_000;
+const SSE_HEARTBEAT_MS = 5000;
 
 export interface CockpitAppDeps {
   config: AgentConfig;
@@ -203,11 +208,41 @@ export function createCockpitApp(deps: CockpitAppDeps): Hono<CockpitEnv> {
     await next();
   });
 
+  app.get("/api/session", (c) => {
+    const session = c.get("session");
+    const expiresAtMs = new Date(session.expires_at_utc).getTime();
+    const remainingSeconds = Math.max(
+      0,
+      Math.floor((expiresAtMs - clock().getTime()) / 1000),
+    );
+    return c.json({
+      user_id: session.user_id,
+      username: session.username,
+      schema: session.schema,
+      native_role: session.native_role,
+      permissions: session.permissions,
+      default_persona: session.default_persona,
+      can_switch_persona: session.can_switch_persona,
+      expires_at_utc: session.expires_at_utc,
+      remaining_seconds: remainingSeconds,
+    });
+  });
+
   app.get("/api/incidents", async (c) => {
     const session = c.get("session");
     requirePermission(session, "view_incident");
     const incidents = await listAllIncidents(deps.adapter);
     return c.json({ incidents });
+  });
+
+  app.get("/api/compliance", async (c) => {
+    const session = c.get("session");
+    requirePermission(session, "view_incident");
+    const [timers, pendingDecisions] = await Promise.all([
+      getRegulatoryTimers(deps.store, clock),
+      checkPendingDecisions(deps.adapter, deps.store, session),
+    ]);
+    return c.json({ timers, pending_decisions: pendingDecisions });
   });
 
   app.get("/api/stream", async (c) => {
@@ -216,19 +251,36 @@ export function createCockpitApp(deps: CockpitAppDeps): Hono<CockpitEnv> {
 
     return streamSSE(c, async (stream) => {
       let closed = false;
+      let writeQueue = Promise.resolve();
+      const safeWriteSSE = (msg: {
+        id?: string;
+        event?: string;
+        data: string;
+      }): Promise<void> => {
+        if (closed || c.req.raw.signal.aborted) {
+          return Promise.resolve();
+        }
+        writeQueue = writeQueue
+          .then(async () => {
+            if (!closed && !c.req.raw.signal.aborted) {
+              await stream.writeSSE(msg);
+            }
+          })
+          .catch((err) => {
+            console.error("SSE_WRITE_FAILED:", err);
+          });
+        return writeQueue;
+      };
+
       const unsubscribe = hub.subscribe(session, (id, event) => {
-        if (closed) {
+        if (closed || c.req.raw.signal.aborted) {
           return;
         }
-        void stream
-          .writeSSE({
-            id: String(id),
-            event: "agent",
-            data: JSON.stringify(event),
-          })
-          .catch(() => {
-            closed = true;
-          });
+        void safeWriteSSE({
+          id: String(id),
+          event: "agent",
+          data: JSON.stringify(event),
+        });
       });
       stream.onAbort(() => {
         closed = true;
@@ -236,18 +288,29 @@ export function createCockpitApp(deps: CockpitAppDeps): Hono<CockpitEnv> {
       });
 
       try {
-        await stream.writeSSE({
+        await stream.write(": connected\n\n");
+        await safeWriteSSE({
           id: String(hub.allocateId()),
           event: "stream:ready",
           data: JSON.stringify({ at_utc: clock().toISOString() }),
         });
-        const snapshot = await buildSnapshot(
-          deps.adapter,
-          deps.store,
-          clock,
-          session,
-        );
-        await stream.writeSSE({
+        let snapshot: StreamSnapshot;
+        try {
+          snapshot = await buildSnapshot(
+            deps.adapter,
+            deps.store,
+            clock,
+            session,
+          );
+        } catch (error) {
+          console.error("BUILD_SNAPSHOT_FATAL_ERROR:", error);
+          snapshot = {
+            incidents: [],
+            timers: [],
+            pending_decisions: [],
+          };
+        }
+        await safeWriteSSE({
           id: String(hub.allocateId()),
           event: "snapshot",
           data: JSON.stringify(snapshot),

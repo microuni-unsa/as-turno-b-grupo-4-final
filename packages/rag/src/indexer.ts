@@ -66,6 +66,11 @@ export class RagIndexer {
         text text NOT NULL,
         embedding vector(${DEFAULT_EMBEDDING_DIM})
       );`);
+    await this.pgClient.unsafe(`CREATE TABLE IF NOT EXISTS rag_corpus_metadata (
+        key text PRIMARY KEY,
+        value text NOT NULL,
+        updated_at timestamptz NOT NULL
+      );`);
   }
 
   async indexCorpus(
@@ -96,6 +101,25 @@ export class RagIndexer {
 
       if (this.pgClient) {
         await this.initPgvector();
+
+        // Check if current version is already indexed and chunk count matches
+        const metaRows = await this.pgClient<{ value: string }[]>`
+          SELECT value FROM rag_corpus_metadata WHERE key = 'corpus_version' LIMIT 1;
+        `;
+        const countRows = await this.pgClient<{ count: string | number }[]>`
+          SELECT count(*)::text as count FROM rag_corpus_chunks;
+        `;
+        const existingCount = Number(countRows[0]?.count ?? "0");
+
+        if (
+          metaRows.length > 0 &&
+          metaRows[0]?.value === version &&
+          existingCount === chunks.length
+        ) {
+          // Exact cache hit: skip embeddings generation to preserve tokens and accelerate startup
+          return;
+        }
+
         await this.pgClient`DELETE FROM rag_corpus_chunks;`;
 
         const batches: Array<CorpusChunk[]> = [];
@@ -131,6 +155,14 @@ export class RagIndexer {
             }),
           );
         }
+
+        await this.pgClient`
+          INSERT INTO rag_corpus_metadata (key, value, updated_at)
+          VALUES ('corpus_version', ${version}, NOW())
+          ON CONFLICT (key) DO UPDATE SET
+            value = EXCLUDED.value,
+            updated_at = EXCLUDED.updated_at;
+        `;
       }
     } finally {
       this.isIngesting = false;

@@ -1,4 +1,7 @@
-import { getSession } from "@pims/cockpit/ui/lib/session.ts";
+import {
+  getSession,
+  notifySessionExpired,
+} from "@pims/cockpit/ui/lib/session.ts";
 import type { AgentEvent } from "@pims/types/agent.ts";
 import type { CockpitTimer, StreamSnapshot } from "@pims/types/cockpit.ts";
 
@@ -17,11 +20,22 @@ class CockpitSseClient {
   private abortController: AbortController | null = null;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private backoffMs = 1000;
+  private authRevoked = false;
+
+  constructor() {
+    if (typeof window !== "undefined") {
+      window.addEventListener("cockpit:session-expired", () => {
+        this.authRevoked = true;
+        this.stop();
+      });
+    }
+  }
 
   start(): void {
     if (typeof window === "undefined") {
       return;
     }
+    this.authRevoked = false;
     if (this.status === "connected" || this.status === "connecting") {
       return;
     }
@@ -63,6 +77,11 @@ class CockpitSseClient {
   }
 
   private async connect(): Promise<void> {
+    if (this.authRevoked) {
+      this.setStatus("disconnected");
+      return;
+    }
+
     const session = getSession();
     if (session === null || session.access_token === "") {
       this.setStatus("disconnected");
@@ -80,6 +99,13 @@ class CockpitSseClient {
         },
         signal: this.abortController.signal,
       });
+
+      if (response.status === 401) {
+        this.authRevoked = true;
+        this.setStatus("disconnected");
+        notifySessionExpired("STREAM_UNAUTHORIZED");
+        return;
+      }
 
       if (!response.ok || response.body === null) {
         throw new Error(`SSE stream failed with status ${response.status}`);
@@ -106,10 +132,12 @@ class CockpitSseClient {
           this.processEventBlock(block);
         }
       }
-    } catch {
-      // Stream error or aborted
+    } catch (err: unknown) {
+      if ((err as Error)?.name !== "AbortError") {
+        console.warn("[Cockpit SSE] Stream connection error:", err);
+      }
     } finally {
-      if (this.status !== "disconnected") {
+      if (!this.authRevoked && this.status !== "disconnected") {
         this.setStatus("disconnected");
         this.scheduleReconnect();
       }
@@ -117,7 +145,7 @@ class CockpitSseClient {
   }
 
   private scheduleReconnect(): void {
-    if (this.reconnectTimer !== null) {
+    if (this.authRevoked || this.reconnectTimer !== null) {
       return;
     }
     const delay = Math.min(this.backoffMs, 10_000);
@@ -131,19 +159,21 @@ class CockpitSseClient {
   private processEventBlock(block: string): void {
     const lines = block.split("\n");
     let eventType = "message";
-    let dataText = "";
+    const dataLines: string[] = [];
 
     for (const line of lines) {
       if (line.startsWith("event:")) {
         eventType = line.slice(6).trim();
       } else if (line.startsWith("data:")) {
-        dataText = line.slice(5).trim();
+        dataLines.push(line.slice(5).trim());
       }
     }
 
-    if (dataText === "") {
+    if (dataLines.length === 0) {
       return;
     }
+
+    const dataText = dataLines.join("\n");
 
     try {
       const parsedData = JSON.parse(dataText) as unknown;

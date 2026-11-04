@@ -278,14 +278,9 @@ export async function handleChat(
   for (const citationId of citationsUsed) {
     let citation = citationById.get(citationId);
     if (citation === undefined) {
+      const lower = citationId.toLowerCase();
       for (const [key, val] of citationById.entries()) {
-        const idLower = citationId.toLowerCase();
-        if (
-          key.toLowerCase().includes(idLower) ||
-          idLower.includes(key.toLowerCase()) ||
-          val.citation.toLowerCase().includes(idLower) ||
-          val.text.toLowerCase().includes(idLower)
-        ) {
+        if (key.toLowerCase() === lower) {
           citation = val;
           break;
         }

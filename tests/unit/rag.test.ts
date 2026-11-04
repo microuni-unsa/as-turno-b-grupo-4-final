@@ -464,5 +464,115 @@ Notify the designated Incident Commander within 30 minutes.
       expect(records[0]?.passages[0]?.chunk_sha256).toBe(chunkSha);
       expect(records[0]?.citations).toEqual(result.citations);
     });
+
+    it("skips embedding API calls when corpus version and chunk count match (cache hit)", async () => {
+      const sqlStub = Object.assign(
+        vi.fn().mockImplementation((strings: TemplateStringsArray) => {
+          const queryText = strings.join(" ");
+          if (queryText.includes("rag_corpus_metadata")) {
+            return Promise.resolve([{ value: "v-cached" }]);
+          }
+          if (queryText.includes("count(*)")) {
+            return Promise.resolve([{ count: "1" }]);
+          }
+          return Promise.resolve([]);
+        }),
+        {
+          unsafe: vi.fn().mockResolvedValue([]),
+        },
+      );
+
+      const embedSpy = vi.spyOn(dummyProvider, "embed");
+      embedSpy.mockClear();
+
+      const indexer = new RagIndexer({
+        modelProvider: dummyProvider,
+        pgClient: sqlStub as unknown as postgres.Sql,
+      });
+
+      await indexer.indexCorpus(
+        [
+          {
+            chunk_id: "art33",
+            doc_id: "gdpr-full",
+            article_or_clause: "art33",
+            lines: "1-5",
+            text: "[DOC:gdpr-full | CLAUSE:art33 | NORMATIVE:true]\nArticle 33",
+            normative: true,
+            header: "[DOC:gdpr-full | CLAUSE:art33 | NORMATIVE:true]",
+            token_count: 5,
+            sha256: "c".repeat(64),
+          },
+        ],
+        "v-cached",
+      );
+
+      expect(embedSpy).not.toHaveBeenCalled();
+      expect(indexer.getVersion()).toBe("v-cached");
+    });
+
+    it("reuses cached query embedding vector across identical queries", async () => {
+      const sqlStub = Object.assign(
+        vi.fn().mockResolvedValue([{ chunk_id: "art33", similarity: 0.9 }]),
+        { unsafe: vi.fn().mockResolvedValue([]) },
+      );
+
+      const embedSpy = vi
+        .spyOn(dummyProvider, "embed")
+        .mockResolvedValue({ vectors: [[0.5, 0.5]] });
+
+      vi.spyOn(dummyProvider, "rerank").mockResolvedValue({
+        ranked: [
+          {
+            chunk_id: "art33",
+            doc_id: "gdpr-full",
+            article_or_clause: "art33",
+            lines: "1-5",
+            text: "[DOC:gdpr-full | CLAUSE:art33 | NORMATIVE:true]\nArticle 33",
+            normative: true,
+            score: 0.95,
+            rank: 1,
+          },
+        ],
+      });
+
+      const indexer = new RagIndexer({
+        modelProvider: dummyProvider,
+        pgClient: sqlStub as unknown as postgres.Sql,
+      });
+
+      await indexer.indexCorpus(
+        [
+          {
+            chunk_id: "art33",
+            doc_id: "gdpr-full",
+            article_or_clause: "art33",
+            lines: "1-5",
+            text: "[DOC:gdpr-full | CLAUSE:art33 | NORMATIVE:true]\nArticle 33",
+            normative: true,
+            header: "[DOC:gdpr-full | CLAUSE:art33 | NORMATIVE:true]",
+            token_count: 5,
+            sha256: "d".repeat(64),
+          },
+        ],
+        "v-query-cache",
+      );
+
+      embedSpy.mockClear();
+
+      const ragService = new RAGService({
+        modelProvider: dummyProvider,
+        indexer,
+        config: testRagConfig,
+      });
+
+      const queryText = "data breach 72 hours";
+      await ragService.query(queryText);
+      expect(embedSpy).toHaveBeenCalledTimes(1);
+
+      // Repeat identical query
+      await ragService.query(queryText);
+      expect(embedSpy).toHaveBeenCalledTimes(1);
+    });
   });
 });

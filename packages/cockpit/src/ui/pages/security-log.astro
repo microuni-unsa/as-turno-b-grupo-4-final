@@ -124,32 +124,53 @@ import {
 </AppLayout>
 
 <script>
+  import { eventStore } from "@pims/cockpit/ui/lib/event-store.ts";
   import { getSession, hasPermission } from "@pims/cockpit/ui/lib/session.ts";
   import type { AgentEvent } from "@pims/types/agent.ts";
 
-  const session = getSession();
-  const deniedPanel = document.getElementById("access-denied-panel");
-  const contentPanel = document.getElementById("security-log-content");
-
-  if (!hasPermission(session, "view_securitylog")) {
-    if (deniedPanel) deniedPanel.classList.remove("hidden");
-    if (contentPanel) contentPanel.classList.add("hidden");
+  function getEl<T extends HTMLElement>(id: string): T | null {
+    return document.getElementById(id) as T | null;
   }
-
-  const tbody = document.getElementById("mutations-tbody") as HTMLTableSectionElement;
-  const roleContainer = document.getElementById("role-transitions-container");
-  const statCount = document.getElementById("stat-mutations-count");
-  const statAvg = document.getElementById("stat-avg-duration");
-  const statSuccess = document.getElementById("stat-success-rate");
-  const statRoles = document.getElementById("stat-role-transitions");
-  const footerCount = document.getElementById("mutations-footer-count");
 
   let mutations: any[] = [];
   let roleTransitionsCount = 0;
 
+  function initSecurityLogPage() {
+    const currentSession = getSession();
+    const deniedPanel = getEl("access-denied-panel");
+    const contentPanel = getEl("security-log-content");
+
+    if (!hasPermission(currentSession, "view_securitylog")) {
+      if (deniedPanel) deniedPanel.classList.remove("hidden");
+      if (contentPanel) contentPanel.classList.add("hidden");
+      return;
+    }
+    if (deniedPanel) deniedPanel.classList.add("hidden");
+    if (contentPanel) contentPanel.classList.remove("hidden");
+
+    mutations = [];
+    roleTransitionsCount = 0;
+    const pastEvents = eventStore.getEvents().slice().reverse();
+    for (const evt of pastEvents) {
+      if (evt.type === "tool:mutation") {
+        addMutation(evt);
+      } else if (evt.type === "role:transition") {
+        addRoleTransition(evt);
+      }
+    }
+  }
+
+  document.addEventListener("astro:page-load", initSecurityLogPage);
+  initSecurityLogPage();
+
   function addMutation(event: any) {
     mutations.unshift(event);
     if (mutations.length > 100) mutations.pop();
+
+    const statCount = getEl("stat-mutations-count");
+    const footerCount = getEl("mutations-footer-count");
+    const statAvg = getEl("stat-avg-duration");
+    const statSuccess = getEl("stat-success-rate");
 
     if (statCount) statCount.textContent = String(mutations.length);
     if (footerCount) footerCount.textContent = `${mutations.length} llamadas registradas`;
@@ -166,6 +187,7 @@ import {
   }
 
   function renderMutations() {
+    const tbody = getEl<HTMLTableSectionElement>("mutations-tbody");
     if (!tbody) return;
     tbody.innerHTML = mutations
       .map((m) => {
@@ -209,6 +231,9 @@ import {
 
   function addRoleTransition(event: any) {
     roleTransitionsCount += 1;
+    const statRoles = getEl("stat-role-transitions");
+    const roleContainer = getEl("role-transitions-container");
+
     if (statRoles) statRoles.textContent = String(roleTransitionsCount);
 
     if (roleContainer) {
