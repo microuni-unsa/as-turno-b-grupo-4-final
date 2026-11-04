@@ -1,0 +1,419 @@
+---
+import AppLayout from "@pims/cockpit/ui/layouts/AppLayout.astro";
+import DecisionModal from "@pims/cockpit/ui/components/DecisionModal.astro";
+import { AlertCircle, AlertTriangle, ArrowRight, CheckCircle2, Clock, Eye, Filter, RefreshCw, Search, ShieldAlert, X } from "lucide-astro";
+---
+
+<AppLayout title="Incidentes | Glass-Box Cockpit" breadcrumb="Incidentes">
+  <div class="space-y-6">
+    <!-- Header title -->
+    <div class="flex items-center justify-between">
+      <div>
+        <h1 class="text-xl font-bold tracking-tight text-white">
+          Incidentes
+        </h1>
+        <p class="text-xs text-slate-400 mt-1">
+          Registro y seguimiento de incidentes de seguridad y privacidad en tiempo real
+        </p>
+      </div>
+      <button
+        id="btn-refresh-list"
+        type="button"
+        class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-medium transition-colors flex items-center space-x-1.5 border border-slate-700"
+      >
+        <RefreshCw class="w-3.5 h-3.5" />
+        <span>Sincronizar</span>
+      </button>
+    </div>
+
+    <!-- Metrics Cards Row -->
+    <div class="grid grid-cols-2 sm:grid-cols-5 gap-3">
+      <div class="bg-slate-900 border border-slate-800 rounded-xl p-3.5 shadow-sm">
+        <p class="text-xs font-medium text-slate-400">Total</p>
+        <p id="stat-total" class="text-2xl font-bold text-white mt-1 tabular-nums">—</p>
+      </div>
+      <div class="bg-slate-900 border border-slate-800 rounded-xl p-3.5 shadow-sm">
+        <p class="text-xs font-medium text-amber-400 flex items-center space-x-1">
+          <span class="w-2 h-2 rounded-full bg-amber-400"></span>
+          <span>Abiertos</span>
+        </p>
+        <p id="stat-open" class="text-2xl font-bold text-amber-300 mt-1 tabular-nums">—</p>
+      </div>
+      <div class="bg-slate-900 border border-slate-800 rounded-xl p-3.5 shadow-sm">
+        <p class="text-xs font-medium text-sky-400 flex items-center space-x-1">
+          <span class="w-2 h-2 rounded-full bg-sky-400"></span>
+          <span>En proceso</span>
+        </p>
+        <p id="stat-in-progress" class="text-2xl font-bold text-sky-300 mt-1 tabular-nums">—</p>
+      </div>
+      <div class="bg-slate-900 border border-slate-800 rounded-xl p-3.5 shadow-sm">
+        <p class="text-xs font-medium text-emerald-400 flex items-center space-x-1">
+          <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+          <span>Cerrados</span>
+        </p>
+        <p id="stat-closed" class="text-2xl font-bold text-emerald-300 mt-1 tabular-nums">—</p>
+      </div>
+      <div class="bg-slate-900 border border-slate-800 rounded-xl p-3.5 shadow-sm col-span-2 sm:col-span-1">
+        <p class="text-xs font-medium text-rose-400 flex items-center space-x-1">
+          <AlertTriangle class="w-3.5 h-3.5" />
+          <span>Críticos activos</span>
+        </p>
+        <p id="stat-critical" class="text-2xl font-bold text-rose-300 mt-1 tabular-nums">—</p>
+      </div>
+    </div>
+
+    <!-- Filter and Search Toolbar -->
+    <div class="bg-slate-900 border border-slate-800 rounded-xl p-3 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+      <div class="relative flex-1">
+        <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-500">
+          <Search class="w-4 h-4" />
+        </div>
+        <input
+          id="search-input"
+          type="text"
+          placeholder="Buscar por código (ej. INC-001) o título..."
+          class="w-full bg-slate-950 border border-slate-800 rounded-lg pl-9 pr-3 py-1.5 text-xs text-slate-200 placeholder:text-slate-600 focus:border-blue-500 focus:outline-none"
+        />
+      </div>
+
+      <div class="flex items-center space-x-2">
+        <select
+          id="filter-status"
+          class="bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:border-blue-500 focus:outline-none"
+        >
+          <option value="ALL">Todos los estados</option>
+          <option value="O">Abierto (O)</option>
+          <option value="P">En proceso (P)</option>
+          <option value="C">Cerrado (C)</option>
+        </select>
+
+        <select
+          id="filter-severity"
+          class="bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:border-blue-500 focus:outline-none"
+        >
+          <option value="ALL">Todas las severidades</option>
+          <option value="C">Crítica (C)</option>
+          <option value="A">Alta (A)</option>
+          <option value="M">Media (M)</option>
+          <option value="B">Baja (B)</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Incidents Table Container -->
+    <div class="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-sm">
+      <div class="overflow-x-auto">
+        <table class="w-full text-left text-xs">
+          <thead class="bg-slate-950/60 text-slate-400 uppercase tracking-wider border-b border-slate-800 font-semibold">
+            <tr>
+              <th scope="col" class="py-3 px-4">Código</th>
+              <th scope="col" class="py-3 px-4">Fecha</th>
+              <th scope="col" class="py-3 px-4">Título</th>
+              <th scope="col" class="py-3 px-4">Tipo</th>
+              <th scope="col" class="py-3 px-4">Severidad</th>
+              <th scope="col" class="py-3 px-4">Impacto</th>
+              <th scope="col" class="py-3 px-4">Estado</th>
+              <th scope="col" class="py-3 px-4 text-right">Acciones</th>
+            </tr>
+          </thead>
+          <tbody id="incidents-tbody" class="divide-y divide-slate-800 text-slate-200 font-normal">
+            <tr>
+              <td colspan="8" class="py-8 text-center text-slate-500">
+                <div class="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-2"></div>
+                Sincronizando incidentes desde el servidor PIMS...
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Pagination / Counts Footer -->
+      <div class="px-4 py-3 bg-slate-950/40 border-t border-slate-800 flex items-center justify-between text-xs text-slate-400">
+        <span id="footer-count">Mostrando 0 incidentes</span>
+        <span>Actualización continua vía SSE</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Slide-over Incident Detail Drawer -->
+  <div
+    id="detail-drawer"
+    class="fixed inset-y-0 right-0 max-w-md w-full bg-slate-900 border-l border-slate-800 shadow-2xl p-6 transform translate-x-full transition-transform duration-300 z-50 overflow-y-auto space-y-6"
+  >
+    <div class="flex items-start justify-between pb-4 border-b border-slate-800">
+      <div>
+        <div class="flex items-center space-x-2">
+          <h2 id="drawer-code" class="text-base font-bold text-white font-mono">INC-###</h2>
+          <span id="drawer-status-badge" class="px-2 py-0.5 rounded text-[11px] font-semibold border">
+            Estado
+          </span>
+        </div>
+        <p id="drawer-title" class="text-xs text-slate-400 mt-1">Título del incidente</p>
+      </div>
+      <button
+        id="btn-close-drawer"
+        type="button"
+        class="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+      >
+        <X class="w-5 h-5" />
+      </button>
+    </div>
+
+    <!-- Incident Attributes Grid -->
+    <div class="grid grid-cols-2 gap-3 text-xs">
+      <div class="bg-slate-950 p-2.5 rounded-lg border border-slate-800 space-y-0.5">
+        <span class="text-slate-500">Severidad</span>
+        <p id="drawer-severity" class="font-semibold text-slate-200">—</p>
+      </div>
+      <div class="bg-slate-950 p-2.5 rounded-lg border border-slate-800 space-y-0.5">
+        <span class="text-slate-500">Impacto</span>
+        <p id="drawer-impact" class="font-semibold text-slate-200">—</p>
+      </div>
+      <div class="bg-slate-950 p-2.5 rounded-lg border border-slate-800 space-y-0.5">
+        <span class="text-slate-500">Tipo</span>
+        <p id="drawer-type" class="font-semibold text-slate-200 truncate">—</p>
+      </div>
+      <div class="bg-slate-950 p-2.5 rounded-lg border border-slate-800 space-y-0.5">
+        <span class="text-slate-500">Fecha de Detección</span>
+        <p id="drawer-date" class="font-semibold text-slate-200 truncate">—</p>
+      </div>
+    </div>
+
+    <!-- Agent Lifecycle Stage Timeline -->
+    <div class="space-y-2">
+      <h3 class="text-xs font-semibold text-slate-300 uppercase tracking-wider">
+        Ciclo de Vida del Agente
+      </h3>
+      <div class="bg-slate-950 p-3 rounded-lg border border-slate-800 space-y-2 text-xs">
+        <div class="flex items-center space-x-2">
+          <div class="w-2 h-2 rounded-full bg-blue-500"></div>
+          <span class="text-slate-400">1. Detección y Triaje (O → P)</span>
+        </div>
+        <div class="flex items-center space-x-2">
+          <div class="w-2 h-2 rounded-full bg-blue-500"></div>
+          <span class="text-slate-400">2. Análisis Causa Raíz (5-Whys) & C/A/R</span>
+        </div>
+        <div class="flex items-center space-x-2">
+          <div class="w-2 h-2 rounded-full bg-blue-500"></div>
+          <span class="text-slate-400">3. Recuperación RAG Dual & Borradores</span>
+        </div>
+        <div class="flex items-center space-x-2">
+          <div id="drawer-stage-approval" class="w-2 h-2 rounded-full bg-slate-600"></div>
+          <span class="text-slate-300 font-medium">4. Aprobación Regulatoria DPO</span>
+        </div>
+        <div class="flex items-center space-x-2">
+          <div id="drawer-stage-close" class="w-2 h-2 rounded-full bg-slate-600"></div>
+          <span class="text-slate-400">5. Notificación, Sellado de Bundle & Cierre (C)</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Fast Actions -->
+    <div id="drawer-actions-container" class="pt-4 border-t border-slate-800 space-y-2">
+      <button
+        id="drawer-btn-compliance"
+        class="w-full py-2 px-3 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-medium text-xs transition-colors flex items-center justify-center space-x-2"
+      >
+        <span>Gestionar Puertas de Cumplimiento DPO</span>
+        <ArrowRight class="w-3.5 h-3.5" />
+      </button>
+    </div>
+  </div>
+
+  <DecisionModal />
+</AppLayout>
+
+<script>
+  import type { CockpitIncidentSummary, StreamSnapshot } from "@pims/types/cockpit.ts";
+  import {
+    formatDateTime,
+    getImpactLabel,
+    getSeverityBadgeClasses,
+    getSeverityLabel,
+    getStatusBadgeClasses,
+    getStatusLabel,
+  } from "@pims/cockpit/ui/lib/utils.ts";
+
+  let allIncidents: CockpitIncidentSummary[] = [];
+  let selectedIncident: CockpitIncidentSummary | null = null;
+
+  const tbody = document.getElementById("incidents-tbody") as HTMLTableSectionElement;
+  const searchInput = document.getElementById("search-input") as HTMLInputElement;
+  const filterStatus = document.getElementById("filter-status") as HTMLSelectElement;
+  const filterSeverity = document.getElementById("filter-severity") as HTMLSelectElement;
+  const footerCount = document.getElementById("footer-count");
+
+  // Metrics elements
+  const statTotal = document.getElementById("stat-total");
+  const statOpen = document.getElementById("stat-open");
+  const statInProgress = document.getElementById("stat-in-progress");
+  const statClosed = document.getElementById("stat-closed");
+  const statCritical = document.getElementById("stat-critical");
+
+  // Drawer elements
+  const drawer = document.getElementById("detail-drawer");
+  const drawerCode = document.getElementById("drawer-code");
+  const drawerTitle = document.getElementById("drawer-title");
+  const drawerStatus = document.getElementById("drawer-status-badge");
+  const drawerSeverity = document.getElementById("drawer-severity");
+  const drawerImpact = document.getElementById("drawer-impact");
+  const drawerType = document.getElementById("drawer-type");
+  const drawerDate = document.getElementById("drawer-date");
+  const btnCloseDrawer = document.getElementById("btn-close-drawer");
+  const btnCompliance = document.getElementById("drawer-btn-compliance");
+
+  function renderTable() {
+    if (!tbody) return;
+    const query = (searchInput?.value || "").toLowerCase().trim();
+    const statusVal = filterStatus?.value || "ALL";
+    const severityVal = filterSeverity?.value || "ALL";
+
+    const filtered = allIncidents.filter((inc) => {
+      if (statusVal !== "ALL" && inc.status !== statusVal) return false;
+      if (severityVal !== "ALL" && inc.severity !== severityVal) return false;
+      if (query !== "") {
+        const matchCode = inc.incident_code.toLowerCase().includes(query);
+        const matchTitle = inc.title.toLowerCase().includes(query);
+        if (!matchCode && !matchTitle) return false;
+      }
+      return true;
+    });
+
+    if (footerCount) {
+      footerCount.textContent = `Mostrando ${filtered.length} de ${allIncidents.length} incidentes`;
+    }
+
+    if (filtered.length === 0) {
+      tbody.innerHTML = `
+        <tr>
+          <td colspan="8" class="py-8 text-center text-slate-500">
+            No se encontraron incidentes que coincidan con los filtros aplicados.
+          </td>
+        </tr>
+      `;
+      return;
+    }
+
+    tbody.innerHTML = filtered
+      .map(
+        (inc) => `
+        <tr class="hover:bg-slate-800/40 transition-colors cursor-pointer" data-id="${inc.id}">
+          <td class="py-3 px-4 font-mono font-semibold text-blue-400">${inc.incident_code}</td>
+          <td class="py-3 px-4 text-slate-400 tabular-nums">${formatDateTime(inc.detection_date)}</td>
+          <td class="py-3 px-4 text-white font-medium max-w-xs truncate">${inc.title}</td>
+          <td class="py-3 px-4 text-slate-300 capitalize">${inc.incident_type}</td>
+          <td class="py-3 px-4">
+            <span class="inline-block px-2 py-0.5 rounded text-[11px] font-semibold border ${getSeverityBadgeClasses(inc.severity)}">
+              ${getSeverityLabel(inc.severity)}
+            </span>
+          </td>
+          <td class="py-3 px-4 text-slate-300">${getImpactLabel(inc.impact)}</td>
+          <td class="py-3 px-4">
+            <span class="inline-block px-2 py-0.5 rounded text-[11px] font-semibold border ${getStatusBadgeClasses(inc.status)}">
+              ${getStatusLabel(inc.status)}
+            </span>
+          </td>
+          <td class="py-3 px-4 text-right">
+            <button
+              type="button"
+              data-view-id="${inc.id}"
+              class="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors text-xs inline-flex items-center space-x-1"
+            >
+              <span>Detalle</span>
+            </button>
+          </td>
+        </tr>
+      `
+      )
+      .join("");
+
+    // Attach click listeners to rows & buttons
+    tbody.querySelectorAll("tr[data-id]").forEach((row) => {
+      row.addEventListener("click", () => {
+        const id = Number(row.getAttribute("data-id"));
+        const found = allIncidents.find((x) => x.id === id);
+        if (found) openDrawer(found);
+      });
+    });
+  }
+
+  function updateMetrics() {
+    if (!statTotal) return;
+    const total = allIncidents.length;
+    const open = allIncidents.filter((x) => x.status === "O").length;
+    const inProgress = allIncidents.filter((x) => x.status === "P").length;
+    const closed = allIncidents.filter((x) => x.status === "C").length;
+    const critical = allIncidents.filter(
+      (x) => x.severity === "C" && (x.status === "O" || x.status === "P")
+    ).length;
+
+    statTotal.textContent = String(total);
+    if (statOpen) statOpen.textContent = String(open);
+    if (statInProgress) statInProgress.textContent = String(inProgress);
+    if (statClosed) statClosed.textContent = String(closed);
+    if (statCritical) statCritical.textContent = String(critical);
+  }
+
+  function openDrawer(inc: CockpitIncidentSummary) {
+    selectedIncident = inc;
+    if (!drawer) return;
+    if (drawerCode) drawerCode.textContent = inc.incident_code;
+    if (drawerTitle) drawerTitle.textContent = inc.title;
+    if (drawerStatus) {
+      drawerStatus.textContent = getStatusLabel(inc.status);
+      drawerStatus.className = `px-2 py-0.5 rounded text-[11px] font-semibold border ${getStatusBadgeClasses(inc.status)}`;
+    }
+    if (drawerSeverity) drawerSeverity.textContent = getSeverityLabel(inc.severity);
+    if (drawerImpact) drawerImpact.textContent = getImpactLabel(inc.impact);
+    if (drawerType) drawerType.textContent = inc.incident_type;
+    if (drawerDate) drawerDate.textContent = formatDateTime(inc.detection_date);
+
+    drawer.classList.remove("translate-x-full");
+  }
+
+  function closeDrawer() {
+    if (drawer) drawer.classList.add("translate-x-full");
+    selectedIncident = null;
+  }
+
+  if (btnCloseDrawer) btnCloseDrawer.addEventListener("click", closeDrawer);
+  if (btnCompliance) {
+    btnCompliance.addEventListener("click", () => {
+      window.location.href = "/compliance";
+    });
+  }
+
+  if (searchInput) searchInput.addEventListener("input", renderTable);
+  if (filterStatus) filterStatus.addEventListener("change", renderTable);
+  if (filterSeverity) filterSeverity.addEventListener("change", renderTable);
+
+  const btnRefresh = document.getElementById("btn-refresh-list");
+  if (btnRefresh) {
+    btnRefresh.addEventListener("click", () => {
+      window.location.reload();
+    });
+  }
+
+  // Handle SSE Snapshot
+  window.addEventListener("cockpit:snapshot", ((e: CustomEvent<StreamSnapshot>) => {
+    allIncidents = e.detail.incidents;
+    updateMetrics();
+    renderTable();
+  }) as EventListener);
+
+  // Handle SSE Lifecycle Changes
+  window.addEventListener("cockpit:agent-event", ((e: CustomEvent) => {
+    const event = e.detail;
+    if (event.type === "lifecycle:status_change") {
+      const idx = allIncidents.findIndex((x) => x.incident_code === event.incident_code);
+      if (idx !== -1) {
+        allIncidents[idx] = {
+          ...allIncidents[idx],
+          status: event.to,
+        };
+        updateMetrics();
+        renderTable();
+      }
+    }
+  }) as EventListener);
+</script>

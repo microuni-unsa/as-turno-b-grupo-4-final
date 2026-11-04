@@ -2,7 +2,7 @@ import type { AgentEventEmitter } from "@pims/agent/events/agent-events.ts";
 import {
   checkPendingDecisions,
   getRegulatoryTimers,
-  listActiveIncidents,
+  listAllIncidents,
 } from "@pims/cockpit/chat-tools.ts";
 import type { EvidenceStore } from "@pims/evidence/evidence-store.ts";
 import type { PimsAdapter } from "@pims/pims-adapter";
@@ -83,7 +83,7 @@ export async function buildSnapshot(
   clock: () => Date,
   session: CockpitSession,
 ): Promise<StreamSnapshot> {
-  const incidents = await listActiveIncidents(adapter);
+  const incidents = await listAllIncidents(adapter);
   const timers = await getRegulatoryTimers(store, clock);
   const pendingDecisions = await checkPendingDecisions(adapter, store, session);
   return {

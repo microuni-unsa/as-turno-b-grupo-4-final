@@ -143,6 +143,9 @@ dist
 # Nix
 .direnv
 
+# Astro
+.astro/
+
 # Local live-tenant secrets (never committed)
 data/site.md
 data/pims_password

@@ -38,9 +38,8 @@ export type JurisdictionDeadlines = z.infer<typeof JurisdictionDeadlinesSchema>;
 export interface AgentConfig {
   PIMS_BASE_URL: string;
   PIMS_SCHEMA: string;
-  PIMS_TOKEN_CMD?: string[];
-  PIMS_USERNAME?: string;
-  PIMS_PASSWORD?: string;
+  PIMS_USERNAME: string;
+  PIMS_PASSWORD: string;
   PIMS_TIMEOUT_MS: number;
   PIMS_MAX_RETRIES: number;
   PIMS_PAGE_SIZE: { default: number; max: number };
@@ -243,35 +242,17 @@ export function loadConfig(
 
   const pimsSchema = env.PIMS_SCHEMA ?? DEFAULT_PIMS_SCHEMA;
 
-  const tokenCmdRaw = env.PIMS_TOKEN_CMD?.trim();
   const usernameRaw = env.PIMS_USERNAME?.trim();
   const passwordRaw = env.PIMS_PASSWORD;
-  const hasTokenCmd = tokenCmdRaw !== undefined && tokenCmdRaw !== "";
   const hasUsername = usernameRaw !== undefined && usernameRaw !== "";
   const hasPassword = passwordRaw !== undefined && passwordRaw.trim() !== "";
 
-  if (hasTokenCmd && (hasUsername || hasPassword)) {
-    throw new ConfigError(
-      "PIMS auth is ambiguous: configure either PIMS_TOKEN_CMD or PIMS_USERNAME with PIMS_PASSWORD, never both",
-      "CONFIG_REJECTED:PIMS_AUTH_MODE",
-    );
-  }
-  if (!hasTokenCmd && !hasUsername && !hasPassword) {
-    throw new ConfigError(
-      "PIMS auth is required: configure PIMS_TOKEN_CMD or PIMS_USERNAME with PIMS_PASSWORD",
-      "CONFIG_MISSING:PIMS_AUTH",
-    );
-  }
-  if (!hasTokenCmd && (!hasUsername || !hasPassword)) {
+  if (!hasUsername || !hasPassword) {
     throw new ConfigError(
       "Password auth requires both PIMS_USERNAME and PIMS_PASSWORD",
       "CONFIG_MISSING:PIMS_AUTH",
     );
   }
-
-  const tokenCmdParts = hasTokenCmd
-    ? (tokenCmdRaw as string).split(/\s+/)
-    : undefined;
 
   let jurisdictionDeadlines: JurisdictionDeadlines;
   const rawJurisdiction =
@@ -571,9 +552,8 @@ export function loadConfig(
   return {
     PIMS_BASE_URL: pimsBaseUrl,
     PIMS_SCHEMA: pimsSchema,
-    PIMS_TOKEN_CMD: tokenCmdParts,
-    PIMS_USERNAME: hasUsername ? (usernameRaw as string) : undefined,
-    PIMS_PASSWORD: hasPassword ? (passwordRaw as string) : undefined,
+    PIMS_USERNAME: usernameRaw as string,
+    PIMS_PASSWORD: passwordRaw as string,
     PIMS_TIMEOUT_MS: pimsTimeoutMs,
     PIMS_MAX_RETRIES: pimsMaxRetries,
     PIMS_PAGE_SIZE: pimsPageSize,

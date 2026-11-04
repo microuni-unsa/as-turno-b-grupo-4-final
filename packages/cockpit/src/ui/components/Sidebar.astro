@@ -1,0 +1,164 @@
+---
+import {
+  AlertTriangle,
+  LogOut,
+  MessageSquare,
+  ShieldCheck,
+  Terminal,
+} from "lucide-astro";
+
+interface Props {
+  currentPath?: string;
+}
+
+const { currentPath = Astro.url.pathname } = Astro.props;
+
+const navItems = [
+  {
+    href: "/incidents",
+    label: "Incidentes",
+    icon: AlertTriangle,
+    permission: "view_incident",
+  },
+  {
+    href: "/compliance",
+    label: "Cumplimiento DPO",
+    icon: ShieldCheck,
+    permission: "view_incident",
+  },
+  {
+    href: "/security-log",
+    label: "Bitácora de Seguridad",
+    icon: Terminal,
+    permission: "view_securitylog",
+  },
+  {
+    href: "/chat",
+    label: "Asistente IA",
+    icon: MessageSquare,
+    permission: "view_incident",
+  },
+];
+---
+
+<aside class="bg-slate-900 text-slate-100 flex flex-col h-screen border-r border-slate-800 shrink-0 select-none w-72 transition-all duration-300">
+  <!-- Brand / Tenant header -->
+  <a
+    href="/incidents"
+    class="p-6 border-b border-slate-800 flex items-center hover:bg-slate-800/40 transition-colors space-x-3.5"
+  >
+    <div
+      class="w-9 h-9 bg-blue-600 rounded-lg flex items-center justify-center font-bold text-white text-lg tracking-wider shadow-md shadow-blue-500/25 shrink-0"
+    >
+      U
+    </div>
+    <div class="min-w-0 flex-1">
+      <h1 class="font-bold text-base leading-tight tracking-wide text-white uppercase truncate">
+        UNSA
+      </h1>
+      <p class="text-xs text-slate-400 font-medium truncate">
+        Gestión Integrada · Cockpit
+      </p>
+    </div>
+  </a>
+
+  <!-- Navigation -->
+  <div class="flex-1 py-5 px-3 overflow-y-auto space-y-6">
+    <div>
+      <h2 class="px-3 text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
+        Módulos Cockpit
+      </h2>
+      <nav class="space-y-1" id="cockpit-nav">
+        {
+          navItems.map((item) => {
+            const Icon = item.icon;
+            const isActive =
+              currentPath === item.href ||
+              (item.href !== "/" && currentPath.startsWith(item.href));
+            return (
+              <a
+                href={item.href}
+                data-permission={item.permission}
+                class:list={[
+                  "w-full flex items-center space-x-3 rounded-lg text-sm font-medium transition-all duration-150 px-3 py-2.5",
+                  isActive
+                    ? "bg-blue-600 text-white shadow-sm shadow-blue-600/30"
+                    : "text-slate-300 hover:bg-slate-800/70 hover:text-white",
+                ]}
+              >
+                <Icon class:list={["w-4 h-4 shrink-0", isActive ? "text-white" : "text-slate-400"]} />
+                <span class="truncate">{item.label}</span>
+              </a>
+            );
+          })
+        }
+      </nav>
+    </div>
+  </div>
+
+  <!-- User profile footer -->
+  <div class="p-4 border-t border-slate-800 bg-slate-900/80">
+    <div class="flex items-center justify-between">
+      <div class="flex items-center space-x-3 min-w-0">
+        <div
+          id="user-avatar"
+          class="w-8 h-8 rounded-full bg-slate-700 border border-slate-600 flex items-center justify-center font-semibold text-xs text-slate-200 shrink-0 uppercase"
+        >
+          U
+        </div>
+        <div class="min-w-0 flex-1">
+          <p id="user-name" class="text-xs font-semibold text-white truncate">
+            Cargando...
+          </p>
+          <div class="flex items-center space-x-1.5">
+            <span
+              id="user-role-badge"
+              class="inline-block px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-950 text-blue-300 border border-blue-800/80 uppercase tracking-wider"
+            >
+              Operador
+            </span>
+          </div>
+        </div>
+      </div>
+      <button
+        id="btn-logout"
+        title="Cerrar sesión"
+        class="p-1.5 rounded-md text-slate-400 hover:text-rose-400 hover:bg-rose-950/40 transition-colors"
+      >
+        <LogOut class="w-4 h-4" />
+      </button>
+    </div>
+  </div>
+</aside>
+
+<script>
+  import { clearSession, getSession, hasPermission } from "@pims/cockpit/ui/lib/session.ts";
+
+  const session = getSession();
+  if (session) {
+    const avatar = document.getElementById("user-avatar");
+    const nameEl = document.getElementById("user-name");
+    const roleBadge = document.getElementById("user-role-badge");
+
+    if (avatar) avatar.textContent = session.username.charAt(0).toUpperCase();
+    if (nameEl) nameEl.textContent = session.username;
+    if (roleBadge) roleBadge.textContent = session.native_role;
+
+    // Filter nav items based on permissions
+    const navLinks = document.querySelectorAll("#cockpit-nav a[data-permission]");
+    for (const link of navLinks) {
+      const permission = link.getAttribute("data-permission") as any;
+      if (permission && !hasPermission(session, permission)) {
+        (link as HTMLElement).style.display = "none";
+      }
+    }
+  }
+
+  const logoutBtn = document.getElementById("btn-logout");
+  if (logoutBtn) {
+    logoutBtn.addEventListener("click", () => {
+      clearSession();
+      window.location.href = "/login";
+    });
+  }
+</script>

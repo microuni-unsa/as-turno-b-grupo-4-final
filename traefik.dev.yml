@@ -1,0 +1,32 @@
+# Dynamic configuration for Traefik dev reverse proxy
+# Routes both local dev servers (Hono backend on 3000, Astro frontend on 4321) under a single entrypoint
+http:
+  routers:
+    # Cockpit Hono Backend: API, Health, Readiness endpoints
+    backend:
+      entryPoints:
+        - web
+      rule: "PathPrefix(`/api`) || PathPrefix(`/healthz`) || PathPrefix(`/readyz`)"
+      service: backend-service
+      priority: 100
+
+    # Cockpit Astro Frontend: UI pages, assets, and Vite HMR
+    frontend:
+      entryPoints:
+        - web
+      rule: "PathPrefix(`/`)"
+      service: frontend-service
+      priority: 10
+
+  services:
+    backend-service:
+      loadBalancer:
+        servers:
+          - url: "http://127.0.0.1:3000"
+        passHostHeader: true
+
+    frontend-service:
+      loadBalancer:
+        servers:
+          - url: "http://127.0.0.1:4321"
+        passHostHeader: true

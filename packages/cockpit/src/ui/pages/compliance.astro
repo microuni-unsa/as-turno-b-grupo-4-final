@@ -1,0 +1,343 @@
+---
+import AppLayout from "@pims/cockpit/ui/layouts/AppLayout.astro";
+import DecisionModal from "@pims/cockpit/ui/components/DecisionModal.astro";
+import RagCitation from "@pims/cockpit/ui/components/RagCitation.astro";
+import TimerCard from "@pims/cockpit/ui/components/TimerCard.astro";
+import {
+  AlertCircle,
+  BookOpen,
+  CheckCircle2,
+  Clock,
+  FileText,
+  KeyRound,
+  Lock,
+  RotateCcw,
+  ShieldAlert,
+  ShieldCheck,
+} from "lucide-astro";
+---
+
+<AppLayout title="Cumplimiento DPO | Glass-Box Cockpit" breadcrumb="Cumplimiento DPO">
+  <div class="space-y-8">
+    <!-- Header banner -->
+    <div>
+      <h1 class="text-xl font-bold tracking-tight text-white flex items-center space-x-2">
+        <ShieldCheck class="w-6 h-6 text-blue-400" />
+        <span>Cumplimiento Regulatorio & Puertas de Aprobación DPO</span>
+      </h1>
+      <p class="text-xs text-slate-400 mt-1">
+        Supervisión de plazos legales (Art. 33 72h / SLA 4h), atestaciones de exención técnica y trazabilidad normativa RAG
+      </p>
+    </div>
+
+    <!-- Active Regulatory Timers Section -->
+    <div class="space-y-3">
+      <div class="flex items-center justify-between">
+        <h2 class="text-xs font-semibold text-slate-300 uppercase tracking-wider flex items-center space-x-1.5">
+          <Clock class="w-4 h-4 text-amber-400" />
+          <span>Plazos Regulatorios & SLAs Activos</span>
+        </h2>
+        <span class="text-xs text-slate-500">Sincronización en vivo con el scheduler</span>
+      </div>
+
+      <div id="timers-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <!-- Rendered dynamically from snapshot/SSE -->
+        <div class="p-6 bg-slate-900 border border-slate-800 rounded-xl text-center text-xs text-slate-500 col-span-full">
+          <div class="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-2"></div>
+          Cargando plazos activos...
+        </div>
+      </div>
+    </div>
+
+    <!-- Pending Decision Gates Section -->
+    <div class="space-y-3">
+      <div class="flex items-center justify-between">
+        <h2 class="text-xs font-semibold text-slate-300 uppercase tracking-wider flex items-center space-x-1.5">
+          <ShieldAlert class="w-4 h-4 text-blue-400" />
+          <span>Puertas de Decisión DPO Pendientes de Firma</span>
+        </h2>
+        <span id="pending-count-badge" class="px-2 py-0.5 rounded text-xs font-semibold bg-slate-800 text-slate-400">
+          0 pendientes
+        </span>
+      </div>
+
+      <div id="pending-decisions-container" class="space-y-3">
+        <div class="p-6 bg-slate-900 border border-slate-800 rounded-xl text-center text-xs text-slate-500">
+          No hay decisiones regulatorias pendientes de firma humana en este momento.
+        </div>
+      </div>
+    </div>
+
+    <!-- Dual-Modal RAG Normative Citations Stream -->
+    <div class="space-y-3">
+      <div class="flex items-center justify-between">
+        <h2 class="text-xs font-semibold text-slate-300 uppercase tracking-wider flex items-center space-x-1.5">
+          <BookOpen class="w-4 h-4 text-emerald-400" />
+          <span>Trazabilidad Normativa RAG Dual-Modal (ISO 27701 / GDPR / Ley 29733)</span>
+        </h2>
+        <span class="text-xs text-slate-500">Puntajes densos, BM25, RRF y Cross-Encoder</span>
+      </div>
+
+      <div id="rag-citations-container" class="space-y-3">
+        <div class="p-6 bg-slate-900 border border-slate-800 rounded-xl text-center text-xs text-slate-500">
+          Esperando eventos de recuperación RAG en tiempo real...
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <DecisionModal />
+</AppLayout>
+
+<script>
+  import { getSession, hasPermission } from "@pims/cockpit/ui/lib/session.ts";
+  import type { CockpitTimer, PendingDecision, StreamSnapshot } from "@pims/types/cockpit.ts";
+  import type { AgentEvent } from "@pims/types/agent.ts";
+  import { formatRemainingTime } from "@pims/cockpit/ui/lib/utils.ts";
+
+  const session = getSession();
+  const canChangeIncident = hasPermission(session, "change_incident");
+
+  const timersGrid = document.getElementById("timers-grid");
+  const pendingContainer = document.getElementById("pending-decisions-container");
+  const pendingCountBadge = document.getElementById("pending-count-badge");
+  const ragContainer = document.getElementById("rag-citations-container");
+
+  let activeTimers: CockpitTimer[] = [];
+  let pendingDecisions: PendingDecision[] = [];
+
+  function renderTimers() {
+    if (!timersGrid) return;
+    if (activeTimers.length === 0) {
+      timersGrid.innerHTML = `
+        <div class="p-6 bg-slate-900 border border-slate-800 rounded-xl text-center text-xs text-slate-500 col-span-full">
+          No hay temporizadores regulatorios activos en este momento.
+        </div>
+      `;
+      return;
+    }
+
+    timersGrid.innerHTML = activeTimers
+      .map((timer) => {
+        let label = timer.timer_type;
+        if (timer.timer_type === "T_AUTHORITY_72H") label = "Plazo Legal Art. 33 GDPR (72h)";
+        if (timer.timer_type === "T_INTERNAL_SLA") label = "SLA de Revisión Interna (4h)";
+        if (timer.timer_type === "T_PHASE_FOLLOWUP") label = "Seguimiento por Fases (48h)";
+
+        return `
+          <div class="bg-slate-900 border border-slate-800 rounded-xl p-4 flex flex-col justify-between space-y-3 shadow-sm hover:border-slate-700 transition-colors">
+            <div class="flex items-start justify-between">
+              <div class="space-y-1">
+                <div class="flex items-center space-x-2">
+                  <span class="px-2 py-0.5 rounded text-xs font-semibold bg-blue-950 text-blue-400 border border-blue-900">
+                    ${timer.incident_code}
+                  </span>
+                  <span class="text-xs font-medium text-slate-300">
+                    ${label}
+                  </span>
+                </div>
+                <p class="text-xs text-slate-500">
+                  Vence: ${new Date(timer.fire_at_utc).toLocaleString("es-PE")}
+                </p>
+              </div>
+              <div class="p-2 rounded-lg bg-slate-800 text-slate-300">
+                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+            </div>
+
+            <div class="pt-2 border-t border-slate-800/80 flex items-baseline justify-between">
+              <span class="text-xs text-slate-400">Tiempo restante:</span>
+              <span
+                data-timer-id="${timer.timer_id}"
+                data-ms="${timer.remaining_ms}"
+                class="text-xl font-bold font-mono tracking-tight tabular-nums ${
+                  timer.remaining_ms <= 0
+                    ? "text-rose-500 animate-pulse"
+                    : timer.remaining_ms < 12 * 3600 * 1000
+                    ? "text-amber-400"
+                    : "text-emerald-400"
+                }"
+              >
+                ${formatRemainingTime(timer.remaining_ms)}
+              </span>
+            </div>
+          </div>
+        `;
+      })
+      .join("");
+  }
+
+  function renderPendingDecisions() {
+    if (!pendingContainer) return;
+    if (pendingCountBadge) {
+      pendingCountBadge.textContent = `${pendingDecisions.length} pendientes`;
+      if (pendingDecisions.length > 0) {
+        pendingCountBadge.className = "px-2 py-0.5 rounded text-xs font-semibold bg-amber-950 text-amber-300 border border-amber-800";
+      } else {
+        pendingCountBadge.className = "px-2 py-0.5 rounded text-xs font-semibold bg-slate-800 text-slate-400";
+      }
+    }
+
+    if (pendingDecisions.length === 0) {
+      pendingContainer.innerHTML = `
+        <div class="p-6 bg-slate-900 border border-slate-800 rounded-xl text-center text-xs text-slate-500">
+          No hay decisiones regulatorias pendientes de firma humana en este momento.
+        </div>
+      `;
+      return;
+    }
+
+    pendingContainer.innerHTML = pendingDecisions
+      .map((item) => {
+        const disabledAttr = canChangeIncident ? "" : "disabled title=\"Permiso 'change_incident' requerido (Modo solo lectura)\"";
+        const disabledClasses = canChangeIncident ? "" : "opacity-50 cursor-not-allowed";
+
+        return `
+          <div class="bg-slate-900 border border-slate-800 rounded-xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div class="space-y-1">
+              <div class="flex items-center space-x-2">
+                <span class="px-2 py-0.5 rounded text-xs font-bold font-mono bg-blue-950 text-blue-400 border border-blue-900">
+                  ${item.incident_code}
+                </span>
+                <span class="text-sm font-semibold text-white">
+                  Paquete de Notificación listo para emisión (${item.pack_type === "authority" ? "Autoridad Art. 33" : "Titulares Art. 34"})
+                </span>
+              </div>
+              <p class="text-xs text-slate-400">
+                ${item.blocked_reason || "Revisión adversaria superada. Esperando aprobación humana."}
+              </p>
+            </div>
+
+            <div class="flex items-center space-x-2 shrink-0">
+              <button
+                type="button"
+                data-action="revision"
+                data-inc-id="${item.incident_id}"
+                data-inc-code="${item.incident_code}"
+                ${disabledAttr}
+                class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium transition-colors flex items-center space-x-1 border border-slate-700 ${disabledClasses}"
+              >
+                <span>Solicitar Revisión</span>
+              </button>
+
+              <button
+                type="button"
+                data-action="exemption"
+                data-inc-id="${item.incident_id}"
+                data-inc-code="${item.incident_code}"
+                ${disabledAttr}
+                class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium transition-colors flex items-center space-x-1 border border-slate-700 ${disabledClasses}"
+              >
+                <span>Atestiguar Exención</span>
+              </button>
+
+              <button
+                type="button"
+                data-action="approve"
+                data-inc-id="${item.incident_id}"
+                data-inc-code="${item.incident_code}"
+                ${disabledAttr}
+                class="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold transition-colors flex items-center space-x-1 shadow-sm shadow-emerald-600/20 ${disabledClasses}"
+              >
+                <span>Aprobar Emisión</span>
+              </button>
+            </div>
+          </div>
+        `;
+      })
+      .join("");
+
+    // Attach listeners to trigger modal
+    pendingContainer.querySelectorAll("button[data-action]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        if (!canChangeIncident) return;
+        const action = btn.getAttribute("data-action");
+        const incidentId = Number(btn.getAttribute("data-inc-id"));
+        const incidentCode = btn.getAttribute("data-inc-code") || "";
+        window.dispatchEvent(
+          new CustomEvent("cockpit:open-decision-modal", {
+            detail: { action, incidentId, incidentCode },
+          })
+        );
+      });
+    });
+  }
+
+  // Timer ticker
+  setInterval(() => {
+    const timerEls = document.querySelectorAll("[data-timer-id]");
+    for (const el of timerEls) {
+      let ms = Number(el.getAttribute("data-ms") || "0");
+      if (ms > 0) {
+        ms = Math.max(0, ms - 1000);
+        el.setAttribute("data-ms", String(ms));
+      }
+      el.textContent = formatRemainingTime(ms);
+    }
+  }, 1000);
+
+  // SSE snapshot listener
+  window.addEventListener("cockpit:snapshot", ((e: CustomEvent<StreamSnapshot>) => {
+    activeTimers = e.detail.timers;
+    pendingDecisions = e.detail.pending_decisions;
+    renderTimers();
+    renderPendingDecisions();
+  }) as EventListener);
+
+  // SSE agent event listener
+  window.addEventListener("cockpit:agent-event", ((e: CustomEvent<AgentEvent>) => {
+    const event = e.detail;
+    if (event.type === "scheduler:timer_tick") {
+      const idx = activeTimers.findIndex((x) => x.timer_id === event.timer_id);
+      if (idx !== -1) {
+        activeTimers[idx].remaining_ms = event.remaining_ms;
+      } else {
+        activeTimers.push({
+          timer_id: event.timer_id,
+          incident_code: event.incident_code,
+          timer_type: event.timer_kind,
+          fire_at_utc: event.fire_at_utc,
+          remaining_ms: event.remaining_ms,
+        });
+      }
+      renderTimers();
+    } else if (event.type === "rag:retrieval" && ragContainer) {
+      for (const p of event.passages) {
+        const div = document.createElement("div");
+        div.className = "bg-slate-900 border border-slate-800 rounded-xl p-4 space-y-3";
+        div.innerHTML = `
+          <div class="flex items-center justify-between">
+            <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-blue-950 text-blue-300 border border-blue-800">
+              ${p.citation}
+            </span>
+            <span class="font-mono text-[10px] text-slate-400">${p.chunk_sha256.slice(0, 12)}…</span>
+          </div>
+          <blockquote class="text-sm text-slate-200 bg-slate-950/60 border border-slate-800/80 rounded-lg p-3 font-serif italic">
+            "${p.text}"
+          </blockquote>
+          <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2 border-t border-slate-800/80 text-[11px]">
+            <div class="bg-slate-950/60 p-1.5 rounded border border-slate-800 flex justify-between">
+              <span class="text-slate-400">Dense:</span>
+              <span class="font-mono text-slate-200">${p.dense_score !== null ? p.dense_score.toFixed(4) : "—"}</span>
+            </div>
+            <div class="bg-slate-950/60 p-1.5 rounded border border-slate-800 flex justify-between">
+              <span class="text-slate-400">BM25:</span>
+              <span class="font-mono text-slate-200">${p.bm25_rank !== null ? `#${p.bm25_rank}` : "—"}</span>
+            </div>
+            <div class="bg-slate-950/60 p-1.5 rounded border border-slate-800 flex justify-between">
+              <span class="text-slate-400">RRF:</span>
+              <span class="font-mono text-blue-400">${p.rrf_score.toFixed(4)}</span>
+            </div>
+            <div class="bg-slate-950/60 p-1.5 rounded border border-slate-800 flex justify-between">
+              <span class="text-slate-400">Rerank:</span>
+              <span class="font-mono text-emerald-400">${p.rerank_score.toFixed(4)}</span>
+            </div>
+          </div>
+        `;
+        ragContainer.prepend(div);
+      }
+    }
+  }) as EventListener);
+</script>

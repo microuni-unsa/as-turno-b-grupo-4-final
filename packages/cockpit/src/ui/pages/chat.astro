@@ -1,0 +1,311 @@
+---
+import AppLayout from "@pims/cockpit/ui/layouts/AppLayout.astro";
+import {
+  AlertTriangle,
+  Bot,
+  CornerDownLeft,
+  MessageSquare,
+  Send,
+  Sparkles,
+  User,
+} from "lucide-astro";
+---
+
+<AppLayout title="Asistente IA | Glass-Box Cockpit" breadcrumb="Asistente IA">
+  <div class="h-[calc(100vh-7rem)] flex flex-col space-y-4">
+    <!-- Header with Persona Switcher -->
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-800">
+      <div>
+        <h1 class="text-xl font-bold tracking-tight text-white flex items-center space-x-2">
+          <MessageSquare class="w-6 h-6 text-blue-400" />
+          <span>Asistente IA Regulatorio</span>
+        </h1>
+        <p class="text-xs text-slate-400 mt-0.5">
+          Consultas en lenguaje natural con citas normativas exactas y verificación anti-alucinación
+        </p>
+      </div>
+
+      <!-- Persona Selector Bar -->
+      <div class="flex items-center space-x-1.5 bg-slate-900 p-1 rounded-xl border border-slate-800 text-xs">
+        <span class="text-slate-400 px-2 py-1 font-medium">Ver como:</span>
+        <button
+          type="button"
+          data-persona="auditor"
+          class="persona-btn px-3 py-1 rounded-lg font-medium transition-colors bg-blue-600 text-white"
+        >
+          Auditor
+        </button>
+        <button
+          type="button"
+          data-persona="executive"
+          class="persona-btn px-3 py-1 rounded-lg font-medium transition-colors text-slate-300 hover:text-white hover:bg-slate-800"
+        >
+          Ejecutivo
+        </button>
+        <button
+          type="button"
+          data-persona="dpo"
+          class="persona-btn px-3 py-1 rounded-lg font-medium transition-colors text-slate-300 hover:text-white hover:bg-slate-800"
+        >
+          DPO / Legal
+        </button>
+      </div>
+    </div>
+
+    <!-- Proactive Decision Warning Banner -->
+    <div
+      id="chat-warning-banner"
+      class="hidden p-3 rounded-xl bg-amber-950/70 border border-amber-800/80 text-amber-200 text-xs flex items-center justify-between shadow-sm animate-pulse"
+    >
+      <div class="flex items-center space-x-2">
+        <AlertTriangle class="w-4 h-4 text-amber-400 shrink-0" />
+        <span id="chat-warning-text">Acción pendiente detectada</span>
+      </div>
+      <a
+        href="/compliance"
+        class="px-2.5 py-1 rounded bg-amber-900/80 hover:bg-amber-800 text-white font-semibold transition-colors text-[11px]"
+      >
+        Revisar Decisión
+      </a>
+    </div>
+
+    <!-- Messages Container -->
+    <div
+      id="chat-messages"
+      class="flex-1 overflow-y-auto space-y-4 pr-2 text-xs"
+    >
+      <!-- Initial Welcome Message from System -->
+      <div class="flex items-start space-x-3">
+        <div class="w-8 h-8 rounded-lg bg-blue-600/20 border border-blue-500/40 text-blue-400 flex items-center justify-center shrink-0">
+          <Bot class="w-4 h-4" />
+        </div>
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 max-w-2xl space-y-2">
+          <div class="flex items-center justify-between">
+            <span class="font-semibold text-white">Agente de Incidentes UNSA</span>
+            <span class="text-[10px] text-slate-500 font-mono">Conectado</span>
+          </div>
+          <p class="text-slate-300 leading-relaxed">
+            Bienvenido a la consola conversacional del Agente de Incidentes. Puede consultarme sobre el estado de incidentes activos, plazos de 72 horas del Art. 33 de GDPR, citas normativas verificadas de ISO/IEC 27701 y Ley 29733, o decisiones pendientes de firma.
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Chat Input Form -->
+    <form id="chat-form" class="pt-2" onsubmit="event.preventDefault(); return false;">
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl p-2.5 space-y-2 focus-within:border-blue-500 transition-colors">
+        <div class="flex items-center space-x-2 px-1 text-xs text-slate-400">
+          <span>Contexto de Incidente:</span>
+          <input
+            id="chat-incident-context"
+            type="text"
+            placeholder="Opcional (ej. INC-001)"
+            class="bg-slate-950 border border-slate-800 rounded px-2 py-0.5 text-xs text-slate-200 font-mono focus:border-blue-500 focus:outline-none w-36"
+          />
+        </div>
+
+        <div class="flex items-center space-x-2">
+          <textarea
+            id="chat-input"
+            rows="2"
+            placeholder="Escriba su consulta... (Enter para enviar, Shift+Enter para nueva línea)"
+            class="flex-1 bg-transparent border-0 text-slate-100 placeholder:text-slate-600 text-xs focus:ring-0 focus:outline-none resize-none p-1.5"
+          ></textarea>
+
+          <button
+            id="btn-send-chat"
+            type="button"
+            class="p-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white transition-colors shrink-0 shadow-md shadow-blue-600/20"
+          >
+            <Send class="w-4 h-4" />
+          </button>
+        </div>
+      </div>
+    </form>
+  </div>
+</AppLayout>
+
+<script>
+  import { sendChat } from "@pims/cockpit/ui/lib/api.ts";
+  import { canSwitchPersona, getSession } from "@pims/cockpit/ui/lib/session.ts";
+  import type { ChatCitation, ChatPersona, StreamSnapshot } from "@pims/types/cockpit.ts";
+
+  const session = getSession();
+  let currentPersona: ChatPersona = session?.default_persona || "auditor";
+
+  const personaBtns = document.querySelectorAll(".persona-btn");
+  const messagesContainer = document.getElementById("chat-messages") as HTMLDivElement;
+  const chatForm = document.getElementById("chat-form") as HTMLFormElement;
+  const chatInput = document.getElementById("chat-input") as HTMLTextAreaElement;
+  const chatIncidentContext = document.getElementById("chat-incident-context") as HTMLInputElement;
+  const btnSendChat = document.getElementById("btn-send-chat");
+  const warningBanner = document.getElementById("chat-warning-banner");
+  const warningText = document.getElementById("chat-warning-text");
+
+  // Persona switching logic
+  if (!canSwitchPersona(session)) {
+    personaBtns.forEach((btn) => {
+      const p = btn.getAttribute("data-persona");
+      if (p !== currentPersona) {
+        (btn as HTMLButtonElement).style.display = "none";
+      }
+    });
+  } else {
+    personaBtns.forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const p = btn.getAttribute("data-persona") as ChatPersona;
+        if (p) {
+          currentPersona = p;
+          personaBtns.forEach((b) => {
+            b.className = "persona-btn px-3 py-1 rounded-lg font-medium transition-colors text-slate-300 hover:text-white hover:bg-slate-800";
+          });
+          btn.className = "persona-btn px-3 py-1 rounded-lg font-medium transition-colors bg-blue-600 text-white";
+        }
+      });
+    });
+  }
+
+  async function handleSendMessage(): Promise<void> {
+    const query = chatInput.value.trim();
+    if (!query) return;
+
+    const incidentCode = chatIncidentContext.value.trim() || undefined;
+    appendMessage("user", query);
+    chatInput.value = "";
+
+    // Show typing placeholder
+    const typingIndicator = document.createElement("div");
+    typingIndicator.id = "typing-indicator";
+    typingIndicator.className = "flex items-center space-x-2 text-xs text-slate-500 italic py-2";
+    typingIndicator.innerHTML = `
+      <div class="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+      <span>El agente está consultando los registros normativos y evidencia...</span>
+    `;
+    messagesContainer.appendChild(typingIndicator);
+    messagesContainer.scrollTop = messagesContainer.scrollHeight;
+
+    try {
+      const response = await sendChat(query, incidentCode, currentPersona);
+      typingIndicator.remove();
+      appendMessage("bot", response.reply, response.citations, response.tool_calls);
+
+      if (response.pending_decisions && response.pending_decisions.length > 0) {
+        if (warningBanner && warningText) {
+          warningText.textContent = `Atención: Hay ${response.pending_decisions.length} decisiones regulatorias pendientes de aprobación humana.`;
+          warningBanner.classList.remove("hidden");
+        }
+      }
+    } catch (err: unknown) {
+      typingIndicator.remove();
+      const message = err instanceof Error ? err.message : "Error desconocido";
+      appendMessage("bot", `Error al procesar la consulta: ${message}`);
+    }
+  }
+
+  // Handle Enter to submit
+  chatInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      void handleSendMessage();
+    }
+  });
+
+  if (btnSendChat) {
+    btnSendChat.addEventListener("click", (e) => {
+      e.preventDefault();
+      void handleSendMessage();
+    });
+  }
+
+  chatForm.addEventListener("submit", (e) => {
+    e.preventDefault();
+    void handleSendMessage();
+  });
+
+  function appendMessage(sender: "user" | "bot", text: string, citations: ChatCitation[] = [], tools: string[] = []) {
+    const msgDiv = document.createElement("div");
+    msgDiv.className = `flex items-start space-x-3 ${sender === "user" ? "justify-end" : ""}`;
+
+    if (sender === "user") {
+      msgDiv.innerHTML = `
+        <div class="bg-blue-600 text-white rounded-2xl p-3 max-w-lg space-y-1 shadow-sm">
+          <p class="leading-relaxed whitespace-pre-wrap">${text}</p>
+        </div>
+        <div class="w-8 h-8 rounded-lg bg-slate-800 border border-slate-700 text-slate-300 flex items-center justify-center shrink-0">
+          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+          </svg>
+        </div>
+      `;
+    } else {
+      let citationsHtml = "";
+      if (citations.length > 0) {
+        citationsHtml = `
+          <div class="mt-3 pt-3 border-t border-slate-800 space-y-2">
+            <p class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Citas Normativas Groundeadas (${citations.length})</p>
+            <div class="space-y-2">
+              ${citations
+                .map(
+                  (c) => `
+                <div class="bg-slate-950 p-2.5 rounded-lg border border-slate-800 space-y-1.5">
+                  <div class="flex items-center justify-between">
+                    <span class="font-semibold text-blue-400">${c.citation}</span>
+                    <span class="font-mono text-[10px] text-slate-500">${c.chunk_sha256.slice(0, 10)}…</span>
+                  </div>
+                  <blockquote class="italic text-slate-200 bg-slate-950/70 border border-slate-800 rounded p-2 text-[11px]">
+                    "${c.text}"
+                  </blockquote>
+                  <div class="flex items-center space-x-3 text-[10px] text-slate-500 pt-1">
+                    <span>Dense: ${c.dense_score !== null ? c.dense_score.toFixed(4) : "—"}</span>
+                    <span>BM25: ${c.bm25_rank ? `#${c.bm25_rank}` : "—"}</span>
+                    <span>RRF: ${c.rrf_score.toFixed(4)}</span>
+                    <span class="text-emerald-400 font-medium">Rerank: ${c.rerank_score.toFixed(4)}</span>
+                  </div>
+                </div>
+              `
+                )
+                .join("")}
+            </div>
+          </div>
+        `;
+      }
+
+      let toolsHtml = "";
+      if (tools.length > 0) {
+        toolsHtml = `
+          <div class="flex items-center space-x-1.5 text-[10px] text-slate-400 font-mono mb-1">
+            <span>Herramientas invocadas:</span>
+            ${tools.map((t) => `<span class="px-1.5 py-0.5 rounded bg-slate-950 border border-slate-800 text-blue-400">${t}</span>`).join("")}
+          </div>
+        `;
+      }
+
+      msgDiv.innerHTML = `
+        <div class="w-8 h-8 rounded-lg bg-blue-600/20 border border-blue-500/40 text-blue-400 flex items-center justify-center shrink-0">
+          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+          </svg>
+        </div>
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 max-w-2xl space-y-2">
+          ${toolsHtml}
+          <div class="text-slate-200 leading-relaxed whitespace-pre-wrap">${text}</div>
+          ${citationsHtml}
+        </div>
+      `;
+    }
+
+    messagesContainer.appendChild(msgDiv);
+    messagesContainer.scrollTop = messagesContainer.scrollHeight;
+  }
+
+
+
+  // Listen for SSE snapshot to show pending warnings
+  window.addEventListener("cockpit:snapshot", ((e: CustomEvent<StreamSnapshot>) => {
+    const pendings = e.detail.pending_decisions;
+    if (pendings && pendings.length > 0 && warningBanner && warningText) {
+      warningText.textContent = `Atención: Hay ${pendings.length} incidentes pendientes de firma DPO en el sistema.`;
+      warningBanner.classList.remove("hidden");
+    }
+  }) as EventListener);
+</script>

@@ -350,7 +350,8 @@ describe("Phase 4 autonomous lifecycle loop (§6, §9, §14.2)", {
     config = loadConfig({
       PIMS_BASE_URL: server.url,
       PIMS_SCHEMA: "unsa",
-      PIMS_TOKEN_CMD: "true",
+      PIMS_USERNAME: "admin",
+      PIMS_PASSWORD: PIMS_TEST_SEED_PASSWORD,
       EVIDENCE_DB_URL: container.getConnectionUri(),
       OPENAI_API_KEY: "lifecycle-loop-test-key",
       REASONING_MODEL:

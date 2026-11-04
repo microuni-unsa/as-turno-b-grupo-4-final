@@ -36,7 +36,6 @@ async function main(): Promise<void> {
     timeoutMs: config.PIMS_TIMEOUT_MS,
     maxRetries: config.PIMS_MAX_RETRIES,
     idempotencyKeyPrefix: config.IDEMPOTENCY_KEY_PREFIX,
-    tokenCmd: config.PIMS_TOKEN_CMD,
     username: config.PIMS_USERNAME,
     password: config.PIMS_PASSWORD,
     extraHeaders:

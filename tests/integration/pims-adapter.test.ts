@@ -513,10 +513,8 @@ describe("PIMS Client Adapter & Reverse-Engineered DRF API Integration Suite", (
       const testAdapter = new PimsAdapter({
         baseUrl: adapter.baseUrl,
         schema: adapter.schema,
-        tokenCmd: (adapter as unknown as { tokenCmd?: string[] }).tokenCmd ?? [
-          "echo",
-          "tok",
-        ],
+        username: "admin",
+        password: "test-password",
         extraHeaders: { "X-Simulate-Error": "403_LICENSE" },
         cookies: { session: "sess_123" },
       });

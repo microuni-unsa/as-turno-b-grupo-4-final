@@ -1,0 +1,105 @@
+---
+import { BookOpen, Copy } from "lucide-astro";
+
+interface Props {
+  citation: string;
+  docId: string;
+  chunkId: string;
+  lines: string;
+  chunkSha256: string;
+  denseScore: number | null;
+  bm25Rank: number | null;
+  rrfScore: number;
+  rerankScore: number;
+  text: string;
+}
+
+const {
+  citation,
+  docId,
+  chunkId,
+  lines,
+  chunkSha256,
+  denseScore,
+  bm25Rank,
+  rrfScore,
+  rerankScore,
+  text,
+} = Astro.props;
+---
+
+<div class="bg-slate-900 border border-slate-800 rounded-xl p-4 space-y-3 hover:border-slate-700 transition-colors">
+  <div class="flex items-start justify-between gap-3">
+    <div class="space-y-1 min-w-0">
+      <div class="flex items-center space-x-2">
+        <span class="inline-flex items-center space-x-1 px-2 py-0.5 rounded text-xs font-semibold bg-blue-950 text-blue-300 border border-blue-800">
+          <BookOpen class="w-3 h-3 mr-1 inline" />
+          {citation}
+        </span>
+        <span class="text-xs text-slate-400 truncate">
+          {docId} · {chunkId} ({lines})
+        </span>
+      </div>
+    </div>
+
+    <!-- Copy hash button -->
+    <button
+      type="button"
+      data-copy-hash={chunkSha256}
+      class="p-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition-colors text-xs flex items-center space-x-1 shrink-0"
+      title="Copiar SHA-256 del fragmento"
+    >
+      <Copy class="w-3 h-3" />
+      <span class="font-mono text-[10px]">{chunkSha256.slice(0, 8)}…</span>
+    </button>
+  </div>
+
+  <!-- Verbatim text quote -->
+  <blockquote class="text-sm text-slate-200 bg-slate-950/60 border border-slate-800/80 rounded-lg p-3 font-serif italic">
+    "{text}"
+  </blockquote>
+
+  <!-- Dual-Modal Retrieval Scores Grid -->
+  <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2 border-t border-slate-800/80 text-[11px]">
+    <div class="bg-slate-950/60 p-1.5 rounded border border-slate-800 flex justify-between items-center">
+      <span class="text-slate-400">Dense Score:</span>
+      <span class="font-mono font-medium text-slate-200 tabular-nums">
+        {denseScore !== null ? denseScore.toFixed(4) : "—"}
+      </span>
+    </div>
+    <div class="bg-slate-950/60 p-1.5 rounded border border-slate-800 flex justify-between items-center">
+      <span class="text-slate-400">BM25 Rank:</span>
+      <span class="font-mono font-medium text-slate-200 tabular-nums">
+        {bm25Rank !== null ? `#${bm25Rank}` : "—"}
+      </span>
+    </div>
+    <div class="bg-slate-950/60 p-1.5 rounded border border-slate-800 flex justify-between items-center">
+      <span class="text-slate-400">RRF Score:</span>
+      <span class="font-mono font-medium text-blue-400 tabular-nums">
+        {rrfScore.toFixed(4)}
+      </span>
+    </div>
+    <div class="bg-slate-950/60 p-1.5 rounded border border-slate-800 flex justify-between items-center">
+      <span class="text-slate-400">Rerank Score:</span>
+      <span class="font-mono font-medium text-emerald-400 tabular-nums">
+        {rerankScore.toFixed(4)}
+      </span>
+    </div>
+  </div>
+</div>
+
+<script>
+  document.querySelectorAll("[data-copy-hash]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const hash = btn.getAttribute("data-copy-hash");
+      if (hash) {
+        navigator.clipboard.writeText(hash);
+        const originalText = btn.innerHTML;
+        btn.innerHTML = `<span class="text-emerald-400 text-[10px]">¡Copiado!</span>`;
+        setTimeout(() => {
+          btn.innerHTML = originalText;
+        }, 1500);
+      }
+    });
+  });
+</script>

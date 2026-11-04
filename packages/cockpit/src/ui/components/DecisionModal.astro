@@ -1,0 +1,346 @@
+---
+import { CheckCircle2, ShieldAlert, X } from "lucide-astro";
+---
+
+<!-- Modal Dialog -->
+<dialog
+  id="cockpit-decision-modal"
+  class="bg-transparent backdrop:bg-slate-950/80 backdrop:backdrop-blur-sm p-0 m-auto max-w-xl w-full border-0 outline-none"
+>
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl p-6 text-slate-100 space-y-5">
+    <!-- Modal Header -->
+    <div class="flex items-start justify-between">
+      <div class="flex items-center space-x-3">
+        <div id="modal-icon-container" class="p-2.5 rounded-xl bg-blue-950 text-blue-400 border border-blue-900">
+          <ShieldAlert class="w-5 h-5" />
+        </div>
+        <div>
+          <h3 id="modal-title" class="text-base font-semibold text-white">
+            Acción Regulatoria DPO
+          </h3>
+          <p id="modal-subtitle" class="text-xs text-slate-400">
+            Firma y decisión humana sobre el paquete de notificación
+          </p>
+        </div>
+      </div>
+      <button
+        id="btn-close-modal"
+        type="button"
+        class="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+      >
+        <X class="w-5 h-5" />
+      </button>
+    </div>
+
+    <!-- Feedback banner -->
+    <div id="modal-alert" class="hidden p-3 rounded-lg text-xs font-medium"></div>
+
+    <!-- FORM 1: Approve Form -->
+    <div id="form-approve-container" class="space-y-4">
+      <p class="text-sm text-slate-300">
+        ¿Confirma la aprobación y emisión inmediata del paquete de notificación para el incidente <strong id="approve-incident-code" class="text-white"></strong>?
+      </p>
+      <div class="p-3 bg-slate-950 rounded-lg border border-slate-800 text-xs text-slate-400 space-y-1">
+        <p>• La aprobación desbloqueará la emisión hacia los destinatarios configurados en PIMS.</p>
+        <p>• Se sellará criptográficamente el bundle de evidencias en formato canónico JSON.</p>
+      </div>
+      <div class="flex justify-end space-x-3 pt-3 border-t border-slate-800">
+        <button
+          type="button"
+          class="btn-cancel px-4 py-2 rounded-lg text-xs font-semibold text-slate-300 hover:bg-slate-800 transition-colors"
+        >
+          Cancelar
+        </button>
+        <button
+          id="btn-confirm-approve"
+          type="button"
+          class="px-4 py-2 rounded-lg text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white transition-colors flex items-center space-x-1.5 shadow-md shadow-emerald-600/20"
+        >
+          <CheckCircle2 class="w-4 h-4" />
+          <span>Confirmar y Notificar</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- FORM 2: Revision Form -->
+    <form id="form-revision" class="hidden space-y-4">
+      <input type="hidden" id="revision-incident-id" />
+      <div class="space-y-1.5">
+        <label for="revision-pack-type" class="block text-xs font-medium text-slate-300">
+          Tipo de Paquete
+        </label>
+        <select
+          id="revision-pack-type"
+          class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-200 focus:border-blue-500 focus:outline-none"
+        >
+          <option value="authority">Notificación a la Autoridad (Art. 33)</option>
+          <option value="subject">Comunicación a los Titulares (Art. 34)</option>
+        </select>
+      </div>
+
+      <div class="space-y-1.5">
+        <label for="revision-reason" class="block text-xs font-medium text-slate-300">
+          Motivo de la Revisión / Observaciones Requeridas <span class="text-rose-400">*</span>
+        </label>
+        <textarea
+          id="revision-reason"
+          required
+          rows="3"
+          placeholder="Especifique las correcciones o datos faltantes que el agente debe subsanar..."
+          class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-200 placeholder:text-slate-600 focus:border-blue-500 focus:outline-none"
+        ></textarea>
+      </div>
+
+      <div class="flex justify-end space-x-3 pt-3 border-t border-slate-800">
+        <button
+          type="button"
+          class="btn-cancel px-4 py-2 rounded-lg text-xs font-semibold text-slate-300 hover:bg-slate-800 transition-colors"
+        >
+          Cancelar
+        </button>
+        <button
+          type="submit"
+          class="px-4 py-2 rounded-lg text-xs font-semibold bg-amber-600 hover:bg-amber-500 text-white transition-colors"
+        >
+          Solicitar Revisión
+        </button>
+      </div>
+    </form>
+
+    <!-- FORM 3: Art 34(3)(a) Exemption Form -->
+    <form id="form-exemption" class="hidden space-y-3">
+      <input type="hidden" id="exemption-incident-id" />
+      <p class="text-xs text-slate-400">
+        Atestación formal de medidas de protección técnica (cifrado en reposo/tránsito) eximiendo la notificación obligatoria a los titulares (Art. 34.3.a GDPR).
+      </p>
+
+      <div class="grid grid-cols-2 gap-3">
+        <div class="space-y-1">
+          <label class="block text-xs font-medium text-slate-300">Alcance de Cifrado</label>
+          <select
+            id="exemption-scope"
+            class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-slate-200"
+          >
+            <option value="encrypt_rest">Cifrado en Reposo (encrypt_rest)</option>
+            <option value="encrypt_transit">Cifrado en Tránsito (encrypt_transit)</option>
+          </select>
+        </div>
+        <div class="space-y-1">
+          <label class="block text-xs font-medium text-slate-300">Algoritmo</label>
+          <input
+            id="exemption-algorithm"
+            type="text"
+            required
+            value="AES-256-GCM"
+            class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 font-mono"
+          />
+        </div>
+      </div>
+
+      <div class="space-y-1">
+        <label class="block text-xs font-medium text-slate-300">Referencia de Gestión de Claves (KMS)</label>
+        <input
+          id="exemption-kms"
+          type="text"
+          required
+          placeholder="ej. KMS-KEY-VAULT-PROD-01"
+          class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-slate-200"
+        />
+      </div>
+
+      <div class="space-y-1">
+        <label class="block text-xs font-medium text-slate-300">SHA-256 del Archivo de Prueba (64 hex)</label>
+        <input
+          id="exemption-sha256"
+          type="text"
+          required
+          pattern="[0-9a-f]{64}"
+          placeholder="64 caracteres hexadecimales"
+          class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 font-mono"
+        />
+      </div>
+
+      <div class="space-y-1">
+        <label class="block text-xs font-medium text-slate-300">Referencias de Evidencia (separadas por coma)</label>
+        <input
+          id="exemption-evidence"
+          type="text"
+          required
+          placeholder="ev-crypt-01, audit-ref-02"
+          class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-slate-200"
+        />
+      </div>
+
+      <div class="flex items-center space-x-2 pt-1">
+        <input
+          id="exemption-applies"
+          type="checkbox"
+          checked
+          class="rounded bg-slate-950 border-slate-800 text-blue-600 focus:ring-0"
+        />
+        <label for="exemption-applies" class="text-xs text-slate-300">
+          Certifico que el cifrado cubre la totalidad de los datos afectados.
+        </label>
+      </div>
+
+      <div class="flex justify-end space-x-3 pt-3 border-t border-slate-800">
+        <button
+          type="button"
+          class="btn-cancel px-4 py-2 rounded-lg text-xs font-semibold text-slate-300 hover:bg-slate-800 transition-colors"
+        >
+          Cancelar
+        </button>
+        <button
+          type="submit"
+          class="px-4 py-2 rounded-lg text-xs font-semibold bg-blue-600 hover:bg-blue-500 text-white transition-colors"
+        >
+          Emitir Atestación
+        </button>
+      </div>
+    </form>
+  </div>
+</dialog>
+
+<script>
+  import { approveIncident, attestExemption, requestRevision } from "@pims/cockpit/ui/lib/api.ts";
+
+  const modal = document.getElementById("cockpit-decision-modal") as HTMLDialogElement | null;
+  const modalAlert = document.getElementById("modal-alert");
+  const formApprove = document.getElementById("form-approve-container");
+  const formRevision = document.getElementById("form-revision") as HTMLFormElement | null;
+  const formExemption = document.getElementById("form-exemption") as HTMLFormElement | null;
+  const modalTitle = document.getElementById("modal-title");
+
+  let currentIncidentId = 0;
+
+  function showAlert(msg: string, isError = false) {
+    if (!modalAlert) return;
+    modalAlert.classList.remove("hidden", "bg-emerald-950/70", "text-emerald-300", "bg-rose-950/70", "text-rose-300");
+    if (isError) {
+      modalAlert.classList.add("bg-rose-950/70", "text-rose-300", "border", "border-rose-800/80");
+    } else {
+      modalAlert.classList.add("bg-emerald-950/70", "text-emerald-300", "border", "border-emerald-800/80");
+    }
+    modalAlert.textContent = msg;
+  }
+
+  function hideAlert() {
+    if (modalAlert) modalAlert.classList.add("hidden");
+  }
+
+  // Open modal handlers via CustomEvents
+  window.addEventListener("cockpit:open-decision-modal", ((e: CustomEvent) => {
+    const { action, incidentId, incidentCode } = e.detail;
+    currentIncidentId = incidentId;
+    hideAlert();
+    if (!modal) return;
+
+    if (formApprove) formApprove.classList.add("hidden");
+    if (formRevision) formRevision.classList.add("hidden");
+    if (formExemption) formExemption.classList.add("hidden");
+
+    if (action === "approve") {
+      if (modalTitle) modalTitle.textContent = "Aprobar Notificación Regulatoria";
+      const codeSpan = document.getElementById("approve-incident-code");
+      if (codeSpan) codeSpan.textContent = incidentCode;
+      if (formApprove) formApprove.classList.remove("hidden");
+    } else if (action === "revision") {
+      if (modalTitle) modalTitle.textContent = "Solicitar Revisión de Notificación";
+      if (formRevision) {
+        formRevision.classList.remove("hidden");
+        formRevision.reset();
+      }
+    } else if (action === "exemption") {
+      if (modalTitle) modalTitle.textContent = "Atestiguar Exención Art. 34(3)(a)";
+      if (formExemption) {
+        formExemption.classList.remove("hidden");
+        formExemption.reset();
+      }
+    }
+
+    modal.showModal();
+  }) as EventListener);
+
+  // Close modal
+  document.querySelectorAll(".btn-cancel, #btn-close-modal").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      if (modal) modal.close();
+    });
+  });
+
+  // Handle Approve Confirm
+  const btnConfirmApprove = document.getElementById("btn-confirm-approve");
+  if (btnConfirmApprove) {
+    btnConfirmApprove.addEventListener("click", async () => {
+      try {
+        btnConfirmApprove.setAttribute("disabled", "true");
+        btnConfirmApprove.textContent = "Procesando...";
+        const result = await approveIncident(currentIncidentId);
+        showAlert("¡Notificación aprobada exitosamente! Se selló el paquete.");
+        setTimeout(() => {
+          if (modal) modal.close();
+          window.location.reload();
+        }, 1200);
+      } catch (err: any) {
+        showAlert(err.message || "Error al aprobar", true);
+      } finally {
+        btnConfirmApprove.removeAttribute("disabled");
+        btnConfirmApprove.textContent = "Confirmar y Notificar";
+      }
+    });
+  }
+
+  // Handle Revision Submit
+  if (formRevision) {
+    formRevision.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const packType = (document.getElementById("revision-pack-type") as HTMLSelectElement).value as any;
+      const reason = (document.getElementById("revision-reason") as HTMLTextAreaElement).value.trim();
+      try {
+        await requestRevision(currentIncidentId, { pack_type: packType, reason });
+        showAlert("Revisión solicitada exitosamente.");
+        setTimeout(() => {
+          if (modal) modal.close();
+          window.location.reload();
+        }, 1200);
+      } catch (err: any) {
+        showAlert(err.message || "Error al solicitar revisión", true);
+      }
+    });
+  }
+
+  // Handle Exemption Submit
+  if (formExemption) {
+    formExemption.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const scope = (document.getElementById("exemption-scope") as HTMLSelectElement).value as any;
+      const algorithm = (document.getElementById("exemption-algorithm") as HTMLInputElement).value.trim();
+      const kms = (document.getElementById("exemption-kms") as HTMLInputElement).value.trim();
+      const sha256 = (document.getElementById("exemption-sha256") as HTMLInputElement).value.trim();
+      const evidence = (document.getElementById("exemption-evidence") as HTMLInputElement).value
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
+      const applies = (document.getElementById("exemption-applies") as HTMLInputElement).checked;
+
+      try {
+        await attestExemption(currentIncidentId, {
+          letter: "a",
+          source_file_sha256: sha256,
+          scope,
+          algorithm,
+          key_management_ref: kms,
+          applies_to_affected_data: applies,
+          evidence_refs: evidence,
+        });
+        showAlert("Atestación de exención registrada exitosamente.");
+        setTimeout(() => {
+          if (modal) modal.close();
+          window.location.reload();
+        }, 1200);
+      } catch (err: any) {
+        showAlert(err.message || "Error al atestiguar exención", true);
+      }
+    });
+  }
+</script>

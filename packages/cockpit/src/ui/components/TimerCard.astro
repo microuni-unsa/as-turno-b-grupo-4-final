@@ -1,0 +1,107 @@
+---
+import { Clock } from "lucide-astro";
+
+interface Props {
+  timerId: string;
+  incidentCode: string;
+  timerKind: string;
+  fireAtUtc: string;
+  remainingMs: number;
+}
+
+const { timerId, incidentCode, timerKind, fireAtUtc, remainingMs } =
+  Astro.props;
+
+function getTimerFriendlyName(kind: string): string {
+  switch (kind) {
+    case "T_AUTHORITY_72H":
+      return "Plazo Legal Art. 33 GDPR (72 Horas)";
+    case "T_INTERNAL_SLA":
+      return "SLA de Revisión Interna DPO (4 Horas)";
+    case "T_PHASE_FOLLOWUP":
+      return "Seguimiento de Notificación por Fases";
+    case "T_RETRY":
+      return "Reintento de Notificación Automático";
+    default:
+      return kind;
+  }
+}
+---
+
+<div
+  data-timer-card={timerId}
+  class="bg-slate-900 border border-slate-800 rounded-xl p-4 flex flex-col justify-between space-y-3 shadow-sm hover:border-slate-700 transition-colors"
+>
+  <div class="flex items-start justify-between">
+    <div class="space-y-1">
+      <div class="flex items-center space-x-2">
+        <span class="px-2 py-0.5 rounded text-xs font-semibold bg-blue-950 text-blue-400 border border-blue-900">
+          {incidentCode}
+        </span>
+        <span class="text-xs font-medium text-slate-400">
+          {getTimerFriendlyName(timerKind)}
+        </span>
+      </div>
+      <p class="text-xs text-slate-500">
+        Vence: {new Date(fireAtUtc).toLocaleString("es-PE")}
+      </p>
+    </div>
+    <div class="p-2 rounded-lg bg-slate-800 text-slate-300">
+      <Clock class="w-4 h-4" />
+    </div>
+  </div>
+
+  <div class="pt-2 border-t border-slate-800/80 flex items-baseline justify-between">
+    <span class="text-xs text-slate-400">Tiempo restante:</span>
+    <span
+      data-remaining-display={timerId}
+      data-remaining-ms={remainingMs}
+      class="text-xl font-bold font-mono tracking-tight text-white tabular-nums"
+    >
+      --:--:--
+    </span>
+  </div>
+</div>
+
+<script>
+  import { formatRemainingTime } from "@pims/cockpit/ui/lib/utils.ts";
+
+  function tickTimers() {
+    const displays = document.querySelectorAll("[data-remaining-display]");
+    for (const el of displays) {
+      let currentMs = Number(el.getAttribute("data-remaining-ms") || "0");
+      if (currentMs > 0) {
+        currentMs = Math.max(0, currentMs - 1000);
+        el.setAttribute("data-remaining-ms", String(currentMs));
+      }
+      el.textContent = formatRemainingTime(currentMs);
+
+      // Color coding based on urgency
+      if (currentMs <= 0) {
+        el.className = "text-xl font-bold font-mono tracking-tight text-rose-500 tabular-nums animate-pulse";
+      } else if (currentMs < 4 * 3600 * 1000) {
+        el.className = "text-xl font-bold font-mono tracking-tight text-rose-400 tabular-nums";
+      } else if (currentMs < 12 * 3600 * 1000) {
+        el.className = "text-xl font-bold font-mono tracking-tight text-amber-400 tabular-nums";
+      } else {
+        el.className = "text-xl font-bold font-mono tracking-tight text-emerald-400 tabular-nums";
+      }
+    }
+  }
+
+  // Update immediately and then every second
+  tickTimers();
+  setInterval(tickTimers, 1000);
+
+  // Sync with SSE agent timer ticks
+  window.addEventListener("cockpit:agent-event", ((e: CustomEvent) => {
+    const event = e.detail;
+    if (event.type === "scheduler:timer_tick") {
+      const el = document.querySelector(`[data-remaining-display="${event.timer_id}"]`);
+      if (el) {
+        el.setAttribute("data-remaining-ms", String(event.remaining_ms));
+        el.textContent = formatRemainingTime(event.remaining_ms);
+      }
+    }
+  }) as EventListener);
+</script>

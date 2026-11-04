@@ -1,0 +1,17 @@
+{
+  "$schema": "https://starwind.dev/config-schema.v2.json",
+  "version": 2,
+  "framework": "astro",
+  "registry": {
+    "source": "bundled",
+    "version": "2.2.0"
+  },
+  "components": [],
+  "tailwind": {
+    "css": "src/ui/styles/starwind.css",
+    "baseColor": "slate",
+    "cssVariables": true
+  },
+  "componentDir": "src/ui/components/starwind",
+  "utilsDir": "src/ui/lib/utils"
+}

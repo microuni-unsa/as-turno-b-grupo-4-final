@@ -39,7 +39,6 @@ describe("Configuration Manager", () => {
     expect(config.JURISDICTION_DEADLINES_JSON.EU_GDPR?.authority_h).toBe(72);
     expect(config.PIMS_USERNAME).toBe("grupob4");
     expect(config.PIMS_PASSWORD).toBe("plain-test-password");
-    expect(config.PIMS_TOKEN_CMD).toBeUndefined();
     expect(config.EVIDENCE_DB_URL).toBe(
       "postgres://pims:pims@localhost:5432/pims_evidence",
     );
@@ -47,29 +46,6 @@ describe("Configuration Manager", () => {
     expect(config.MODEL_LOGPROBS).toBe(true);
     expect(config.WATCHER_POLL_INTERVAL_MS).toBe(5000);
     expect(config.RAG_CORPUS_DIR).toBe("corpus");
-  });
-
-  it("accepts token auth mode", () => {
-    const env: Record<string, string> = {
-      ...baseValidEnv,
-      PIMS_TOKEN_CMD: "echo dev-token",
-    };
-    delete env.PIMS_USERNAME;
-    delete env.PIMS_PASSWORD;
-    const config = loadConfig(env);
-    expect(config.PIMS_TOKEN_CMD).toEqual(["echo", "dev-token"]);
-    expect(config.PIMS_USERNAME).toBeUndefined();
-    expect(config.PIMS_PASSWORD).toBeUndefined();
-  });
-
-  it("rejects mixed token and password auth modes", () => {
-    const env = { ...baseValidEnv, PIMS_TOKEN_CMD: "echo dev-token" };
-    expect(() => loadConfig(env)).toThrow(ConfigError);
-    try {
-      loadConfig(env);
-    } catch (err) {
-      expect((err as ConfigError).code).toBe("CONFIG_REJECTED:PIMS_AUTH_MODE");
-    }
   });
 
   it("rejects missing PIMS authentication", () => {
@@ -164,17 +140,6 @@ describe("Configuration Manager", () => {
       loadConfig(env);
     } catch (err) {
       expect((err as ConfigError).code).toBe("CONFIG_MISSING:REASONING_MODEL");
-    }
-  });
-
-  it("fails fast when model referenced auth env is missing", () => {
-    const env = { ...baseValidEnv };
-    delete env.MISTRAL_API_KEY;
-    expect(() => loadConfig(env)).toThrow(ConfigError);
-    try {
-      loadConfig(env);
-    } catch (err) {
-      expect((err as ConfigError).code).toBe("CONFIG_MISSING:MISTRAL_API_KEY");
     }
   });
 

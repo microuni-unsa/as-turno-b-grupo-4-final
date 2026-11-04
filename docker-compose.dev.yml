@@ -1,0 +1,55 @@
+services:
+  # Local PostgreSQL 16 + pgvector container for the Evidence Store and RAG vector index
+  evidence-db:
+    image: pgvector/pgvector:pg16
+    container_name: pims-evidence-db
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: pims
+      POSTGRES_PASSWORD: pims
+      POSTGRES_DB: pims_evidence
+    volumes:
+      - evidence_pgdata:/var/lib/postgresql/data
+      # Mount initial database schema and UNSA seed data on first boot
+      - ./data/gestitel_base_de_datos.sql:/docker-entrypoint-initdb.d/01-gestitel.sql:ro
+      - ./data/02-init-unsa-seed.sql:/docker-entrypoint-initdb.d/02-seed.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pims -d pims_evidence"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Optional web-based database management tool for inspecting tables and vector embeddings
+  adminer:
+    image: adminer:latest
+    container_name: pims-evidence-adminer
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    depends_on:
+      evidence-db:
+        condition: service_healthy
+
+  # Traefik reverse proxy in host network mode to route local dev scripts under a single port
+  traefik:
+    image: traefik:v3.3
+    container_name: pims-dev-traefik
+    restart: unless-stopped
+    network_mode: host
+    command:
+      - "--global.checknewversion=false"
+      - "--global.sendanonymoususage=false"
+      - "--entrypoints.web.address=:${DEV_PORT:-80}"
+      - "--entrypoints.traefik.address=:8082"
+      - "--api.dashboard=true"
+      - "--api.insecure=true"
+      - "--providers.file.filename=/etc/traefik/dynamic.yml"
+      - "--providers.file.watch=true"
+    volumes:
+      - ./traefik.dev.yml:/etc/traefik/dynamic.yml:ro
+
+volumes:
+  evidence_pgdata:
+    driver: local

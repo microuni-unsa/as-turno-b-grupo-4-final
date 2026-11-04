@@ -1,0 +1,38 @@
+---
+import BaseLayout from "@pims/cockpit/ui/layouts/BaseLayout.astro";
+import Header from "@pims/cockpit/ui/components/Header.astro";
+import Sidebar from "@pims/cockpit/ui/components/Sidebar.astro";
+
+interface Props {
+  title?: string;
+  breadcrumb: string;
+}
+
+const { title, breadcrumb } = Astro.props;
+---
+
+<BaseLayout title={title}>
+  <div class="flex h-screen w-full bg-slate-950 text-slate-100 overflow-hidden font-sans">
+    <Sidebar currentPath={Astro.url.pathname} />
+
+    <div class="flex-1 flex flex-col min-w-0 overflow-hidden">
+      <Header breadcrumb={breadcrumb} />
+
+      <main class="flex-1 overflow-y-auto p-6">
+        <slot />
+      </main>
+    </div>
+  </div>
+</BaseLayout>
+
+<script>
+  import { getSession } from "@pims/cockpit/ui/lib/session.ts";
+  import { sseClient } from "@pims/cockpit/ui/lib/sse-client.ts";
+
+  const session = getSession();
+  if (!session) {
+    window.location.href = "/login";
+  } else {
+    sseClient.start();
+  }
+</script>

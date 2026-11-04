@@ -1,0 +1,238 @@
+---
+import AppLayout from "@pims/cockpit/ui/layouts/AppLayout.astro";
+import {
+  Activity,
+  CheckCircle2,
+  Clock,
+  Key,
+  Lock,
+  RotateCcw,
+  Shield,
+  Terminal,
+  XCircle,
+} from "lucide-astro";
+---
+
+<AppLayout title="Bitácora de Seguridad | Glass-Box Cockpit" breadcrumb="Bitácora de Seguridad">
+  <!-- Restricted Access Banner (if user lacks view_securitylog) -->
+  <div id="access-denied-panel" class="hidden p-8 text-center space-y-4 max-w-lg mx-auto mt-12 bg-slate-900 border border-slate-800 rounded-2xl shadow-xl">
+    <div class="w-12 h-12 rounded-full bg-rose-950/80 border border-rose-800 text-rose-400 flex items-center justify-center mx-auto">
+      <Lock class="w-6 h-6" />
+    </div>
+    <div class="space-y-1">
+      <h2 class="text-base font-bold text-white">Acceso Restringido</h2>
+      <p class="text-xs text-slate-400">
+        Su rol actual no posee el permiso <code class="text-rose-300 font-mono">view_securitylog</code> necesario para auditar la bitácora de mutaciones HTTP.
+      </p>
+    </div>
+    <a
+      href="/incidents"
+      class="inline-block px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold transition-colors"
+    >
+      Volver a Incidentes
+    </a>
+  </div>
+
+  <!-- Main Security Log Content -->
+  <div id="security-log-content" class="space-y-6">
+    <!-- Header title -->
+    <div class="flex items-center justify-between">
+      <div>
+        <h1 class="text-xl font-bold tracking-tight text-white flex items-center space-x-2">
+          <Terminal class="w-6 h-6 text-blue-400" />
+          <span>Bitácora de Seguridad & Mutaciones PIMS</span>
+        </h1>
+        <p class="text-xs text-slate-400 mt-1">
+          Trazabilidad criptográfica y auditoría en tiempo real de llamadas HTTP salientes y traspasos de roles del agente
+        </p>
+      </div>
+
+      <div class="flex items-center space-x-2 text-xs">
+        <span class="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
+        <span class="text-slate-300 font-medium">Captura activa de eventos</span>
+      </div>
+    </div>
+
+    <!-- Telemetry Stats Cards -->
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div class="bg-slate-900 border border-slate-800 rounded-xl p-3.5 shadow-sm">
+        <p class="text-xs font-medium text-slate-400">Mutaciones Totales</p>
+        <p id="stat-mutations-count" class="text-2xl font-bold text-white mt-1 tabular-nums">0</p>
+      </div>
+      <div class="bg-slate-900 border border-slate-800 rounded-xl p-3.5 shadow-sm">
+        <p class="text-xs font-medium text-slate-400">Latencia Media</p>
+        <p id="stat-avg-duration" class="text-2xl font-bold text-slate-200 mt-1 tabular-nums">— ms</p>
+      </div>
+      <div class="bg-slate-900 border border-slate-800 rounded-xl p-3.5 shadow-sm">
+        <p class="text-xs font-medium text-emerald-400">Éxito HTTP</p>
+        <p id="stat-success-rate" class="text-2xl font-bold text-emerald-300 mt-1 tabular-nums">100%</p>
+      </div>
+      <div class="bg-slate-900 border border-slate-800 rounded-xl p-3.5 shadow-sm">
+        <p class="text-xs font-medium text-blue-400">Transiciones de Rol</p>
+        <p id="stat-role-transitions" class="text-2xl font-bold text-blue-300 mt-1 tabular-nums">0</p>
+      </div>
+    </div>
+
+    <!-- Role Transitions Strip -->
+    <div class="space-y-2">
+      <h2 class="text-xs font-semibold text-slate-300 uppercase tracking-wider flex items-center space-x-1.5">
+        <Activity class="w-4 h-4 text-blue-400" />
+        <span>Traspasos de Roles y Arrendamientos (Agent Leases)</span>
+      </h2>
+      <div
+        id="role-transitions-container"
+        class="flex items-center space-x-2 overflow-x-auto py-2 px-1 text-xs text-slate-400"
+      >
+        <span class="text-slate-500 italic">Esperando traspasos de roles...</span>
+      </div>
+    </div>
+
+    <!-- Mutations Table -->
+    <div class="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-sm space-y-3">
+      <div class="p-4 border-b border-slate-800 flex items-center justify-between">
+        <h2 class="text-xs font-semibold text-slate-300 uppercase tracking-wider">
+          Registro Cronológico de Mutaciones HTTP
+        </h2>
+        <span id="mutations-footer-count" class="text-xs text-slate-400">0 llamadas registradas</span>
+      </div>
+
+      <div class="overflow-x-auto">
+        <table class="w-full text-left text-xs">
+          <thead class="bg-slate-950/60 text-slate-400 uppercase tracking-wider border-b border-slate-800 font-semibold">
+            <tr>
+              <th class="py-3 px-4">Hora (UTC)</th>
+              <th class="py-3 px-4">Incidente</th>
+              <th class="py-3 px-4">Método</th>
+              <th class="py-3 px-4">Endpoint</th>
+              <th class="py-3 px-4">Operación</th>
+              <th class="py-3 px-4">Idempotency Key</th>
+              <th class="py-3 px-4">Duración</th>
+              <th class="py-3 px-4">Estado</th>
+            </tr>
+          </thead>
+          <tbody id="mutations-tbody" class="divide-y divide-slate-800 text-slate-300 font-normal">
+            <tr>
+              <td colspan="8" class="py-8 text-center text-slate-500">
+                Esperando eventos de mutación HTTP desde el adaptador PIMS...
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</AppLayout>
+
+<script>
+  import { getSession, hasPermission } from "@pims/cockpit/ui/lib/session.ts";
+  import type { AgentEvent } from "@pims/types/agent.ts";
+
+  const session = getSession();
+  const deniedPanel = document.getElementById("access-denied-panel");
+  const contentPanel = document.getElementById("security-log-content");
+
+  if (!hasPermission(session, "view_securitylog")) {
+    if (deniedPanel) deniedPanel.classList.remove("hidden");
+    if (contentPanel) contentPanel.classList.add("hidden");
+  }
+
+  const tbody = document.getElementById("mutations-tbody") as HTMLTableSectionElement;
+  const roleContainer = document.getElementById("role-transitions-container");
+  const statCount = document.getElementById("stat-mutations-count");
+  const statAvg = document.getElementById("stat-avg-duration");
+  const statSuccess = document.getElementById("stat-success-rate");
+  const statRoles = document.getElementById("stat-role-transitions");
+  const footerCount = document.getElementById("mutations-footer-count");
+
+  let mutations: any[] = [];
+  let roleTransitionsCount = 0;
+
+  function addMutation(event: any) {
+    mutations.unshift(event);
+    if (mutations.length > 100) mutations.pop();
+
+    if (statCount) statCount.textContent = String(mutations.length);
+    if (footerCount) footerCount.textContent = `${mutations.length} llamadas registradas`;
+
+    const totalDuration = mutations.reduce((acc, m) => acc + (m.duration_ms || 0), 0);
+    const avgDuration = Math.round(totalDuration / mutations.length);
+    if (statAvg) statAvg.textContent = `${avgDuration} ms`;
+
+    const successCount = mutations.filter((m) => m.status >= 200 && m.status < 400).length;
+    const rate = Math.round((successCount / mutations.length) * 100);
+    if (statSuccess) statSuccess.textContent = `${rate}%`;
+
+    renderMutations();
+  }
+
+  function renderMutations() {
+    if (!tbody) return;
+    tbody.innerHTML = mutations
+      .map((m) => {
+        const isSuccess = m.status >= 200 && m.status < 400;
+        const statusBadgeClass = isSuccess
+          ? "bg-emerald-950 text-emerald-400 border-emerald-800"
+          : "bg-rose-950 text-rose-400 border-rose-800";
+
+        let methodBadgeClass = "bg-slate-800 text-slate-300";
+        if (m.method === "POST") methodBadgeClass = "bg-blue-950 text-blue-300 border border-blue-800";
+        if (m.method === "PATCH") methodBadgeClass = "bg-amber-950 text-amber-300 border border-amber-800";
+        if (m.method === "DELETE") methodBadgeClass = "bg-rose-950 text-rose-300 border border-rose-800";
+
+        return `
+          <tr class="hover:bg-slate-800/40 transition-colors">
+            <td class="py-3 px-4 font-mono text-slate-400 text-[11px]">${new Date(m.at_utc).toLocaleTimeString()}</td>
+            <td class="py-3 px-4 font-mono font-semibold text-blue-400">${m.incident_code || "—"}</td>
+            <td class="py-3 px-4">
+              <span class="inline-block px-1.5 py-0.5 rounded text-[10px] font-bold uppercase ${methodBadgeClass}">
+                ${m.method}
+              </span>
+            </td>
+            <td class="py-3 px-4 font-mono text-slate-300 max-w-xs truncate" title="${m.endpoint}">
+              ${m.endpoint}
+            </td>
+            <td class="py-3 px-4 text-white font-medium">${m.operation}</td>
+            <td class="py-3 px-4 font-mono text-[11px] text-slate-400">
+              ${m.idempotency_key ? `${m.idempotency_key.slice(0, 16)}…` : "—"}
+            </td>
+            <td class="py-3 px-4 font-mono tabular-nums text-slate-300">${m.duration_ms} ms</td>
+            <td class="py-3 px-4">
+              <span class="inline-block px-1.5 py-0.5 rounded text-[11px] font-semibold border ${statusBadgeClass}">
+                ${m.status}
+              </span>
+            </td>
+          </tr>
+        `;
+      })
+      .join("");
+  }
+
+  function addRoleTransition(event: any) {
+    roleTransitionsCount += 1;
+    if (statRoles) statRoles.textContent = String(roleTransitionsCount);
+
+    if (roleContainer) {
+      if (roleTransitionsCount === 1) roleContainer.innerHTML = "";
+      const pill = document.createElement("div");
+      pill.className = "flex items-center space-x-1 px-2.5 py-1 rounded-full bg-slate-950 border border-slate-800 shrink-0 text-xs text-slate-300";
+      pill.innerHTML = `
+        <span class="font-mono text-blue-400">${event.incident_code}</span>
+        <span class="text-slate-500">·</span>
+        <span class="text-slate-400">${event.previous_role || "none"}</span>
+        <span class="text-slate-600">→</span>
+        <span class="font-semibold text-emerald-400 uppercase">${event.role}</span>
+      `;
+      roleContainer.prepend(pill);
+    }
+  }
+
+  // SSE agent event listener
+  window.addEventListener("cockpit:agent-event", ((e: CustomEvent<AgentEvent>) => {
+    const event = e.detail;
+    if (event.type === "tool:mutation") {
+      addMutation(event);
+    } else if (event.type === "role:transition") {
+      addRoleTransition(event);
+    }
+  }) as EventListener);
+</script>

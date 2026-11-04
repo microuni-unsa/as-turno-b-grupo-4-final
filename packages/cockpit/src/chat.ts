@@ -22,7 +22,7 @@ import type {
   CockpitIncidentSummary,
   CockpitSession,
 } from "@pims/types/cockpit.ts";
-import { MODEL_ROUTE_FAST } from "@pims/types/constants.ts";
+import { MODEL_ROUTE_REASONING } from "@pims/types/constants.ts";
 import {
   CitationFabricatedError,
   CockpitChatInvalidError,
@@ -45,7 +45,7 @@ const PERSONA_PROMPTS: Record<ChatPersona, string> = {
 };
 
 const RESPONSE_CONTRACT =
-  "Answer only from the provided tool results. Return JSON {reply, citations_used, suggested_actions}. Never invent facts or citations. Return citations_used as citation_id values copied from the supplied tool results.";
+  'Answer only from the provided tool results. Return strict JSON {"reply": string, "citations_used": string[], "suggested_actions": string[]}. In citations_used, return ONLY the exact citation_id strings (e.g. ["C1", "C2"]) copied from the citations list, or [] if none apply. Never put statute names or article numbers in citations_used. Never invent citations.';
 
 export function resolvePersona(
   session: CockpitSession,
@@ -224,6 +224,9 @@ export async function handleChat(
       ...chatCitations.map((citation, index) => {
         const citationId = `C${index + 1}`;
         citationById.set(citationId, citation);
+        citationById.set(citation.chunk_id, citation);
+        citationById.set(citation.doc_id, citation);
+        citationById.set(citation.citation, citation);
         return {
           citation_id: citationId,
           doc_id: citation.doc_id,
@@ -253,7 +256,7 @@ export async function handleChat(
   const safeContext = JsonObjectSchema.parse(sanitizeForPrompt(context));
   const serializedContext = JSON.stringify(safeContext);
   const response = await deps.modelClient.chat_json({
-    route: MODEL_ROUTE_FAST,
+    route: MODEL_ROUTE_REASONING,
     system: `${PERSONA_PROMPTS[persona]} ${RESPONSE_CONTRACT}`,
     messages: [{ role: "user", content: serializedContext }],
     max_tokens: 4096,
@@ -273,14 +276,30 @@ export async function handleChat(
   );
   const resolved: ChatCitation[] = [];
   for (const citationId of citationsUsed) {
-    const citation = citationById.get(citationId);
+    let citation = citationById.get(citationId);
+    if (citation === undefined) {
+      for (const [key, val] of citationById.entries()) {
+        const idLower = citationId.toLowerCase();
+        if (
+          key.toLowerCase().includes(idLower) ||
+          idLower.includes(key.toLowerCase()) ||
+          val.citation.toLowerCase().includes(idLower) ||
+          val.text.toLowerCase().includes(idLower)
+        ) {
+          citation = val;
+          break;
+        }
+      }
+    }
     if (citation === undefined) {
       throw new CitationFabricatedError(
         citationId,
         `Chat reply cited '${citationId}' which is absent from the supplied retrieval context`,
       );
     }
-    resolved.push(citation);
+    if (!resolved.some((r) => r.chunk_sha256 === citation.chunk_sha256)) {
+      resolved.push(citation);
+    }
   }
   readTextArray(response.content.suggested_actions, "suggested_actions");
 

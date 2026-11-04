@@ -1,0 +1,23 @@
+---
+import BaseLayout from "@pims/cockpit/ui/layouts/BaseLayout.astro";
+---
+
+<BaseLayout title="Redireccionando... | Glass-Box Cockpit">
+  <div class="flex items-center justify-center min-h-screen bg-slate-950 text-slate-400 text-sm">
+    <div class="space-y-2 text-center">
+      <div class="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto"></div>
+      <p>Cargando consola operativa...</p>
+    </div>
+  </div>
+</BaseLayout>
+
+<script>
+  import { getSession } from "@pims/cockpit/ui/lib/session.ts";
+
+  const session = getSession();
+  if (session) {
+    window.location.href = "/incidents";
+  } else {
+    window.location.href = "/login";
+  }
+</script>

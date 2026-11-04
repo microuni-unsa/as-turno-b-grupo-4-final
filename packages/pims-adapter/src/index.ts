@@ -1,4 +1,3 @@
-import { execFileSync } from "node:child_process";
 import { assertAttachmentMeta } from "@pims/types/attachments.ts";
 import {
   DEFAULT_IDEMPOTENCY_KEY_PREFIX,
@@ -69,7 +68,6 @@ export interface PimsAdapterConfig {
   timeoutMs?: number;
   maxRetries?: number;
   idempotencyKeyPrefix?: string;
-  tokenCmd?: string[];
   username?: string;
   password?: string;
   extraHeaders?: Record<string, string>;
@@ -91,7 +89,6 @@ export class PimsAdapter {
   readonly extraHeaders?: Record<string, string>;
   readonly cookies?: Record<string, string>;
   private readonly onMutation?: (record: PimsMutationRecord) => void;
-  private readonly tokenCmd?: string[];
   private username?: string;
   private password?: string;
 
@@ -110,7 +107,6 @@ export class PimsAdapter {
     this.extraHeaders = config.extraHeaders;
     this.cookies = config.cookies;
     this.onMutation = config.onMutation;
-    this.tokenCmd = config.tokenCmd;
     this.username = config.username;
     this.password = config.password;
   }
@@ -1065,7 +1061,12 @@ export class PimsAdapter {
         );
       }
 
-      if (response.status === 401 && !options.isPublic) {
+      if (response.status === 401) {
+        if (options.isPublic) {
+          throw new PimsAuthFailedError(
+            "Authentication credentials rejected by PIMS",
+          );
+        }
         const rawBody = await response.text().catch(() => "");
         let parsedBody: Record<string, unknown> = {};
         try {
@@ -1227,24 +1228,8 @@ export class PimsAdapter {
       return;
     }
 
-    if (this.tokenCmd && this.tokenCmd.length > 0) {
-      const [cmd, ...args] = this.tokenCmd;
-      if (!cmd) {
-        throw new PimsAuthFailedError("PIMS_TOKEN_CMD is empty");
-      }
-      try {
-        const output = execFileSync(cmd, args, { encoding: "utf-8" }).trim();
-        this.accessToken = output;
-        return;
-      } catch (err: unknown) {
-        throw new PimsAuthFailedError(
-          `PIMS_TOKEN_CMD execution failed: ${String(err)}`,
-        );
-      }
-    }
-
     throw new PimsAuthFailedError(
-      "No authentication method configured for PIMS adapter",
+      "No authentication credentials configured for PIMS adapter",
     );
   }
 
@@ -1260,11 +1245,6 @@ export class PimsAdapter {
 
     if (this.username && this.password) {
       await this.login(this.username, this.password);
-      return true;
-    }
-
-    if (this.tokenCmd && this.tokenCmd.length > 0) {
-      await this.obtainToken();
       return true;
     }
 

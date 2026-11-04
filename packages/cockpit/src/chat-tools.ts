@@ -90,6 +90,24 @@ export async function listActiveIncidents(
   return summaries;
 }
 
+export async function listAllIncidents(
+  adapter: PimsAdapter,
+): Promise<CockpitIncidentSummary[]> {
+  const summaries: CockpitIncidentSummary[] = [];
+  let page = 1;
+  while (true) {
+    const res = await adapter.listIncidents({ page, page_size: 100 });
+    for (const incident of res.results) {
+      summaries.push(summarizeIncident(incident));
+    }
+    if (res.next === null || res.results.length === 0) {
+      break;
+    }
+    page += 1;
+  }
+  return summaries.sort((a, b) => b.id - a.id);
+}
+
 export async function getRegulatoryTimers(
   store: EvidenceStore,
   clock: () => Date,

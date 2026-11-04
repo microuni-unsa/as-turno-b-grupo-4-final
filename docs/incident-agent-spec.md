@@ -541,7 +541,7 @@ Fixed catalog of 10. Each skill maps to ≥1 tool; missing skill → `SKILL_UNKN
 
 The complete callable surface of 19 tools. Any call outside this manifest → `TOOL_UNKNOWN`. All tools are synchronous request/response. Mutations REQUIRE client `Idempotency-Key` (`<IDEMPOTENCY_KEY_PREFIX>:<incident_code>:<op>:<uuid>`, §13); PIMS has no native key, so `pims-adapter` implements exactly-once by reconcile-before-retry (GET + history check, §12.1). Every tool declares args, returns, and named errors; arg validation failure → `TOOL_ARGS_INVALID:<tool>:<field>` (no coercion).
 
-`pims_login` — args: none (uses `PIMS_TOKEN_CMD` service credential, §13). Returns: `{access_expires_at_utc, schema, user_id}`. Errors: `PIMS_AUTH_FAILED`, `PIMS_THROTTLED`, `PIMS_GATE_BLOCKED`. Side effect: in-memory token only.
+`pims_login` — args: none (uses `PIMS_USERNAME` and `PIMS_PASSWORD` service credentials, §13). Returns: `{access_expires_at_utc, schema, user_id}`. Errors: `PIMS_AUTH_FAILED`, `PIMS_THROTTLED`, `PIMS_GATE_BLOCKED`. Side effect: in-memory token only.
 
 `pims_list_incidents` — args: `{status?, severity?, incident_type?, search?, page?, page_size? (per PIMS_PAGE_SIZE, §13), ordering?}`. Returns: `{count, next, previous, results: [incident_summary]}` (E05). Errors: `PIMS_PERMISSION_DENIED`, `PIMS_FILTER_IGNORED` (warning + client-side filter, §3.1), `PIMS_EMPTY_LIST` (informational).
 
@@ -1011,7 +1011,7 @@ Required by: B.3.11/B.3.12 (protect the process itself), 4.2/6.1.2 (PII risk), A
 ### 11.1 Authentication and authorization
 
 - Operator console: SSO via PIMS session (E01 with operator credentials; agent NEVER stores operator passwords; session tokens in memory, 8h access / 1d refresh same as §3.3). Console role check on every action (operator needs `view_incident` minimum; kill-switch needs `change_incident`; recipient activation needs `change_incident`).
-- Agent service identity: dedicated PIMS user with EXACTLY the §3.3 grants (least privilege; `view_securitylog` denied). Credential via `PIMS_TOKEN_CMD` (§13) — a helper printing a fresh token/session to stdout; the agent MUST NOT store, log, or embed the credential. Token refresh per §3.6 (refresh-once then re-login).
+- Agent service identity: dedicated PIMS user with EXACTLY the §3.3 grants (least privilege; `view_securitylog` denied). Credential via `PIMS_USERNAME` and `PIMS_PASSWORD` (§13); the agent MUST NOT store, log, or embed the credential in prompts or output. Token refresh per §3.6 (refresh-once then re-login).
 - Tool-level authz: §5.4 matrix enforced in-process on every call (denied → `ROLE_TOOL_DENIED`). No ambient authority: roles receive capability handles only for allowlisted tools.
 
 ### 11.2 Secrets handling
@@ -1039,7 +1039,7 @@ Every PIMS call carries the session whose JWT `schema` claim MUST equal the conn
 
 ### 11.6 Abuse controls
 
-Login throttle respected (5/min; agent backs off per §3.6, never hammers). No CAPTCHA exists on ARCO (Anexo_05 limitation 7) — irrelevant (agent does not touch ARCO). No 2FA exists (limitation 9) — agent compensates with `PIMS_TOKEN_CMD` short-lived sessions (≤1h) + `must_change_password` compliance on provisioning. Session 8h (limitation 8) — agent re-authenticates proactively at 7h (`SESSION_PROACTIVE_REFRESH`). XSS/localStorage token pattern (limitation 12) is a frontend concern; the agent keeps tokens in memory only and never renders HTML.
+Login throttle respected (5/min; agent backs off per §3.6, never hammers). No CAPTCHA exists on ARCO (Anexo_05 limitation 7) — irrelevant (agent does not touch ARCO). No 2FA exists (limitation 9) — agent compensates with short-lived session tokens (≤1h) + `must_change_password` compliance on provisioning. Session 8h (limitation 8) — agent re-authenticates proactively at 7h (`SESSION_PROACTIVE_REFRESH`). XSS/localStorage token pattern (limitation 12) is a frontend concern; the agent keeps tokens in memory only and never renders HTML.
 
 ## 12. Reliability, observability, deployment
 
@@ -1078,7 +1078,7 @@ Production Build & Docker Packaging:
 
 Operational troubleshooting guide per named error (one paragraph each, exact first action):
 
-- `PIMS_AUTH_FAILED`: verify `PIMS_TOKEN_CMD` output freshness + `schema` claim (`bun -e` decode per §3.3); re-provision service user if `must_change_password` flipped.
+- `PIMS_AUTH_FAILED`: verify `PIMS_USERNAME` and `PIMS_PASSWORD` credentials + `schema` claim (`bun -e` decode per §3.3); re-provision service user if `must_change_password` flipped.
 - `PIMS_GATE_BLOCKED`: read `LICENSE_EXPIRED` vs `SERVICE_SUSPENDED` from the 403 body; contact GESTITEL/license admin; agent stays read-only — do NOT restart-loop.
 - `PIMS_PERMISSION_DENIED`: compare required (§3.3) vs granted (E04 + user perms); request grant; use delegated-draft ONLY for audit actions.
 - `PIMS_UNAVAILABLE` / `CIRCUIT_OPEN`: check PIMS status page/deploy; breaker auto-half-opens — do NOT force-close; verify reconcile on recovery (no dupes).
@@ -1100,9 +1100,8 @@ Required by: B.3.11 (documented, communicated procedures — configuration IS pr
 |---|---|---|---|---|
 | `PIMS_BASE_URL` | url | `https://unsa.27k.pe` | Yes | PIMS base; no credential here |
 | `PIMS_SCHEMA` | string | `unsa` | Yes | Tenant schema; asserted on every session (§11.4) |
-| `PIMS_TOKEN_CMD` | argv | — | One auth mode | Helper printing a fresh PIMS session token; token mode is mutually exclusive with password mode |
-| `PIMS_USERNAME` | string | — | Password mode | PIMS service username; requires `PIMS_PASSWORD` |
-| `PIMS_PASSWORD` | string | — | Password mode | Plain PIMS password from the environment (never committed); setting both auth modes, or neither, → `CONFIG_REJECTED:PIMS_AUTH_MODE` / `CONFIG_MISSING:PIMS_AUTH` |
+| `PIMS_USERNAME` | string | — | Yes | PIMS service username; requires `PIMS_PASSWORD` |
+| `PIMS_PASSWORD` | string | — | Yes | Plain PIMS password from the environment (never committed); missing either → `CONFIG_MISSING:PIMS_AUTH` |
 | `PIMS_TIMEOUT_MS` | int | `15000` | No | Per-request timeout |
 | `PIMS_MAX_RETRIES` | int | `3` | No | §3.6/§12.2 retry cap |
 | `PIMS_PAGE_SIZE` | `default/max` | `50/100` | No | §5.3 pagination bounds for `core_incident` and related list queries |

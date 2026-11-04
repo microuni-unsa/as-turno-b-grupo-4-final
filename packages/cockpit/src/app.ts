@@ -6,6 +6,7 @@ import {
   type SessionRegistry,
 } from "@pims/cockpit/auth.ts";
 import { handleChat } from "@pims/cockpit/chat.ts";
+import { listAllIncidents } from "@pims/cockpit/chat-tools.ts";
 import { buildSnapshot, CockpitEventHub } from "@pims/cockpit/event-hub.ts";
 import type { AgentConfig } from "@pims/config";
 import type { EvidenceStore } from "@pims/evidence/evidence-store.ts";
@@ -47,6 +48,7 @@ import {
 } from "@pims/types/errors.ts";
 import type { ExemptionEvaluationInput } from "@pims/types/notices.ts";
 import { Hono } from "hono";
+import { cors } from "hono/cors";
 import { streamSSE } from "hono/streaming";
 import { ZodError } from "zod";
 
@@ -162,6 +164,16 @@ export function createCockpitApp(deps: CockpitAppDeps): Hono<CockpitEnv> {
   const app = new Hono<CockpitEnv>();
   let readiness: ReadinessCache | null = null;
 
+  app.use(
+    "*",
+    cors({
+      origin: (origin) => origin,
+      allowHeaders: ["Authorization", "Content-Type", "Accept"],
+      allowMethods: ["GET", "POST", "OPTIONS"],
+      credentials: true,
+    }),
+  );
+
   app.post("/api/login", async (c) => {
     const body = await c.req.json().catch(() => ({}));
     const request = CockpitLoginRequestSchema.parse(body);
@@ -189,6 +201,13 @@ export function createCockpitApp(deps: CockpitAppDeps): Hono<CockpitEnv> {
     }
     c.set("session", deps.sessions.get(token));
     await next();
+  });
+
+  app.get("/api/incidents", async (c) => {
+    const session = c.get("session");
+    requirePermission(session, "view_incident");
+    const incidents = await listAllIncidents(deps.adapter);
+    return c.json({ incidents });
   });
 
   app.get("/api/stream", async (c) => {
