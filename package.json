@@ -16,7 +16,8 @@
     "dev:ui": "bun --filter @pims/cockpit dev:ui",
     "build:ui": "bun --filter @pims/cockpit build:ui",
     "start": "bun run packages/cockpit/src/server.ts",
-    "build": "bun build packages/cockpit/src/server.ts --outdir dist --target bun"
+    "build": "bun build packages/cockpit/src/server.ts --outdir dist --target bun",
+    "decrypt": "sops -d --output .env .enc.env"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.6.4",

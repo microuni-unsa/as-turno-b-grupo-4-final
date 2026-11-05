@@ -29,6 +29,7 @@
           (with pkgs; [
             postgresql
             docker
+            sops
           ])
           (with unstable; [
             bun
