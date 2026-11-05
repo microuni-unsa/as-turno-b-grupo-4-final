@@ -116,6 +116,10 @@ export const ROLE_PATCH_POLICIES: Readonly<
     pims_update_incident: [
       "resolved_date",
       "measure_considered_resolved",
+      "measure_updated_registry",
+      "measure_new_security",
+      "measure_improved_policies",
+      "measure_reported_authorities",
       "evidence_refs",
     ],
   },

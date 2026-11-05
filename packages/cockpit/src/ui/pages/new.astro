@@ -6,16 +6,19 @@ import {
   ArrowLeft,
   CheckCircle2,
   HelpCircle,
+  Info,
   Mic,
   MicOff,
+  Plus,
   Send,
   Sparkles,
+  Trash2,
   X,
 } from "lucide-astro";
 ---
 
 <AppLayout title="Nuevo Incidente Guiado | Glass-Box Cockpit" breadcrumb="Nuevo Incidente">
-  <div class="max-w-5xl mx-auto space-y-6 pb-12">
+  <div class="max-w-5xl mx-auto space-y-6 pb-16">
     <!-- Header -->
     <div class="flex items-center justify-between">
       <div class="flex items-center space-x-3">
@@ -34,7 +37,7 @@ import {
             </span>
           </h1>
           <p class="text-xs text-slate-400 mt-1">
-            Redacte el incidente con asistencia de IA o dictado por voz. Revise y valide cada campo antes de enviar.
+            Formulario unificado con el PIMS primario. Complete los campos con asistencia de IA o dictado por voz. Las secciones de medidas y acciones pueden dejarse vacías y serán completadas por el orquestador.
           </p>
         </div>
       </div>
@@ -89,155 +92,304 @@ import {
       </div>
     </div>
 
-    <!-- Incident Form Form Sections -->
+    <!-- Incident Form Sections -->
     <form id="incident-form" class="space-y-6">
-      <!-- Section 1: Identificación -->
+
+      <!-- Section 1: Representante Legal (Opcional) -->
       <div class="bg-slate-900 border border-slate-800 rounded-xl p-5 space-y-4">
-        <h3 class="text-sm font-semibold text-white border-b border-slate-800 pb-2">1. Identificación del Incidente</h3>
-        <div class="grid grid-cols-1 gap-4">
+        <div class="flex items-center justify-between border-b border-slate-800 pb-2">
+          <div>
+            <h3 class="text-sm font-semibold text-white">1. Representante Legal</h3>
+            <p class="text-[11px] text-slate-400 mt-0.5">Datos del representante o persona de contacto principal ante la autoridad.</p>
+          </div>
+          <span class="text-[11px] font-medium text-slate-500 bg-slate-800 px-2 py-0.5 rounded">Opcional</span>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <div class="flex items-center justify-between mb-1">
-              <label class="text-xs font-medium text-slate-300">
-                Título del incidente <span class="text-rose-400">*</span>
-              </label>
-              <div class="flex items-center space-x-1.5">
-                <span id="badge-title" class="provenance-badge hidden"></span>
-                <button type="button" class="btn-explain text-slate-400 hover:text-blue-400" data-field="title">
-                  <HelpCircle class="w-3.5 h-3.5" />
-                </button>
-              </div>
+              <label class="text-xs font-medium text-slate-300">Número de documento</label>
+              <span id="badge-rep_document_number" class="provenance-badge hidden"></span>
             </div>
             <input
-              id="field-title"
-              name="title"
+              id="field-rep_document_number"
+              name="rep_document_number"
               type="text"
-              required
-              maxlength="150"
-              placeholder="Ej. Filtración de registros en portal de admisiones"
+              placeholder="Ej. 72345678"
               class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-200 focus:border-blue-500 focus:outline-none"
             />
           </div>
 
           <div>
             <div class="flex items-center justify-between mb-1">
-              <label class="text-xs font-medium text-slate-300">Descripción detallada</label>
-              <div class="flex items-center space-x-1.5">
-                <span id="badge-description" class="provenance-badge hidden"></span>
-                <button type="button" class="btn-explain text-slate-400 hover:text-blue-400" data-field="description">
-                  <HelpCircle class="w-3.5 h-3.5" />
-                </button>
-              </div>
+              <label class="text-xs font-medium text-slate-300">Caducidad del documento</label>
+              <span id="badge-rep_document_expiry" class="provenance-badge hidden"></span>
             </div>
-            <textarea
-              id="field-description"
-              name="description"
-              rows="3"
-              maxlength="1000"
-              placeholder="Detalles sobre lo ocurrido, sistemas y consecuencias observadas..."
-              class="w-full bg-slate-950 border border-slate-800 rounded-lg p-3 text-xs text-slate-200 focus:border-blue-500 focus:outline-none"
-            ></textarea>
+            <input
+              id="field-rep_document_expiry"
+              name="rep_document_expiry"
+              type="date"
+              class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-200 focus:border-blue-500 focus:outline-none"
+            />
+          </div>
+
+          <div>
+            <div class="flex items-center justify-between mb-1">
+              <label class="text-xs font-medium text-slate-300">Nombres</label>
+              <span id="badge-rep_first_name" class="provenance-badge hidden"></span>
+            </div>
+            <input
+              id="field-rep_first_name"
+              name="rep_first_name"
+              type="text"
+              placeholder="Ej. Carlos Alberto"
+              class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-200 focus:border-blue-500 focus:outline-none"
+            />
+          </div>
+
+          <div>
+            <div class="flex items-center justify-between mb-1">
+              <label class="text-xs font-medium text-slate-300">Cargo</label>
+              <span id="badge-rep_position" class="provenance-badge hidden"></span>
+            </div>
+            <input
+              id="field-rep_position"
+              name="rep_position"
+              type="text"
+              placeholder="Ej. Director de Tecnologías / DPO"
+              class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-200 focus:border-blue-500 focus:outline-none"
+            />
+          </div>
+
+          <div>
+            <div class="flex items-center justify-between mb-1">
+              <label class="text-xs font-medium text-slate-300">Apellido paterno</label>
+              <span id="badge-rep_last_name_p" class="provenance-badge hidden"></span>
+            </div>
+            <input
+              id="field-rep_last_name_p"
+              name="rep_last_name_p"
+              type="text"
+              placeholder="Ej. Mendoza"
+              class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-200 focus:border-blue-500 focus:outline-none"
+            />
+          </div>
+
+          <div>
+            <div class="flex items-center justify-between mb-1">
+              <label class="text-xs font-medium text-slate-300">Apellido materno</label>
+              <span id="badge-rep_last_name_m" class="provenance-badge hidden"></span>
+            </div>
+            <input
+              id="field-rep_last_name_m"
+              name="rep_last_name_m"
+              type="text"
+              placeholder="Ej. Quispe"
+              class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-200 focus:border-blue-500 focus:outline-none"
+            />
+          </div>
+
+          <div>
+            <div class="flex items-center justify-between mb-1">
+              <label class="text-xs font-medium text-slate-300">Celular</label>
+              <span id="badge-rep_phone" class="provenance-badge hidden"></span>
+            </div>
+            <input
+              id="field-rep_phone"
+              name="rep_phone"
+              type="tel"
+              placeholder="Ej. 987654321"
+              class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-200 focus:border-blue-500 focus:outline-none"
+            />
+          </div>
+
+          <div>
+            <div class="flex items-center justify-between mb-1">
+              <label class="text-xs font-medium text-slate-300">Correo electrónico</label>
+              <span id="badge-rep_email" class="provenance-badge hidden"></span>
+            </div>
+            <input
+              id="field-rep_email"
+              name="rep_email"
+              type="email"
+              placeholder="Ej. cmendoza@unsa.edu.pe"
+              class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-200 focus:border-blue-500 focus:outline-none"
+            />
           </div>
         </div>
       </div>
 
-      <!-- Section 2: Línea de tiempo -->
+      <!-- Section 2: Entidad Afectada (Opcional) -->
       <div class="bg-slate-900 border border-slate-800 rounded-xl p-5 space-y-4">
-        <h3 class="text-sm font-semibold text-white border-b border-slate-800 pb-2">2. Línea de Tiempo</h3>
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div class="flex items-center justify-between border-b border-slate-800 pb-2">
           <div>
-            <div class="flex items-center justify-between mb-1">
-              <label class="text-xs font-medium text-slate-300">
-                Fecha del incidente (ocurrencia) <span class="text-rose-400">*</span>
-              </label>
-              <span id="badge-incident_date" class="provenance-badge hidden"></span>
-            </div>
-            <input
-              id="field-incident_date"
-              name="incident_date"
-              type="date"
-              required
-              class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-200 focus:border-blue-500 focus:outline-none"
-            />
+            <h3 class="text-sm font-semibold text-white">2. Entidad Afectada</h3>
+            <p class="text-[11px] text-slate-400 mt-0.5">Identificación de la organización o institución titular del tratamiento.</p>
           </div>
-
-          <div>
-            <div class="flex items-center justify-between mb-1">
-              <label class="text-xs font-medium text-slate-300">Hora del incidente</label>
-              <span id="badge-incident_time" class="provenance-badge hidden"></span>
-            </div>
-            <input
-              id="field-incident_time"
-              name="incident_time"
-              type="time"
-              step="1"
-              class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-200 focus:border-blue-500 focus:outline-none"
-            />
-          </div>
-
-          <div>
-            <div class="flex items-center justify-between mb-1">
-              <label class="text-xs font-medium text-slate-300">
-                Fecha de detección <span class="text-rose-400">*</span>
-              </label>
-              <span id="badge-detection_date" class="provenance-badge hidden"></span>
-            </div>
-            <input
-              id="field-detection_date"
-              name="detection_date"
-              type="date"
-              required
-              class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-200 focus:border-blue-500 focus:outline-none"
-            />
-          </div>
-
-          <div>
-            <div class="flex items-center justify-between mb-1">
-              <label class="text-xs font-medium text-slate-300">Hora de detección</label>
-              <span id="badge-detection_time" class="provenance-badge hidden"></span>
-            </div>
-            <input
-              id="field-detection_time"
-              name="detection_time"
-              type="time"
-              step="1"
-              class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-200 focus:border-blue-500 focus:outline-none"
-            />
-          </div>
+          <span class="text-[11px] font-medium text-slate-500 bg-slate-800 px-2 py-0.5 rounded">Opcional</span>
         </div>
-      </div>
 
-      <!-- Section 3: Clasificación y Alcance -->
-      <div class="bg-slate-900 border border-slate-800 rounded-xl p-5 space-y-4">
-        <h3 class="text-sm font-semibold text-white border-b border-slate-800 pb-2">3. Clasificación y Alcance</h3>
-        
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <div class="flex items-center justify-between mb-1">
-              <label class="text-xs font-medium text-slate-300">
-                Tipo de incidente (provisional) <span class="text-rose-400">*</span>
-              </label>
-              <div class="flex items-center space-x-1.5">
-                <span id="badge-incident_type" class="provenance-badge hidden"></span>
-                <button type="button" class="btn-explain text-slate-400 hover:text-blue-400" data-field="incident_type">
-                  <HelpCircle class="w-3.5 h-3.5" />
-                </button>
-              </div>
+              <label class="text-xs font-medium text-slate-300">Tipo de entidad</label>
+              <button type="button" class="btn-explain text-slate-400 hover:text-blue-400" data-field="entity_type">
+                <HelpCircle class="w-3.5 h-3.5" />
+              </button>
             </div>
             <select
-              id="field-incident_type"
-              name="incident_type"
-              required
+              id="field-entity_type"
+              name="entity_type"
               class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-200 focus:border-blue-500 focus:outline-none"
             >
-              <option value="UA">UA - Acceso no autorizado</option>
-              <option value="DL">DL - Fuga o pérdida de datos</option>
-              <option value="MW">MW - Malware o ransomware</option>
-              <option value="PH">PH - Phishing o ingeniería social</option>
-              <option value="DS">DS - Denegación de servicio</option>
-              <option value="HE">HE - Error humano</option>
-              <option value="DV">DV - Robo o pérdida de dispositivo</option>
-              <option value="OT">OT - Otro</option>
+              <option value="U">U - Pública / Universitaria</option>
+              <option value="R">R - Privada</option>
             </select>
+          </div>
+
+          <div>
+            <div class="flex items-center justify-between mb-1">
+              <label class="text-xs font-medium text-slate-300">RUC</label>
+              <span id="badge-entity_ruc" class="provenance-badge hidden"></span>
+            </div>
+            <input
+              id="field-entity_ruc"
+              name="entity_ruc"
+              type="text"
+              maxlength="11"
+              placeholder="11 dígitos (Ej. 20123456789)"
+              class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-200 focus:border-blue-500 focus:outline-none"
+            />
+          </div>
+
+          <div>
+            <div class="flex items-center justify-between mb-1">
+              <label class="text-xs font-medium text-slate-300">Nombre o razón social</label>
+              <span id="badge-entity_name" class="provenance-badge hidden"></span>
+            </div>
+            <input
+              id="field-entity_name"
+              name="entity_name"
+              type="text"
+              placeholder="Ej. Universidad Nacional de San Agustín"
+              class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-200 focus:border-blue-500 focus:outline-none"
+            />
+          </div>
+
+          <div>
+            <div class="flex items-center justify-between mb-1">
+              <label class="text-xs font-medium text-slate-300">Teléfono</label>
+              <span id="badge-entity_phone" class="provenance-badge hidden"></span>
+            </div>
+            <input
+              id="field-entity_phone"
+              name="entity_phone"
+              type="tel"
+              placeholder="Ej. 054-282120"
+              class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-200 focus:border-blue-500 focus:outline-none"
+            />
+          </div>
+
+          <div>
+            <div class="flex items-center justify-between mb-1">
+              <label class="text-xs font-medium text-slate-300">Anexo</label>
+              <span id="badge-entity_extension" class="provenance-badge hidden"></span>
+            </div>
+            <input
+              id="field-entity_extension"
+              name="entity_extension"
+              type="text"
+              placeholder="Ej. 104"
+              class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-200 focus:border-blue-500 focus:outline-none"
+            />
+          </div>
+
+          <div>
+            <div class="flex items-center justify-between mb-1">
+              <label class="text-xs font-medium text-slate-300">Departamento</label>
+              <span id="badge-entity_department" class="provenance-badge hidden"></span>
+            </div>
+            <select
+              id="field-entity_department"
+              name="entity_department"
+              class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-200 focus:border-blue-500 focus:outline-none"
+            >
+              <option value="Arequipa">Arequipa</option>
+              <option value="Lima">Lima</option>
+              <option value="Cusco">Cusco</option>
+              <option value="Áncash">Áncash</option>
+              <option value="Apurímac">Apurímac</option>
+              <option value="Ayacucho">Ayacucho</option>
+              <option value="Cajamarca">Cajamarca</option>
+              <option value="Callao">Callao</option>
+              <option value="Huancavelica">Huancavelica</option>
+              <option value="Huánuco">Huánuco</option>
+              <option value="Ica">Ica</option>
+              <option value="Junín">Junín</option>
+              <option value="La Libertad">La Libertad</option>
+              <option value="Lambayeque">Lambayeque</option>
+              <option value="Loreto">Loreto</option>
+              <option value="Madre de Dios">Madre de Dios</option>
+              <option value="Moquegua">Moquegua</option>
+              <option value="Pasco">Pasco</option>
+              <option value="Piura">Piura</option>
+              <option value="Puno">Puno</option>
+              <option value="San Martín">San Martín</option>
+              <option value="Tacna">Tacna</option>
+              <option value="Tumbes">Tumbes</option>
+              <option value="Ucayali">Ucayali</option>
+            </select>
+          </div>
+
+          <div>
+            <div class="flex items-center justify-between mb-1">
+              <label class="text-xs font-medium text-slate-300">Provincia</label>
+              <span id="badge-entity_province" class="provenance-badge hidden"></span>
+            </div>
+            <input
+              id="field-entity_province"
+              name="entity_province"
+              type="text"
+              placeholder="Ej. Arequipa"
+              class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-200 focus:border-blue-500 focus:outline-none"
+            />
+          </div>
+
+          <div>
+            <div class="flex items-center justify-between mb-1">
+              <label class="text-xs font-medium text-slate-300">Distrito</label>
+              <span id="badge-entity_district" class="provenance-badge hidden"></span>
+            </div>
+            <input
+              id="field-entity_district"
+              name="entity_district"
+              type="text"
+              placeholder="Ej. Arequipa"
+              class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-200 focus:border-blue-500 focus:outline-none"
+            />
+          </div>
+        </div>
+      </div>
+
+      <!-- Section 3: Detalles del Incidente (Obligatorio / Clasificación) -->
+      <div class="bg-slate-900 border border-slate-800 rounded-xl p-5 space-y-4">
+        <div class="flex items-center justify-between border-b border-slate-800 pb-2">
+          <div>
+            <h3 class="text-sm font-semibold text-white">3. Información General del Incidente</h3>
+            <p class="text-[11px] text-slate-400 mt-0.5">Clasificación operativa, línea de tiempo y descripción de los hechos.</p>
+          </div>
+          <span class="text-[11px] font-medium text-rose-400 bg-rose-500/10 border border-rose-500/20 px-2 py-0.5 rounded">Obligatorio</span>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label class="text-xs font-medium text-slate-400 block mb-1">Código de incidente</label>
+            <input
+              type="text"
+              disabled
+              value="(se genera al guardar)"
+              class="w-full bg-slate-950/60 border border-slate-800/80 rounded-lg px-3 py-2 text-xs text-slate-500 cursor-not-allowed"
+            />
           </div>
 
           <div>
@@ -266,18 +418,337 @@ import {
 
           <div>
             <div class="flex items-center justify-between mb-1">
-              <label class="text-xs font-medium text-slate-300">Sistema comprometido</label>
-              <span id="badge-compromised_system" class="provenance-badge hidden"></span>
+              <label class="text-xs font-medium text-slate-300">
+                Fecha del incidente *
+              </label>
+              <span id="badge-incident_date" class="provenance-badge hidden"></span>
             </div>
             <input
-              id="field-compromised_system"
-              name="compromised_system"
-              type="text"
-              placeholder="Ej. portal-admisiones.unsa.edu.pe"
+              id="field-incident_date"
+              name="incident_date"
+              type="date"
+              required
               class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-200 focus:border-blue-500 focus:outline-none"
             />
           </div>
 
+          <div>
+            <div class="flex items-center justify-between mb-1">
+              <label class="text-xs font-medium text-slate-300">Hora del incidente</label>
+              <span id="badge-incident_time" class="provenance-badge hidden"></span>
+            </div>
+            <input
+              id="field-incident_time"
+              name="incident_time"
+              type="time"
+              step="1"
+              class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-200 focus:border-blue-500 focus:outline-none"
+            />
+          </div>
+
+          <div>
+            <div class="flex items-center justify-between mb-1">
+              <label class="text-xs font-medium text-slate-300">Fecha de detección</label>
+              <span id="badge-detection_date" class="provenance-badge hidden"></span>
+            </div>
+            <input
+              id="field-detection_date"
+              name="detection_date"
+              type="date"
+              class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-200 focus:border-blue-500 focus:outline-none"
+            />
+          </div>
+
+          <div>
+            <div class="flex items-center justify-between mb-1">
+              <label class="text-xs font-medium text-slate-300">Hora de detección</label>
+              <span id="badge-detection_time" class="provenance-badge hidden"></span>
+            </div>
+            <input
+              id="field-detection_time"
+              name="detection_time"
+              type="time"
+              step="1"
+              class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-200 focus:border-blue-500 focus:outline-none"
+            />
+          </div>
+
+          <div>
+            <div class="flex items-center justify-between mb-1">
+              <label class="text-xs font-medium text-slate-300">
+                Tipo de incidente <span class="text-rose-400">*</span>
+              </label>
+              <div class="flex items-center space-x-1.5">
+                <span id="badge-incident_type" class="provenance-badge hidden"></span>
+                <button type="button" class="btn-explain text-slate-400 hover:text-blue-400" data-field="incident_type">
+                  <HelpCircle class="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+            <select
+              id="field-incident_type"
+              name="incident_type"
+              required
+              class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-200 focus:border-blue-500 focus:outline-none"
+            >
+              <option value="UA">UA - Acceso no autorizado</option>
+              <option value="DL">DL - Fuga o pérdida de datos</option>
+              <option value="MW">MW - Malware o ransomware</option>
+              <option value="PH">PH - Phishing o ingeniería social</option>
+              <option value="DS">DS - Denegación de servicio</option>
+              <option value="HE">HE - Error humano</option>
+              <option value="DV">DV - Robo o pérdida de dispositivo</option>
+              <option value="OT">OT - Otro</option>
+            </select>
+          </div>
+
+          <div>
+            <div class="flex items-center justify-between mb-1">
+              <label class="text-xs font-medium text-slate-300">Estado inicial</label>
+              <button type="button" class="btn-explain text-slate-400 hover:text-blue-400" data-field="status">
+                <HelpCircle class="w-3.5 h-3.5" />
+              </button>
+            </div>
+            <select
+              id="field-status"
+              name="status"
+              class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-200 focus:border-blue-500 focus:outline-none"
+            >
+              <option value="O" selected>Abierto (O)</option>
+              <option value="P">En proceso (P)</option>
+              <option value="C">Cerrado (C)</option>
+            </select>
+          </div>
+
+          <div>
+            <div class="flex items-center justify-between mb-1">
+              <label class="text-xs font-medium text-slate-300">Severidad</label>
+              <button type="button" class="btn-explain text-slate-400 hover:text-blue-400" data-field="severity">
+                <HelpCircle class="w-3.5 h-3.5" />
+              </button>
+            </div>
+            <select
+              id="field-severity"
+              name="severity"
+              class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-200 focus:border-blue-500 focus:outline-none"
+            >
+              <option value="">— Sin especificar (evaluado en triaje)</option>
+              <option value="L">L - Baja</option>
+              <option value="M">M - Media</option>
+              <option value="H">H - Alta</option>
+              <option value="C">C - Crítica</option>
+            </select>
+          </div>
+
+          <div>
+            <div class="flex items-center justify-between mb-1">
+              <label class="text-xs font-medium text-slate-300">Impacto</label>
+              <button type="button" class="btn-explain text-slate-400 hover:text-blue-400" data-field="impact">
+                <HelpCircle class="w-3.5 h-3.5" />
+              </button>
+            </div>
+            <select
+              id="field-impact"
+              name="impact"
+              class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-200 focus:border-blue-500 focus:outline-none"
+            >
+              <option value="">— Sin especificar (evaluado en triaje)</option>
+              <option value="L">L - Bajo</option>
+              <option value="M">M - Medio</option>
+              <option value="H">H - Alto</option>
+              <option value="V">V - Muy alto</option>
+            </select>
+          </div>
+
+          <div class="sm:col-span-2">
+            <div class="flex items-center justify-between mb-1">
+              <label class="text-xs font-medium text-slate-300">
+                Título del incidente <span class="text-rose-400">*</span>
+              </label>
+              <span id="badge-title" class="provenance-badge hidden"></span>
+            </div>
+            <input
+              id="field-title"
+              name="title"
+              type="text"
+              required
+              maxlength="150"
+              placeholder="Ej. Filtración de registros en portal de admisiones"
+              class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-200 focus:border-blue-500 focus:outline-none"
+            />
+          </div>
+
+          <div class="sm:col-span-2">
+            <div class="flex items-center justify-between mb-1">
+              <label class="text-xs font-medium text-slate-300">Descripción detallada</label>
+              <span id="badge-description" class="provenance-badge hidden"></span>
+            </div>
+            <textarea
+              id="field-description"
+              name="description"
+              rows="3"
+              maxlength="1000"
+              placeholder="Detalles sobre lo ocurrido, sistemas afectados y consecuencias observadas..."
+              class="w-full bg-slate-950 border border-slate-800 rounded-lg p-3 text-xs text-slate-200 focus:border-blue-500 focus:outline-none"
+            ></textarea>
+          </div>
+
+          <div>
+            <div class="flex items-center justify-between mb-1">
+              <label class="text-xs font-medium text-slate-300">Reportado por</label>
+              <span id="badge-reported_by" class="provenance-badge hidden"></span>
+            </div>
+            <input
+              id="field-reported_by"
+              name="reported_by"
+              type="text"
+              placeholder="Operador o sistema reportante"
+              class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-200 focus:border-blue-500 focus:outline-none"
+            />
+          </div>
+
+          <div>
+            <div class="flex items-center justify-between mb-1">
+              <label class="text-xs font-medium text-slate-300">Asignado a</label>
+              <span id="badge-assigned_to" class="provenance-badge hidden"></span>
+            </div>
+            <input
+              id="field-assigned_to"
+              name="assigned_to"
+              type="text"
+              placeholder="Ej. admin / analista de turno"
+              class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-200 focus:border-blue-500 focus:outline-none"
+            />
+          </div>
+
+          <div class="sm:col-span-2">
+            <div class="flex items-center justify-between mb-1">
+              <label class="text-xs font-medium text-slate-300">Tratamiento afectado</label>
+              <span id="badge-affected_treatment" class="provenance-badge hidden"></span>
+            </div>
+            <input
+              id="field-affected_treatment"
+              name="affected_treatment"
+              type="text"
+              placeholder="Ej. Tratamiento de postulantes y matrícula académica"
+              class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-200 focus:border-blue-500 focus:outline-none"
+            />
+          </div>
+
+          <div>
+            <div class="flex items-center justify-between mb-1">
+              <label class="text-xs font-medium text-slate-300">Contacto DPO — nombre</label>
+              <span id="badge-dpo_contact_name" class="provenance-badge hidden"></span>
+            </div>
+            <input
+              id="field-dpo_contact_name"
+              name="dpo_contact_name"
+              type="text"
+              placeholder="Ej. Delegado de Protección de Datos UNSA"
+              class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-200 focus:border-blue-500 focus:outline-none"
+            />
+          </div>
+
+          <div>
+            <div class="flex items-center justify-between mb-1">
+              <label class="text-xs font-medium text-slate-300">Contacto DPO — correo</label>
+              <span id="badge-dpo_contact_email" class="provenance-badge hidden"></span>
+            </div>
+            <input
+              id="field-dpo_contact_email"
+              name="dpo_contact_email"
+              type="email"
+              placeholder="Ej. dpo@unsa.edu.pe"
+              class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-200 focus:border-blue-500 focus:outline-none"
+            />
+          </div>
+
+          <div>
+            <div class="flex items-center justify-between mb-1">
+              <label class="text-xs font-medium text-slate-300">Contacto DPO — teléfono</label>
+              <span id="badge-dpo_contact_phone" class="provenance-badge hidden"></span>
+            </div>
+            <input
+              id="field-dpo_contact_phone"
+              name="dpo_contact_phone"
+              type="tel"
+              placeholder="Ej. 054-282120 anexo 108"
+              class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-200 focus:border-blue-500 focus:outline-none"
+            />
+          </div>
+        </div>
+      </div>
+
+      <!-- Section 4: Datos Afectados y Alcance -->
+      <div class="bg-slate-900 border border-slate-800 rounded-xl p-5 space-y-4">
+        <div class="flex items-center justify-between border-b border-slate-800 pb-2">
+          <div>
+            <h3 class="text-sm font-semibold text-white">4. Datos Afectados y Alcance</h3>
+            <p class="text-[11px] text-slate-400 mt-0.5">Tipos de datos comprometidos, sistemas involucrados y referencias de evidencia.</p>
+          </div>
+          <span class="text-[11px] font-medium text-blue-400 bg-blue-500/10 border border-blue-500/20 px-2 py-0.5 rounded">Evaluación</span>
+        </div>
+
+        <div>
+          <div class="flex items-center justify-between mb-2">
+            <label class="text-xs font-medium text-slate-300">Tipos de datos afectados</label>
+            <button type="button" class="btn-explain text-slate-400 hover:text-blue-400" data-field="affected_data_types">
+              <HelpCircle class="w-3.5 h-3.5" />
+            </button>
+          </div>
+          <div id="container-data-types" class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 bg-slate-950 p-3 rounded-lg border border-slate-800 text-xs text-slate-300">
+            <label class="flex items-center space-x-2 cursor-pointer hover:text-white">
+              <input type="checkbox" name="affected_data_types" value="names" class="rounded text-blue-600 focus:ring-0" />
+              <span>Nombres y apellidos</span>
+            </label>
+            <label class="flex items-center space-x-2 cursor-pointer hover:text-white">
+              <input type="checkbox" name="affected_data_types" value="id_doc" class="rounded text-blue-600 focus:ring-0" />
+              <span>Documento de identidad (DNI/CE)</span>
+            </label>
+            <label class="flex items-center space-x-2 cursor-pointer hover:text-white">
+              <input type="checkbox" name="affected_data_types" value="address" class="rounded text-blue-600 focus:ring-0" />
+              <span>Dirección domiciliaria</span>
+            </label>
+            <label class="flex items-center space-x-2 cursor-pointer hover:text-white">
+              <input type="checkbox" name="affected_data_types" value="phone" class="rounded text-blue-600 focus:ring-0" />
+              <span>Teléfono</span>
+            </label>
+            <label class="flex items-center space-x-2 cursor-pointer hover:text-white">
+              <input type="checkbox" name="affected_data_types" value="email" class="rounded text-blue-600 focus:ring-0" />
+              <span>Correo electrónico</span>
+            </label>
+            <label class="flex items-center space-x-2 cursor-pointer hover:text-white">
+              <input type="checkbox" name="affected_data_types" value="financial" class="rounded text-blue-600 focus:ring-0" />
+              <span>Datos financieros/bancarios</span>
+            </label>
+            <label class="flex items-center space-x-2 cursor-pointer hover:text-white">
+              <input type="checkbox" name="affected_data_types" value="health" class="rounded text-blue-600 focus:ring-0" />
+              <span>Datos de salud</span>
+            </label>
+            <label class="flex items-center space-x-2 cursor-pointer hover:text-white">
+              <input type="checkbox" name="affected_data_types" value="biometric" class="rounded text-blue-600 focus:ring-0" />
+              <span>Datos biométricos</span>
+            </label>
+            <label class="flex items-center space-x-2 cursor-pointer hover:text-white">
+              <input type="checkbox" name="affected_data_types" value="geolocation" class="rounded text-blue-600 focus:ring-0" />
+              <span>Datos de geolocalización</span>
+            </label>
+            <label class="flex items-center space-x-2 cursor-pointer hover:text-white">
+              <input type="checkbox" name="affected_data_types" value="credentials" class="rounded text-blue-600 focus:ring-0" />
+              <span>Credenciales de acceso</span>
+            </label>
+            <label class="flex items-center space-x-2 cursor-pointer hover:text-white">
+              <input type="checkbox" name="affected_data_types" value="minors" class="rounded text-blue-600 focus:ring-0" />
+              <span>Datos de menores de edad</span>
+            </label>
+            <label class="flex items-center space-x-2 cursor-pointer hover:text-white">
+              <input type="checkbox" name="affected_data_types" value="sensitive" class="rounded text-blue-600 focus:ring-0" />
+              <span>Datos sensibles (origen racial, religioso, político, etc.)</span>
+            </label>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <div class="flex items-center justify-between mb-1">
               <label class="text-xs font-medium text-slate-300">Número de titulares afectados (est.)</label>
@@ -289,6 +760,20 @@ import {
               type="number"
               min="0"
               placeholder="Ej. 500"
+              class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-200 focus:border-blue-500 focus:outline-none"
+            />
+          </div>
+
+          <div>
+            <div class="flex items-center justify-between mb-1">
+              <label class="text-xs font-medium text-slate-300">Sistema comprometido</label>
+              <span id="badge-compromised_system" class="provenance-badge hidden"></span>
+            </div>
+            <input
+              id="field-compromised_system"
+              name="compromised_system"
+              type="text"
+              placeholder="Ej. admissions-portal"
               class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-200 focus:border-blue-500 focus:outline-none"
             />
           </div>
@@ -307,89 +792,265 @@ import {
             />
           </div>
 
-          <!-- Dimensiones CID -->
           <div class="sm:col-span-2">
-            <div class="flex items-center justify-between mb-1.5">
-              <label class="text-xs font-medium text-slate-300">Impacto en dimensiones de seguridad (CID)</label>
-              <button type="button" class="btn-explain text-slate-400 hover:text-blue-400" data-field="affected_cid">
+            <div class="flex items-center justify-between mb-1">
+              <label class="text-xs font-medium text-slate-300">Evidencias (referencias / enlaces)</label>
+              <span id="badge-evidence_refs" class="provenance-badge hidden"></span>
+            </div>
+            <textarea
+              id="field-evidence_refs"
+              name="evidence_refs"
+              rows="2"
+              placeholder="Referencias a tickets, hashes de logs, URLs de captura o repositorios forenses..."
+              class="w-full bg-slate-950 border border-slate-800 rounded-lg p-3 text-xs text-slate-200 focus:border-blue-500 focus:outline-none"
+            ></textarea>
+          </div>
+        </div>
+
+        <div class="p-3 rounded-lg bg-slate-950/50 border border-slate-800/80 text-[11px] text-slate-400 flex items-center space-x-2">
+          <Info class="w-4 h-4 text-blue-400 shrink-0" />
+          <span>Adjuntar capturas del incidente: Los adjuntos se pueden subir después de registrar el incidente (al editarlo o durante la fase de análisis).</span>
+        </div>
+      </div>
+
+      <!-- Section 5: Medidas de Seguridad y Consecuencias CID (Opcional — Completado por el agente) -->
+      <div class="bg-slate-900 border border-slate-800 rounded-xl p-5 space-y-4">
+        <div class="flex items-center justify-between border-b border-slate-800 pb-2">
+          <div>
+            <h3 class="text-sm font-semibold text-white">5. Medidas y Consecuencias CID</h3>
+            <p class="text-[11px] text-slate-400 mt-0.5">Respuestas a medidas formales y salvaguardas. Pueden dejarse vacías al inicio.</p>
+          </div>
+          <span class="text-[11px] font-medium text-slate-500 bg-slate-800 px-2 py-0.5 rounded">Opcional</span>
+        </div>
+
+        <!-- Explanatory banner -->
+        <div class="p-3 rounded-lg bg-blue-950/30 border border-blue-900/50 text-xs text-blue-300 flex items-start space-x-2">
+          <Info class="w-4 h-4 text-blue-400 shrink-0 mt-0.5" />
+          <p>
+            Esta sección es completamente opcional al registrar el incidente. El orquestador autónomo evaluará y completará automáticamente estas medidas y resoluciones durante el ciclo de vida del incidente.
+          </p>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <div class="flex items-center justify-between mb-1">
+              <label class="text-xs font-medium text-slate-300">¿Actualizó el registro de incidentes?</label>
+              <button type="button" class="btn-explain text-slate-400 hover:text-blue-400" data-field="measure_updated_registry">
                 <HelpCircle class="w-3.5 h-3.5" />
               </button>
             </div>
-            <div class="flex flex-wrap gap-4 bg-slate-950 p-2.5 rounded-lg border border-slate-800">
-              <label class="flex items-center space-x-1.5 text-xs text-slate-300 cursor-pointer">
-                <input type="checkbox" name="affected_cid" value="C" class="rounded text-blue-600 focus:ring-0" />
-                <span>Confidencialidad (C)</span>
-              </label>
-              <label class="flex items-center space-x-1.5 text-xs text-slate-300 cursor-pointer">
-                <input type="checkbox" name="affected_cid" value="I" class="rounded text-blue-600 focus:ring-0" />
-                <span>Integridad (I)</span>
-              </label>
-              <label class="flex items-center space-x-1.5 text-xs text-slate-300 cursor-pointer">
-                <input type="checkbox" name="affected_cid" value="D" class="rounded text-blue-600 focus:ring-0" />
-                <span>Disponibilidad (D)</span>
-              </label>
-            </div>
+            <select
+              id="field-measure_updated_registry"
+              name="measure_updated_registry"
+              class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-200 focus:border-blue-500 focus:outline-none"
+            >
+              <option value="">— Sin especificar / En evaluación</option>
+              <option value="Y">Sí</option>
+              <option value="N">No</option>
+              <option value="U">En evaluación</option>
+            </select>
           </div>
 
-          <!-- Tipos de datos afectados -->
-          <div class="sm:col-span-2">
-            <div class="flex items-center justify-between mb-1.5">
-              <label class="text-xs font-medium text-slate-300">Tipos de datos afectados</label>
-              <button type="button" class="btn-explain text-slate-400 hover:text-blue-400" data-field="affected_data_types">
+          <div>
+            <div class="flex items-center justify-between mb-1">
+              <label class="text-xs font-medium text-slate-300">¿Adoptó nuevas medidas de seguridad?</label>
+              <button type="button" class="btn-explain text-slate-400 hover:text-blue-400" data-field="measure_new_security">
                 <HelpCircle class="w-3.5 h-3.5" />
               </button>
             </div>
-            <div id="container-data-types" class="grid grid-cols-2 sm:grid-cols-3 gap-2 bg-slate-950 p-2.5 rounded-lg border border-slate-800 text-xs text-slate-300">
-              <label class="flex items-center space-x-1.5"><input type="checkbox" name="affected_data_types" value="names" /><span>Nombres y apellidos</span></label>
-              <label class="flex items-center space-x-1.5"><input type="checkbox" name="affected_data_types" value="id_doc" /><span>Documentos identidad</span></label>
-              <label class="flex items-center space-x-1.5"><input type="checkbox" name="affected_data_types" value="address" /><span>Dirección domiciliaria</span></label>
-              <label class="flex items-center space-x-1.5"><input type="checkbox" name="affected_data_types" value="phone" /><span>Teléfono / Celular</span></label>
-              <label class="flex items-center space-x-1.5"><input type="checkbox" name="affected_data_types" value="email" /><span>Correo electrónico</span></label>
-              <label class="flex items-center space-x-1.5"><input type="checkbox" name="affected_data_types" value="financial" /><span>Datos financieros</span></label>
-              <label class="flex items-center space-x-1.5"><input type="checkbox" name="affected_data_types" value="health" /><span>Datos de salud</span></label>
-              <label class="flex items-center space-x-1.5"><input type="checkbox" name="affected_data_types" value="biometric" /><span>Datos biométricos</span></label>
-              <label class="flex items-center space-x-1.5"><input type="checkbox" name="affected_data_types" value="credentials" /><span>Credenciales / Claves</span></label>
-              <label class="flex items-center space-x-1.5"><input type="checkbox" name="affected_data_types" value="geolocation" /><span>Geolocalización</span></label>
-              <label class="flex items-center space-x-1.5"><input type="checkbox" name="affected_data_types" value="minors" /><span>Menores de edad</span></label>
-              <label class="flex items-center space-x-1.5"><input type="checkbox" name="affected_data_types" value="sensitive" /><span>Datos sensibles</span></label>
+            <select
+              id="field-measure_new_security"
+              name="measure_new_security"
+              class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-200 focus:border-blue-500 focus:outline-none"
+            >
+              <option value="">— Sin especificar / En evaluación</option>
+              <option value="Y">Sí</option>
+              <option value="N">No</option>
+              <option value="U">En evaluación</option>
+            </select>
+          </div>
+
+          <div>
+            <div class="flex items-center justify-between mb-1">
+              <label class="text-xs font-medium text-slate-300">¿Mejoró procedimientos y políticas?</label>
+              <button type="button" class="btn-explain text-slate-400 hover:text-blue-400" data-field="measure_improved_policies">
+                <HelpCircle class="w-3.5 h-3.5" />
+              </button>
             </div>
+            <select
+              id="field-measure_improved_policies"
+              name="measure_improved_policies"
+              class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-200 focus:border-blue-500 focus:outline-none"
+            >
+              <option value="">— Sin especificar / En evaluación</option>
+              <option value="Y">Sí</option>
+              <option value="N">No</option>
+              <option value="U">En evaluación</option>
+            </select>
+          </div>
+
+          <div>
+            <div class="flex items-center justify-between mb-1">
+              <label class="text-xs font-medium text-slate-300">¿Considera resuelto el incidente?</label>
+              <button type="button" class="btn-explain text-slate-400 hover:text-blue-400" data-field="measure_considered_resolved">
+                <HelpCircle class="w-3.5 h-3.5" />
+              </button>
+            </div>
+            <select
+              id="field-measure_considered_resolved"
+              name="measure_considered_resolved"
+              class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-200 focus:border-blue-500 focus:outline-none"
+            >
+              <option value="">— Sin especificar / En evaluación</option>
+              <option value="Y">Sí</option>
+              <option value="N">No</option>
+              <option value="U">En evaluación</option>
+            </select>
+          </div>
+
+          <div>
+            <div class="flex items-center justify-between mb-1">
+              <label class="text-xs font-medium text-slate-300">¿Reportó a autoridades?</label>
+              <button type="button" class="btn-explain text-slate-400 hover:text-blue-400" data-field="measure_reported_authorities">
+                <HelpCircle class="w-3.5 h-3.5" />
+              </button>
+            </div>
+            <select
+              id="field-measure_reported_authorities"
+              name="measure_reported_authorities"
+              class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-200 focus:border-blue-500 focus:outline-none"
+            >
+              <option value="">— Sin especificar / En evaluación</option>
+              <option value="Y">Sí</option>
+              <option value="N">No</option>
+              <option value="U">En evaluación</option>
+            </select>
+          </div>
+
+          <div>
+            <div class="flex items-center justify-between mb-1">
+              <label class="text-xs font-medium text-slate-300">Fecha de resolución</label>
+              <span id="badge-resolved_date" class="provenance-badge hidden"></span>
+            </div>
+            <input
+              id="field-resolved_date"
+              name="resolved_date"
+              type="date"
+              class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-200 focus:border-blue-500 focus:outline-none"
+            />
+          </div>
+        </div>
+
+        <div>
+          <div class="flex items-center justify-between mb-2">
+            <label class="text-xs font-medium text-slate-300">Medidas de seguridad adoptadas</label>
+            <button type="button" class="btn-explain text-slate-400 hover:text-blue-400" data-field="security_measures_adopted">
+              <HelpCircle class="w-3.5 h-3.5" />
+            </button>
+          </div>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 bg-slate-950 p-3 rounded-lg border border-slate-800 text-xs text-slate-300">
+            <label class="flex items-center space-x-2 cursor-pointer hover:text-white">
+              <input type="checkbox" name="security_measures_adopted" value="encrypt_rest" class="rounded text-blue-600 focus:ring-0" />
+              <span>Cifrado en reposo</span>
+            </label>
+            <label class="flex items-center space-x-2 cursor-pointer hover:text-white">
+              <input type="checkbox" name="security_measures_adopted" value="encrypt_transit" class="rounded text-blue-600 focus:ring-0" />
+              <span>Cifrado en tránsito</span>
+            </label>
+            <label class="flex items-center space-x-2 cursor-pointer hover:text-white">
+              <input type="checkbox" name="security_measures_adopted" value="mfa" class="rounded text-blue-600 focus:ring-0" />
+              <span>Doble factor (MFA)</span>
+            </label>
+            <label class="flex items-center space-x-2 cursor-pointer hover:text-white">
+              <input type="checkbox" name="security_measures_adopted" value="network_seg" class="rounded text-blue-600 focus:ring-0" />
+              <span>Segmentación de red</span>
+            </label>
+            <label class="flex items-center space-x-2 cursor-pointer hover:text-white">
+              <input type="checkbox" name="security_measures_adopted" value="rbac" class="rounded text-blue-600 focus:ring-0" />
+              <span>Control de acceso basado en roles</span>
+            </label>
+            <label class="flex items-center space-x-2 cursor-pointer hover:text-white">
+              <input type="checkbox" name="security_measures_adopted" value="siem" class="rounded text-blue-600 focus:ring-0" />
+              <span>Monitoreo SIEM / detección de intrusos</span>
+            </label>
+            <label class="flex items-center space-x-2 cursor-pointer hover:text-white">
+              <input type="checkbox" name="security_measures_adopted" value="training" class="rounded text-blue-600 focus:ring-0" />
+              <span>Capacitación a personal</span>
+            </label>
+            <label class="flex items-center space-x-2 cursor-pointer hover:text-white">
+              <input type="checkbox" name="security_measures_adopted" value="patching" class="rounded text-blue-600 focus:ring-0" />
+              <span>Actualización de parches</span>
+            </label>
+            <label class="flex items-center space-x-2 cursor-pointer hover:text-white">
+              <input type="checkbox" name="security_measures_adopted" value="backups" class="rounded text-blue-600 focus:ring-0" />
+              <span>Backups y plan de recuperación</span>
+            </label>
+            <label class="flex items-center space-x-2 cursor-pointer hover:text-white">
+              <input type="checkbox" name="security_measures_adopted" value="dlp" class="rounded text-blue-600 focus:ring-0" />
+              <span>DLP (prevención de fuga de datos)</span>
+            </label>
+          </div>
+        </div>
+
+        <div>
+          <div class="flex items-center justify-between mb-2">
+            <label class="text-xs font-medium text-slate-300">Como consecuencia se ha visto afectada la:</label>
+            <button type="button" class="btn-explain text-slate-400 hover:text-blue-400" data-field="affected_cid">
+              <HelpCircle class="w-3.5 h-3.5" />
+            </button>
+          </div>
+          <div class="flex flex-wrap gap-4 bg-slate-950 p-3 rounded-lg border border-slate-800 text-xs text-slate-300">
+            <label class="flex items-center space-x-2 cursor-pointer hover:text-white">
+              <input type="checkbox" name="affected_cid" value="C" class="rounded text-blue-600 focus:ring-0" />
+              <span>Confidencialidad</span>
+            </label>
+            <label class="flex items-center space-x-2 cursor-pointer hover:text-white">
+              <input type="checkbox" name="affected_cid" value="I" class="rounded text-blue-600 focus:ring-0" />
+              <span>Integridad</span>
+            </label>
+            <label class="flex items-center space-x-2 cursor-pointer hover:text-white">
+              <input type="checkbox" name="affected_cid" value="D" class="rounded text-blue-600 focus:ring-0" />
+              <span>Disponibilidad</span>
+            </label>
           </div>
         </div>
       </div>
 
-      <!-- Section 4: Reportante -->
+      <!-- Section 6: Acciones Iniciales (Opcional — Gestionado por el agente) -->
       <div class="bg-slate-900 border border-slate-800 rounded-xl p-5 space-y-4">
-        <h3 class="text-sm font-semibold text-white border-b border-slate-800 pb-2">4. Datos del Reportante</h3>
-        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div class="flex items-center justify-between border-b border-slate-800 pb-2">
           <div>
-            <label class="text-xs font-medium text-slate-300 mb-1 block">DNI / Documento</label>
-            <input id="field-rep_document_number" name="rep_document_number" type="text" placeholder="8 dígitos" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-200" />
+            <h3 class="text-sm font-semibold text-white">6. Acciones de Contención, Análisis y Resolución</h3>
+            <p class="text-[11px] text-slate-400 mt-0.5">Acciones ejecutadas. El orquestador generará las acciones automáticamente.</p>
           </div>
-          <div>
-            <label class="text-xs font-medium text-slate-300 mb-1 block">Nombres</label>
-            <input id="field-rep_first_name" name="rep_first_name" type="text" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-200" />
+          <div class="flex items-center space-x-2">
+            <span class="text-[11px] font-medium text-slate-500 bg-slate-800 px-2 py-0.5 rounded">Opcional</span>
+            <button
+              id="btn-add-action"
+              type="button"
+              class="px-2.5 py-1 rounded-lg bg-blue-600/20 hover:bg-blue-600/30 text-blue-400 text-xs font-medium transition-colors flex items-center space-x-1 border border-blue-500/30"
+            >
+              <Plus class="w-3.5 h-3.5" />
+              <span>Agregar acción</span>
+            </button>
           </div>
-          <div>
-            <label class="text-xs font-medium text-slate-300 mb-1 block">Apellido Paterno</label>
-            <input id="field-rep_last_name_p" name="rep_last_name_p" type="text" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-200" />
-          </div>
-          <div>
-            <label class="text-xs font-medium text-slate-300 mb-1 block">Correo electrónico</label>
-            <input id="field-rep_email" name="rep_email" type="email" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-200" />
-          </div>
-          <div>
-            <label class="text-xs font-medium text-slate-300 mb-1 block">Teléfono</label>
-            <input id="field-rep_phone" name="rep_phone" type="tel" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-200" />
-          </div>
-          <div>
-            <label class="text-xs font-medium text-slate-300 mb-1 block">Cargo / Rol</label>
-            <input id="field-rep_position" name="rep_position" type="text" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-200" />
-          </div>
+        </div>
+
+        <div class="p-3 rounded-lg bg-slate-950/40 border border-slate-800 text-xs text-slate-400 flex items-start space-x-2">
+          <Info class="w-4 h-4 text-blue-400 shrink-0 mt-0.5" />
+          <p>
+            No es obligatorio registrar acciones en este momento. El orquestador del agente generará y auditará automáticamente las acciones de contención (C), análisis de causa raíz (A) y resolución (R) en el PIMS durante la atención del incidente.
+          </p>
+        </div>
+
+        <!-- Dynamic Action List -->
+        <div id="container-actions" class="space-y-3">
+          <!-- Dynamically populated or empty -->
         </div>
       </div>
 
       <!-- Submit Section -->
-      <div class="flex items-center justify-between pt-4">
+      <div class="flex items-center justify-between pt-4 border-t border-slate-800">
         <a
           href="/incidents"
           class="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium transition-colors"
@@ -399,10 +1060,10 @@ import {
         <button
           id="btn-submit-incident"
           type="submit"
-          class="px-6 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-medium transition-colors flex items-center space-x-2 shadow-sm"
+          class="px-6 py-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold transition-colors flex items-center space-x-2 shadow-sm"
         >
           <Send class="w-4 h-4" />
-          <span>Confirmar y Enviar Incidente (Estado O)</span>
+          <span>Registrar incidente</span>
         </button>
       </div>
     </form>
@@ -434,19 +1095,19 @@ import {
     border-style: solid;
   }
   .provenance-narrative {
-    background-color: rgba(59, 130, 246, 0.1);
-    color: rgb(96, 165, 250);
-    border-color: rgba(59, 130, 246, 0.2);
+    background-color: rgba(59, 130, 246, 0.15);
+    color: rgb(147, 197, 253);
+    border-color: rgba(59, 130, 246, 0.3);
   }
   .provenance-partial {
-    background-color: rgba(245, 158, 11, 0.1);
-    color: rgb(251, 191, 36);
-    border-color: rgba(245, 158, 11, 0.2);
+    background-color: rgba(245, 158, 11, 0.15);
+    color: rgb(252, 211, 77);
+    border-color: rgba(245, 158, 11, 0.3);
   }
   .provenance-default {
-    background-color: rgb(30, 41, 59);
-    color: rgb(148, 163, 184);
-    border-color: rgb(51, 65, 85);
+    background-color: rgba(51, 65, 85, 0.5);
+    color: rgb(203, 213, 225);
+    border-color: rgb(71, 85, 105);
   }
 </style>
 
@@ -470,6 +1131,8 @@ import {
   const draftFeedbackBanner = document.getElementById("draft-feedback-banner");
   const redactionSummary = document.getElementById("redaction-summary");
   const draftWarnings = document.getElementById("draft-warnings");
+  const btnAddAction = document.getElementById("btn-add-action");
+  const containerActions = document.getElementById("container-actions");
 
   narrativeInput?.addEventListener("input", () => {
     if (charCount) {
@@ -548,13 +1211,72 @@ import {
     speechIndicator?.classList.add("hidden");
   }
 
+  // Dynamic Action items helper
+  let actionCounter = 0;
+
+  function addActionCard(initialData?: { action_type?: string; responsible?: string; action_date?: string; description?: string; evidence?: string }) {
+    if (!containerActions) return;
+    actionCounter += 1;
+    const actionId = `action-row-${actionCounter}`;
+    const card = document.createElement("div");
+    card.id = actionId;
+    card.className = "action-card p-4 rounded-lg bg-slate-950 border border-slate-800 space-y-3 relative";
+
+    const defaultDate = initialData?.action_date || new Date().toISOString().slice(0, 10);
+
+    card.innerHTML = `
+      <div class="flex items-center justify-between pb-2 border-b border-slate-800">
+        <span class="text-xs font-semibold text-slate-300">Acción #${actionCounter}</span>
+        <button type="button" class="btn-remove-action text-slate-500 hover:text-rose-400 transition-colors" data-target="${actionId}" title="Eliminar acción">
+          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg>
+        </button>
+      </div>
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div>
+          <label class="text-[11px] font-medium text-slate-400 block mb-1">Tipo de acción *</label>
+          <select class="action-type w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-slate-200">
+            <option value="C" ${initialData?.action_type === "C" ? "selected" : ""}>Contención</option>
+            <option value="A" ${initialData?.action_type === "A" ? "selected" : ""}>Análisis</option>
+            <option value="R" ${initialData?.action_type === "R" ? "selected" : ""}>Resolución</option>
+          </select>
+        </div>
+        <div>
+          <label class="text-[11px] font-medium text-slate-400 block mb-1">Responsable *</label>
+          <input type="text" class="action-responsible w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-slate-200" placeholder="Ej. analista-seguridad" value="${initialData?.responsible || ""}" />
+        </div>
+        <div>
+          <label class="text-[11px] font-medium text-slate-400 block mb-1">Fecha *</label>
+          <input type="date" class="action-date w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-slate-200" value="${defaultDate}" />
+        </div>
+        <div class="sm:col-span-3">
+          <label class="text-[11px] font-medium text-slate-400 block mb-1">Descripción de la acción *</label>
+          <textarea rows="2" class="action-description w-full bg-slate-900 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-200" placeholder="Detalle de la medida ejecutada...">${initialData?.description || ""}</textarea>
+        </div>
+        <div class="sm:col-span-3">
+          <label class="text-[11px] font-medium text-slate-400 block mb-1">Evidencia (opcional)</label>
+          <input type="text" class="action-evidence w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-slate-200" placeholder="Hash, ID de log, enlace o captura..." value="${initialData?.evidence || ""}" />
+        </div>
+      </div>
+    `;
+
+    card.querySelector(".btn-remove-action")?.addEventListener("click", () => {
+      card.remove();
+    });
+
+    containerActions.appendChild(card);
+  }
+
+  btnAddAction?.addEventListener("click", () => {
+    addActionCard();
+  });
+
   // Draft with AI
   btnDraftAi?.addEventListener("click", async () => {
     const narrative = narrativeInput?.value.trim() ?? "";
     const formData = new FormData(incidentForm);
     const partial: Record<string, any> = {};
     formData.forEach((value, key) => {
-      if (key !== "affected_data_types" && key !== "affected_cid" && value) {
+      if (key !== "affected_data_types" && key !== "affected_cid" && key !== "security_measures_adopted" && value) {
         partial[key] = value;
       }
     });
@@ -579,9 +1301,20 @@ import {
 
       if (draftFeedbackBanner && redactionSummary && draftWarnings) {
         draftFeedbackBanner.classList.remove("hidden");
-        draftFeedbackBanner.className = "p-3 rounded-lg border text-xs space-y-1.5 bg-blue-950/40 border-blue-800 text-blue-200";
-        redactionSummary.textContent = `Anonimización Presidio: ${result.redaction_report.total_spans} entidades detectadas (${result.redaction_report.entities_found.join(", ") || "ninguna"}).`;
+        draftFeedbackBanner.className = "p-3.5 rounded-xl border text-xs space-y-1.5 bg-blue-950/40 border-blue-800/80 text-blue-200 shadow-sm";
         
+        const aiFilledCount = Object.entries(result.provenance).filter(([k, p]) => p === "narrative" && result.draft[k] !== null && result.draft[k] !== "" && (!Array.isArray(result.draft[k]) || result.draft[k].length > 0)).length;
+        
+        redactionSummary.innerHTML = `
+          <div class="flex items-center gap-2">
+            <span class="text-emerald-400 font-semibold text-sm">✨ Análisis completado con éxito</span>
+            <span class="text-blue-300">— Se autocompletaron ${aiFilledCount} campos a partir de su narrativa.</span>
+          </div>
+          <div class="text-[11px] text-slate-300 mt-1">
+            <strong>Protección de privacidad:</strong> ${result.redaction_report.total_spans} datos identificatorios fueron anonimizados para la consulta de IA y restaurados fielmente en el formulario para su validación.
+          </div>
+        `;
+
         draftWarnings.innerHTML = "";
         if (result.warnings && result.warnings.length > 0) {
           result.warnings.forEach((warn: string) => {
@@ -595,7 +1328,7 @@ import {
       alert("Error de red al consultar el asistente.");
     } finally {
       btnDraftAi.removeAttribute("disabled");
-      btnDraftAi.innerHTML = `<svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/></svg><span>Redactar borrador con IA</span>`;
+      btnDraftAi.innerHTML = `<svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/></svg><span>Analizar y autocompletar formulario con IA</span>`;
     }
   });
 
@@ -627,12 +1360,53 @@ import {
         });
       }
 
+      if (key === "security_measures_adopted" && Array.isArray(val)) {
+        const checkboxes = document.getElementsByName("security_measures_adopted") as NodeListOf<HTMLInputElement>;
+        checkboxes.forEach((cb) => {
+          cb.checked = val.includes(cb.value);
+        });
+      }
+
+      if (key === "actions" && Array.isArray(val) && val.length > 0) {
+        if (containerActions && containerActions.children.length === 0) {
+          val.forEach((act: any) => addActionCard(act));
+        }
+      }
+
       // Update provenance badge
       const badge = document.getElementById(`badge-${key}`);
-      if (badge && provenance[key]) {
+      if (badge) {
         badge.classList.remove("hidden", "provenance-narrative", "provenance-partial", "provenance-default");
-        badge.classList.add(`provenance-${provenance[key]}`);
-        badge.textContent = provenance[key] === "narrative" ? "Narrativa" : provenance[key] === "partial" ? "Operador" : "Por defecto";
+        const hasVal = val !== null && val !== undefined && val !== "" && (!Array.isArray(val) || val.length > 0);
+
+        if (provenance[key] === "narrative" && hasVal) {
+          badge.classList.remove("hidden");
+          badge.classList.add("provenance-narrative");
+          badge.textContent = "✨ IA";
+          badge.title = "Completado automáticamente por IA a partir de la narrativa";
+        } else if (provenance[key] === "default" && hasVal) {
+          badge.classList.remove("hidden");
+          badge.classList.add("provenance-default");
+          badge.textContent = "Predeterminado";
+          badge.title = "Valor institucional predeterminado";
+        } else {
+          // If empty, leave hidden! No confusing badges on empty fields!
+          badge.classList.add("hidden");
+        }
+      }
+
+      // Listen for operator modification to mark field as manually edited
+      const fieldEl = document.getElementById(`field-${key}`);
+      if (fieldEl) {
+        fieldEl.addEventListener("input", () => {
+          const b = document.getElementById(`badge-${key}`);
+          if (b && !b.classList.contains("hidden")) {
+            b.classList.remove("provenance-narrative", "provenance-default");
+            b.classList.add("provenance-partial");
+            b.textContent = "Editado";
+            b.title = "Modificado manualmente por el operador";
+          }
+        }, { once: true });
       }
     }
   }
@@ -692,13 +1466,13 @@ import {
     e.preventDefault();
     const btnSubmit = document.getElementById("btn-submit-incident") as HTMLButtonElement;
     btnSubmit.setAttribute("disabled", "true");
-    btnSubmit.innerHTML = `<span>Enviando...</span>`;
+    btnSubmit.innerHTML = `<span>Registrando incidente...</span>`;
 
     const formData = new FormData(incidentForm);
     const body: Record<string, any> = {};
 
     formData.forEach((value, key) => {
-      if (key === "affected_cid" || key === "affected_data_types") {
+      if (key === "affected_cid" || key === "affected_data_types" || key === "security_measures_adopted") {
         if (!body[key]) body[key] = [];
         body[key].push(value);
       } else if (key === "involves_personal_data") {
@@ -712,6 +1486,31 @@ import {
 
     if (!body.affected_cid) body.affected_cid = [];
     if (!body.affected_data_types) body.affected_data_types = [];
+    if (!body.security_measures_adopted) body.security_measures_adopted = [];
+
+    // Collect dynamic action cards (if any were added)
+    const actionCards = document.querySelectorAll(".action-card");
+    const actions: any[] = [];
+    actionCards.forEach((card) => {
+      const typeEl = card.querySelector(".action-type") as HTMLSelectElement;
+      const respEl = card.querySelector(".action-responsible") as HTMLInputElement;
+      const dateEl = card.querySelector(".action-date") as HTMLInputElement;
+      const descEl = card.querySelector(".action-description") as HTMLTextAreaElement;
+      const evidEl = card.querySelector(".action-evidence") as HTMLInputElement;
+
+      const description = descEl?.value.trim();
+      if (description) {
+        actions.push({
+          action_type: typeEl?.value || "C",
+          responsible: respEl?.value.trim() || "operador",
+          action_date: dateEl?.value || new Date().toISOString().slice(0, 10),
+          description,
+          evidence: evidEl?.value.trim() || null,
+        });
+      }
+    });
+    body.actions = actions;
+
     body.idempotency_key = `agi1:create:${crypto.randomUUID()}`;
 
     try {
@@ -728,7 +1527,7 @@ import {
         }
         alert(`Error al crear incidente:\n${errorMsg}`);
         btnSubmit.removeAttribute("disabled");
-        btnSubmit.innerHTML = `<span>Confirmar y Enviar Incidente (Estado O)</span>`;
+        btnSubmit.innerHTML = `<span>Registrar incidente</span>`;
         return;
       }
 
@@ -736,13 +1535,13 @@ import {
       if (result.dedupe) {
         alert(`Incidente duplicado consolidado en registro existente: ${result.incident_code}`);
       } else {
-        alert(`Incidente ${result.incident_code} creado exitosamente en estado O.`);
+        alert(`Incidente ${result.incident_code} creado exitosamente.`);
       }
       window.location.href = "/incidents";
     } catch (err) {
       alert("Error de red al enviar el incidente.");
       btnSubmit.removeAttribute("disabled");
-      btnSubmit.innerHTML = `<span>Confirmar y Enviar Incidente (Estado O)</span>`;
+      btnSubmit.innerHTML = `<span>Registrar incidente</span>`;
     }
   });
 </script>

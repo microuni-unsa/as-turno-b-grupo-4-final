@@ -22,6 +22,7 @@ import {
   ALL_AFFECTED_DATA_TYPES,
   ALL_SECURITY_MEASURES,
   FINDING_CLASSIFICATIONS,
+  FORM_MEASURE_VALUES,
   INCIDENT_IMPACTS,
   INCIDENT_SEVERITIES,
   INCIDENT_STATUSES,
@@ -943,6 +944,38 @@ export const IntakePayloadSchema = z
     compromised_system: z.string().min(1).optional(),
     affected_url: z.string().min(1).optional(),
     assigned_to: z.string().min(1).optional(),
+    status: z.enum(INCIDENT_STATUSES).optional(),
+    severity: z.enum(INCIDENT_SEVERITIES).nullable().optional(),
+    impact: z.enum(INCIDENT_IMPACTS).nullable().optional(),
+    reported_by: z.string().min(1).optional(),
+    affected_treatment: z.string().min(1).optional(),
+    evidence_refs: z.string().optional(),
+    measure_updated_registry: z.enum(FORM_MEASURE_VALUES).nullable().optional(),
+    measure_new_security: z.enum(FORM_MEASURE_VALUES).nullable().optional(),
+    measure_improved_policies: z
+      .enum(FORM_MEASURE_VALUES)
+      .nullable()
+      .optional(),
+    measure_considered_resolved: z
+      .enum(FORM_MEASURE_VALUES)
+      .nullable()
+      .optional(),
+    measure_reported_authorities: z
+      .enum(FORM_MEASURE_VALUES)
+      .nullable()
+      .optional(),
+    resolved_date: z.string().nullable().optional(),
+    actions: z
+      .array(
+        z.object({
+          action_type: z.enum(ACTION_TYPES),
+          responsible: z.string().min(1),
+          action_date: z.string().min(1),
+          description: z.string().min(1),
+          evidence: z.string().nullable().optional(),
+        }),
+      )
+      .optional(),
     source_payload: JsonObjectSchema.optional(),
     attachments: z.array(IntakeAttachmentSchema).optional(),
   })

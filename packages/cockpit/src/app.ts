@@ -311,6 +311,22 @@ export function createCockpitApp(deps: CockpitAppDeps): Hono<CockpitEnv> {
       num_affected_subjects: request.num_affected_subjects ?? undefined,
       compromised_system: request.compromised_system ?? undefined,
       affected_url: request.affected_url ?? undefined,
+      status: request.status ?? undefined,
+      severity: request.severity ?? undefined,
+      impact: request.impact ?? undefined,
+      reported_by: request.reported_by ?? undefined,
+      assigned_to: request.assigned_to ?? undefined,
+      affected_treatment: request.affected_treatment ?? undefined,
+      evidence_refs: request.evidence_refs ?? undefined,
+      measure_updated_registry: request.measure_updated_registry ?? undefined,
+      measure_new_security: request.measure_new_security ?? undefined,
+      measure_improved_policies: request.measure_improved_policies ?? undefined,
+      measure_considered_resolved:
+        request.measure_considered_resolved ?? undefined,
+      measure_reported_authorities:
+        request.measure_reported_authorities ?? undefined,
+      resolved_date: request.resolved_date ?? undefined,
+      actions: request.actions.length > 0 ? request.actions : undefined,
       reporter:
         request.rep_document_number || request.rep_first_name
           ? {

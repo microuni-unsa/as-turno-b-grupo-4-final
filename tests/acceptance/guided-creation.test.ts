@@ -35,15 +35,33 @@ describe("Acceptance Tests A18–A22: Cockpit Guided Incident Creation", {
   const operatorToken = "operator-guided-token";
 
   beforeAll(async () => {
-    presidioContainer = await new GenericContainer("presidio-analyzer:2.2.x-es")
-      .withExposedPorts(3000)
-      .withWaitStrategy(Wait.forHttp("/health", 3000))
-      .withStartupTimeout(60_000)
-      .start();
+    const defaultUrl = process.env.PRESIDIO_URL ?? "http://127.0.0.1:3001";
+    let isAlreadyUp = false;
+    try {
+      const probe = await fetch(`${defaultUrl}/health`, {
+        signal: AbortSignal.timeout(1000),
+      });
+      if (probe.ok) {
+        isAlreadyUp = true;
+        presidioUrl = defaultUrl;
+      }
+    } catch {
+      isAlreadyUp = false;
+    }
 
-    const host = presidioContainer.getHost();
-    const port = presidioContainer.getMappedPort(3000);
-    presidioUrl = `http://${host}:${port}`;
+    if (!isAlreadyUp) {
+      presidioContainer = await new GenericContainer(
+        "presidio-analyzer:2.2.x-es",
+      )
+        .withExposedPorts(3000)
+        .withWaitStrategy(Wait.forHttp("/health", 3000))
+        .withStartupTimeout(60_000)
+        .start();
+
+      const host = presidioContainer.getHost();
+      const port = presidioContainer.getMappedPort(3000);
+      presidioUrl = `http://${host}:${port}`;
+    }
 
     presidioClient = new PresidioClient({
       baseUrl: presidioUrl,

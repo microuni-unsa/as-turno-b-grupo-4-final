@@ -144,6 +144,7 @@ export function createIncidentToolHandlers(
           measure_reported_authorities:
             args.measure_reported_authorities ?? null,
           resolved_date: args.resolved_date ?? null,
+          actions: args.actions,
         },
         {
           incidentCode: args.incident_code ?? null,

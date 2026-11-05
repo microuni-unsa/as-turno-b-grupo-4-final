@@ -468,8 +468,23 @@ export class IncidentOrchestrator {
         num_affected_subjects: payload.num_affected_subjects ?? null,
         compromised_system: payload.compromised_system ?? null,
         affected_url: payload.affected_url ?? null,
-        assigned_to: assignedTo,
-        reported_by: payload.channel,
+        assigned_to: payload.assigned_to ?? assignedTo,
+        reported_by: payload.reported_by ?? payload.channel,
+        severity: payload.severity ?? null,
+        impact: payload.impact ?? null,
+        affected_treatment: payload.affected_treatment ?? null,
+        evidence_refs: payload.evidence_refs ?? null,
+        measure_updated_registry: payload.measure_updated_registry ?? null,
+        measure_new_security: payload.measure_new_security ?? null,
+        measure_improved_policies: payload.measure_improved_policies ?? null,
+        measure_considered_resolved:
+          payload.measure_considered_resolved ?? null,
+        measure_reported_authorities:
+          payload.measure_reported_authorities ?? null,
+        resolved_date: payload.resolved_date ?? null,
+        ...(payload.actions && payload.actions.length > 0
+          ? { actions: payload.actions }
+          : {}),
         dpo_contact_name: payload.dpo?.name ?? null,
         dpo_contact_email: payload.dpo?.email ?? null,
         dpo_contact_phone: payload.dpo?.phone ?? null,
@@ -732,12 +747,12 @@ export class IncidentOrchestrator {
         {
           role: "user",
           content: JSON.stringify({
-            title: redactForPrompt(incident.title),
-            description: redactForPrompt(incident.description ?? ""),
+            title: await redactForPrompt(incident.title),
+            description: await redactForPrompt(incident.description ?? ""),
             involves_personal_data: incident.involves_personal_data,
             num_affected_subjects: incident.num_affected_subjects ?? null,
             affected_data_types: incident.affected_data_types,
-            compromised_system: redactOptionalForPrompt(
+            compromised_system: await redactOptionalForPrompt(
               incident.compromised_system,
             ),
             incident_type_catalog: INCIDENT_TYPES,
@@ -968,12 +983,14 @@ export class IncidentOrchestrator {
             role: "user",
             content: JSON.stringify({
               incident_code: incident.incident_code,
-              title: redactForPrompt(incident.title),
-              description: redactForPrompt(incident.description ?? ""),
-              compromised_system: redactOptionalForPrompt(
+              title: await redactForPrompt(incident.title),
+              description: await redactForPrompt(incident.description ?? ""),
+              compromised_system: await redactOptionalForPrompt(
                 incident.compromised_system,
               ),
-              affected_url: redactOptionalForPrompt(incident.affected_url),
+              affected_url: await redactOptionalForPrompt(
+                incident.affected_url,
+              ),
               affected_cid: incident.affected_cid,
             }),
           },
@@ -1028,8 +1045,8 @@ export class IncidentOrchestrator {
             role: "user",
             content: JSON.stringify({
               incident_code: incident.incident_code,
-              title: redactForPrompt(incident.title),
-              description: redactForPrompt(incident.description ?? ""),
+              title: await redactForPrompt(incident.title),
+              description: await redactForPrompt(incident.description ?? ""),
               involves_personal_data: incident.involves_personal_data,
               affected_cid: incident.affected_cid,
               affected_data_types: incident.affected_data_types,
@@ -1137,12 +1154,12 @@ export class IncidentOrchestrator {
                 incident_type: current.incident_type,
                 severity: current.severity ?? null,
                 impact: current.impact ?? null,
-                title: redactForPrompt(current.title),
+                title: await redactForPrompt(current.title),
                 description: current.description
-                  ? redactForPrompt(current.description)
+                  ? await redactForPrompt(current.description)
                   : null,
                 affected_data_types: [...current.affected_data_types],
-                compromised_system: redactOptionalForPrompt(
+                compromised_system: await redactOptionalForPrompt(
                   current.compromised_system,
                 ),
               },
@@ -1189,12 +1206,93 @@ export class IncidentOrchestrator {
         history.some((row) => row.event_type === "updated") &&
         history.some((row) => row.event_type === "status_changed");
 
+      const discoveredMeasures = new Set<string>(
+        current.security_measures_adopted ?? [],
+      );
+      const actionTexts = [
+        ...containmentParsed.data.actions.map(
+          (a) => `${a.description} ${a.evidence ?? ""}`,
+        ),
+        analysis.cause,
+        analysis.remediation,
+      ]
+        .join(" ")
+        .toLowerCase();
+
+      if (
+        actionTexts.includes("patch") ||
+        actionTexts.includes("parche") ||
+        actionTexts.includes("actualiz")
+      ) {
+        discoveredMeasures.add("patching");
+      }
+      if (
+        actionTexts.includes("mfa") ||
+        actionTexts.includes("doble factor") ||
+        actionTexts.includes("autenticaci")
+      ) {
+        discoveredMeasures.add("mfa");
+      }
+      if (
+        actionTexts.includes("cifrad") ||
+        actionTexts.includes("encrypt") ||
+        actionTexts.includes("tls") ||
+        actionTexts.includes("ssl")
+      ) {
+        discoveredMeasures.add("encrypt_transit");
+      }
+      if (
+        actionTexts.includes("backup") ||
+        actionTexts.includes("copia de seguridad") ||
+        actionTexts.includes("respaldo")
+      ) {
+        discoveredMeasures.add("backups");
+      }
+      if (
+        actionTexts.includes("segment") ||
+        actionTexts.includes("firewall") ||
+        actionTexts.includes("red")
+      ) {
+        discoveredMeasures.add("network_seg");
+      }
+      if (
+        actionTexts.includes("siem") ||
+        actionTexts.includes("log") ||
+        actionTexts.includes("monitoreo")
+      ) {
+        discoveredMeasures.add("siem");
+      }
+      if (
+        actionTexts.includes("capacit") ||
+        actionTexts.includes("entrenam") ||
+        actionTexts.includes("formaci")
+      ) {
+        discoveredMeasures.add("training");
+      }
+      if (
+        actionTexts.includes("rol") ||
+        actionTexts.includes("rbac") ||
+        actionTexts.includes("permis") ||
+        actionTexts.includes("acceso")
+      ) {
+        discoveredMeasures.add("rbac");
+      }
+      if (actionTexts.includes("dlp") || actionTexts.includes("fuga")) {
+        discoveredMeasures.add("dlp");
+      }
+
+      const updatedSecurityMeasures = Array.from(discoveredMeasures);
+
       const measurePatch: JsonObject = {
         measure_updated_registry: registryComplete ? "Y" : "N",
-        measure_new_security: containmentCount > 0 ? "Y" : "N",
+        measure_new_security:
+          containmentCount > 0 || updatedSecurityMeasures.length > 0
+            ? "Y"
+            : "N",
         measure_improved_policies: gateParsed.data.breach_requiring_response
           ? "Y"
           : "U",
+        security_measures_adopted: updatedSecurityMeasures,
       };
       await this.callTool(
         "investigator",
@@ -1241,7 +1339,7 @@ export class IncidentOrchestrator {
             {
               role: "user",
               content: JSON.stringify({
-                cause: redactForPrompt(analysis.cause),
+                cause: await redactForPrompt(analysis.cause),
                 threats: catalogs.threats,
                 vulnerabilities: catalogs.vulnerabilities,
               }),
@@ -1338,7 +1436,7 @@ export class IncidentOrchestrator {
               role: "user",
               content: JSON.stringify({
                 incident_code: incident.incident_code,
-                people_causes: [redactForPrompt(analysis.cause)],
+                people_causes: [await redactForPrompt(analysis.cause)],
               }),
             },
           ],
@@ -2058,15 +2156,37 @@ export class IncidentOrchestrator {
     return this.withLease(code, async () => {
       this.announceRole(code, "monitor");
       const today = limaDate(this.deps.clock());
+      const closeMeasurePatch: JsonObject = {
+        resolved_date: today,
+        measure_considered_resolved: "Y",
+        measure_updated_registry: "Y",
+      };
+      if (
+        incident.measure_new_security === null ||
+        incident.measure_new_security === undefined
+      ) {
+        closeMeasurePatch.measure_new_security =
+          (incident.security_measures_adopted?.length ?? 0) > 0 ? "Y" : "N";
+      }
+      if (
+        incident.measure_improved_policies === null ||
+        incident.measure_improved_policies === undefined
+      ) {
+        closeMeasurePatch.measure_improved_policies = "N";
+      }
+      if (
+        incident.measure_reported_authorities === null ||
+        incident.measure_reported_authorities === undefined
+      ) {
+        closeMeasurePatch.measure_reported_authorities = "N";
+      }
+
       await this.callTool(
         "monitor",
         "pims_update_incident",
         {
           id: incident.id,
-          patch: {
-            resolved_date: today,
-            measure_considered_resolved: "Y",
-          },
+          patch: closeMeasurePatch,
         },
         { incidentId: incident.id, incidentCode: code },
       );

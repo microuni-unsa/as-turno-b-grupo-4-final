@@ -238,9 +238,16 @@ describe("Phase 4 autonomous lifecycle loop (§6, §9, §14.2)", {
         semantic_entropy: 0.2,
       });
       const prompt = args.messages[0]?.content ?? "";
-      const isNonPii = prompt.includes("Port scan");
+      const isNonPii =
+        prompt.includes('"involves_personal_data":false') ||
+        prompt.includes('"incident_type":"OT"') ||
+        prompt.includes("Port scan") ||
+        prompt.includes("edge-router");
 
-      if (args.system === TRIAGE_SYSTEM) {
+      if (
+        args.system.startsWith(TRIAGE_SYSTEM) ||
+        args.system.includes("triage classifier")
+      ) {
         return respond({
           incident_type: isNonPii ? "OT" : "DL",
           candidate_probabilities: [
@@ -254,7 +261,10 @@ describe("Phase 4 autonomous lifecycle loop (§6, §9, §14.2)", {
           citations: [authorityCitation],
         });
       }
-      if (args.system === CONTAINMENT_SYSTEM) {
+      if (
+        args.system.startsWith(CONTAINMENT_SYSTEM) ||
+        args.system.includes("containment")
+      ) {
         return respond({
           actions: [
             {
@@ -266,7 +276,10 @@ describe("Phase 4 autonomous lifecycle loop (§6, §9, §14.2)", {
           ],
         });
       }
-      if (args.system === B3_12_SYSTEM) {
+      if (
+        args.system.startsWith(B3_12_SYSTEM) ||
+        args.system.includes("breach")
+      ) {
         return respond({
           breach_requiring_response: !isNonPii,
           rationale: isNonPii
@@ -275,7 +288,10 @@ describe("Phase 4 autonomous lifecycle loop (§6, §9, §14.2)", {
           citations: [authorityCitation],
         });
       }
-      if (args.system === ROOT_CAUSE_SYSTEM) {
+      if (
+        args.system.startsWith(ROOT_CAUSE_SYSTEM) ||
+        args.system.includes("root cause")
+      ) {
         return respond({
           method: "5-whys",
           cause: isNonPii
@@ -288,10 +304,18 @@ describe("Phase 4 autonomous lifecycle loop (§6, §9, §14.2)", {
           root_cause_unproven: false,
         });
       }
-      if (args.system === RISK_CATALOG_SYSTEM) {
+      if (
+        args.system.startsWith(RISK_CATALOG_SYSTEM) ||
+        args.system.includes("threat_code") ||
+        args.system.includes("risk catal")
+      ) {
         return respond({ threat_code: "TH04", vulnerability_code: null });
       }
-      if (args.system === DRAFT_AUTHORITY_SYSTEM) {
+      if (
+        args.system.startsWith(DRAFT_AUTHORITY_SYSTEM) ||
+        args.system.includes("draft a GDPR Article 33") ||
+        args.system.includes("notification pack for the supervisory authority")
+      ) {
         return respond({
           item_a_nature:
             "Exfiltration of admissions records through the portal export endpoint.",
@@ -311,7 +335,11 @@ describe("Phase 4 autonomous lifecycle loop (§6, §9, §14.2)", {
           citations: [authorityCitation],
         });
       }
-      if (args.system === DRAFT_SUBJECT_SYSTEM) {
+      if (
+        args.system.startsWith(DRAFT_SUBJECT_SYSTEM) ||
+        args.system.includes("draft a GDPR Article 34") ||
+        args.system.includes("communication to affected data subjects")
+      ) {
         return respond({
           body_plain:
             "An unauthorised party accessed some of your admissions records. We stopped the access and rotated the credentials. Please watch for unexpected messages about your application.",
@@ -327,7 +355,10 @@ describe("Phase 4 autonomous lifecycle loop (§6, §9, §14.2)", {
           citations: [authorityCitation],
         });
       }
-      if (args.system === RESOLUTION_SYSTEM) {
+      if (
+        args.system.startsWith(RESOLUTION_SYSTEM) ||
+        args.system.includes("resolution")
+      ) {
         return respond({
           summary:
             "The portal export credential was rotated and the endpoint restricted.",
@@ -337,8 +368,10 @@ describe("Phase 4 autonomous lifecycle loop (§6, §9, §14.2)", {
         });
       }
       if (
-        args.system === REVIEW_CHALLENGE_SYSTEM ||
-        args.system === REVIEW_CHALLENGE_AUTHORITY_SYSTEM
+        args.system.startsWith(REVIEW_CHALLENGE_SYSTEM) ||
+        args.system.startsWith(REVIEW_CHALLENGE_AUTHORITY_SYSTEM) ||
+        args.system.includes("challenge") ||
+        args.system.includes("You review")
       ) {
         return respond(reviewChallengePayload);
       }

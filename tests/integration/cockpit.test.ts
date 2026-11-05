@@ -52,20 +52,39 @@ describe("Cockpit backend", { timeout: 240_000 }, () => {
         if (!isCockpitPersona) {
           return null;
         }
-        const context = JSON.parse(
-          args.messages[0]?.content ?? "{}",
-        ) as JsonObject;
+        let context: JsonObject = {};
+        try {
+          context = JSON.parse(args.messages[0]?.content ?? "{}") as JsonObject;
+        } catch {
+          const sanitized = (args.messages[0]?.content ?? "{}").replace(
+            /(:\s*)(\[[A-Z0-9_]+\])/g,
+            '$1"$2"',
+          );
+          try {
+            context = JSON.parse(sanitized) as JsonObject;
+          } catch {
+            context = {};
+          }
+        }
         const citations = Array.isArray(context.citations)
           ? context.citations
           : [];
         const first = citations[0];
-        const firstCitation =
+        let firstCitation =
           typeof first === "object" &&
           first !== null &&
           !Array.isArray(first) &&
           typeof (first as JsonObject).citation_id === "string"
             ? String((first as JsonObject).citation_id)
             : null;
+        if (firstCitation === null) {
+          const match = (args.messages[0]?.content ?? "").match(
+            /"citation_id":\s*"([^"]+)"/,
+          );
+          if (match?.[1]) {
+            firstCitation = match[1];
+          }
+        }
 
         if (chatMode === "fabricated") {
           return {

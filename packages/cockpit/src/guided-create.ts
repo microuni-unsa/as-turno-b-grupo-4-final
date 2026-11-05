@@ -11,6 +11,7 @@ import {
   type GuidedExplainResponse,
   type GuidedProvenance,
   GuidedReportingSchema,
+  type PresidioRecognizerResult,
 } from "@pims/types/cockpit.ts";
 import { MODEL_ROUTE_FAST } from "@pims/types/constants.ts";
 import { FormNarrativeTooLongError } from "@pims/types/errors.ts";
@@ -28,6 +29,289 @@ export interface GuidedCreateDependencies {
   presidioClient: PresidioClient;
   ragService: RAGService;
   now?: () => Date;
+}
+
+const JOB_TITLE_KEYWORDS = [
+  "jefe",
+  "jefa",
+  "director",
+  "directora",
+  "gerente",
+  "responsable",
+  "oficial",
+  "coordinador",
+  "coordinadora",
+  "analista",
+  "auditor",
+  "auditora",
+  "especialista",
+  "administrador",
+  "administradora",
+  "seguridad",
+  "ciso",
+  "dpo",
+  "soc",
+  "oficial de seguridad",
+];
+
+export function isJobTitle(str: string): boolean {
+  const lower = str.toLowerCase();
+  return JOB_TITLE_KEYWORDS.some((kw) => lower.includes(kw));
+}
+
+export function parseSpanishPersonName(fullName: string): {
+  firstName: string;
+  lastNameP: string;
+  lastNameM: string | null;
+} {
+  const cleaned = fullName.trim().replace(/\s+/g, " ");
+  if (!cleaned) {
+    return { firstName: "", lastNameP: "", lastNameM: null };
+  }
+
+  // Strip common honorific titles (e.g. "Dra. Elena Ramos", "Ing. Carlos Mendoza")
+  const stripped = cleaned.replace(
+    /^(ing|lic|dr|dra|abg|mag|sr|sra|don|doña)\.?\s+/i,
+    "",
+  );
+  const words = stripped.split(" ");
+
+  if (words.length <= 1) {
+    return { firstName: words[0] ?? "", lastNameP: "", lastNameM: null };
+  }
+  if (words.length === 2) {
+    return {
+      firstName: words[0] ?? "",
+      lastNameP: words[1] ?? "",
+      lastNameM: null,
+    };
+  }
+
+  const isPrefix = (w: string) => /^(de|del|la|las|los|san|santa)$/i.test(w);
+
+  if (words.length === 3) {
+    if (isPrefix(words[1] ?? "")) {
+      return {
+        firstName: words[0] ?? "",
+        lastNameP: `${words[1]} ${words[2]}`,
+        lastNameM: null,
+      };
+    }
+    return {
+      firstName: words[0] ?? "",
+      lastNameP: words[1] ?? "",
+      lastNameM: words[2] ?? null,
+    };
+  }
+
+  if (words.length === 4) {
+    if (isPrefix(words[2] ?? "")) {
+      return {
+        firstName: `${words[0]} ${words[1]}`,
+        lastNameP: `${words[2]} ${words[3]}`,
+        lastNameM: null,
+      };
+    }
+    return {
+      firstName: `${words[0]} ${words[1]}`,
+      lastNameP: words[2] ?? "",
+      lastNameM: words[3] ?? null,
+    };
+  }
+
+  // For 5+ words:
+  const mIdx = words.length - 1;
+  let pIdx = words.length - 2;
+  while (pIdx > 1 && isPrefix(words[pIdx - 1] ?? "")) {
+    pIdx--;
+  }
+  return {
+    firstName: words.slice(0, pIdx).join(" "),
+    lastNameP: words.slice(pIdx, mIdx).join(" "),
+    lastNameM: words.slice(mIdx).join(" ") || null,
+  };
+}
+
+export interface IndexedSpanToken {
+  token: string;
+  original: string;
+  entityType: string;
+}
+
+export async function redactForGuidedDraft(
+  text: string,
+  presidioClient: PresidioClient,
+): Promise<{
+  redactedText: string;
+  spans: PresidioRecognizerResult[];
+  tokenMap: Map<string, IndexedSpanToken>;
+  originalPersons: IndexedSpanToken[];
+  originalEmails: IndexedSpanToken[];
+  originalPhones: IndexedSpanToken[];
+  originalIds: IndexedSpanToken[];
+  originalUrls: IndexedSpanToken[];
+}> {
+  if (!text) {
+    return {
+      redactedText: text,
+      spans: [],
+      tokenMap: new Map(),
+      originalPersons: [],
+      originalEmails: [],
+      originalPhones: [],
+      originalIds: [],
+      originalUrls: [],
+    };
+  }
+
+  const spans = await presidioClient.analyze(text);
+  if (spans.length === 0) {
+    return {
+      redactedText: text,
+      spans: [],
+      tokenMap: new Map(),
+      originalPersons: [],
+      originalEmails: [],
+      originalPhones: [],
+      originalIds: [],
+      originalUrls: [],
+    };
+  }
+
+  // Filter overlapping spans: longest span first (matching PresidioClient logic)
+  const sorted = [...spans].sort((a, b) => {
+    const lenDiff = b.end - b.start - (a.end - a.start);
+    if (lenDiff !== 0) {
+      return lenDiff;
+    }
+    const scoreDiff = b.score - a.score;
+    if (scoreDiff !== 0) {
+      return scoreDiff;
+    }
+    return a.start - b.start;
+  });
+
+  const selected: PresidioRecognizerResult[] = [];
+  for (const span of sorted) {
+    const overlaps = selected.some(
+      (existing) =>
+        Math.max(span.start, existing.start) < Math.min(span.end, existing.end),
+    );
+    if (!overlaps) {
+      selected.push(span);
+    }
+  }
+
+  // Sort by start ascending to assign indexed tokens in reading order
+  selected.sort((a, b) => a.start - b.start);
+
+  const tokenMap = new Map<string, IndexedSpanToken>();
+  const originalPersons: IndexedSpanToken[] = [];
+  const originalEmails: IndexedSpanToken[] = [];
+  const originalPhones: IndexedSpanToken[] = [];
+  const originalIds: IndexedSpanToken[] = [];
+  const originalUrls: IndexedSpanToken[] = [];
+
+  const indexedSpans: Array<{ span: PresidioRecognizerResult; token: string }> =
+    [];
+
+  let personCount = 1;
+  let emailCount = 1;
+  let phoneCount = 1;
+  let idCount = 1;
+  let urlCount = 1;
+  let descCount = 1;
+
+  for (const span of selected) {
+    const original = text.slice(span.start, span.end);
+    let token: string;
+    if (span.entity_type === "PERSON") {
+      token = `[REPORTANTE_${personCount++}]`;
+      const item: IndexedSpanToken = {
+        token,
+        original,
+        entityType: span.entity_type,
+      };
+      tokenMap.set(token, item);
+      originalPersons.push(item);
+    } else if (span.entity_type === "EMAIL_ADDRESS") {
+      token = `[CONTACTO_EMAIL_${emailCount++}]`;
+      const item: IndexedSpanToken = {
+        token,
+        original,
+        entityType: span.entity_type,
+      };
+      tokenMap.set(token, item);
+      originalEmails.push(item);
+    } else if (span.entity_type === "PHONE_NUMBER") {
+      token = `[CONTACTO_TEL_${phoneCount++}]`;
+      const item: IndexedSpanToken = {
+        token,
+        original,
+        entityType: span.entity_type,
+      };
+      tokenMap.set(token, item);
+      originalPhones.push(item);
+    } else if (
+      span.entity_type === "PE_DNI" ||
+      span.entity_type === "PE_RUC" ||
+      span.entity_type === "ES_NIF" ||
+      span.entity_type === "ES_NIE" ||
+      span.entity_type === "ES_PASSPORT"
+    ) {
+      token = `[ID_${idCount++}]`;
+      const item: IndexedSpanToken = {
+        token,
+        original,
+        entityType: span.entity_type,
+      };
+      tokenMap.set(token, item);
+      originalIds.push(item);
+    } else if (
+      span.entity_type === "URL" ||
+      span.entity_type === "IP_ADDRESS" ||
+      span.entity_type === "LOCATION"
+    ) {
+      token = `[SISTEMA_${urlCount++}]`;
+      const item: IndexedSpanToken = {
+        token,
+        original,
+        entityType: span.entity_type,
+      };
+      tokenMap.set(token, item);
+      originalUrls.push(item);
+    } else {
+      token = `[DESCRIPCION_${descCount++}]`;
+      const item: IndexedSpanToken = {
+        token,
+        original,
+        entityType: span.entity_type,
+      };
+      tokenMap.set(token, item);
+    }
+
+    indexedSpans.push({ span, token });
+  }
+
+  // Sort descending by start to perform right-to-left string replacement
+  indexedSpans.sort((a, b) => b.span.start - a.span.start);
+
+  let redactedText = text;
+  for (const { span, token } of indexedSpans) {
+    redactedText =
+      redactedText.slice(0, span.start) + token + redactedText.slice(span.end);
+  }
+
+  return {
+    redactedText,
+    spans: selected,
+    tokenMap,
+    originalPersons,
+    originalEmails,
+    originalPhones,
+    originalIds,
+    originalUrls,
+  };
 }
 
 const GUIDED_DRAFT_SYSTEM = `You are an expert incident response and privacy compliance assistant for GESTITEL PIMS.
@@ -48,8 +332,20 @@ Only extract reporting fields:
 - affected_url: string or null
 - security_measures_adopted: array of codes strictly from: ${JSON.stringify(ALL_SECURITY_MEASURES)}
 - affected_cid: array strictly subset of: ["C", "I", "D"]
-- rep_document_number, rep_first_name, rep_last_name_p, rep_email, rep_phone, rep_position: string or null
-Never invent dates or facts not mentioned in the text.`;
+- severity: one of L, M, H, C or null
+- impact: one of L, M, H, V or null
+- status: one of O, P, C (default O)
+- rep_first_name, rep_last_name_p, rep_last_name_m: string or null
+- rep_position: string or null (organizational role / job title, e.g. "Jefe de Seguridad de la Información", "Director de TI", "Auditor")
+- rep_document_number, rep_email, rep_phone: string or null
+- dpo_contact_name, dpo_contact_email, dpo_contact_phone: string or null
+- entity_name, entity_ruc, entity_type, entity_department, entity_province, entity_district: string or null
+
+Rules:
+1. NEVER confuse job titles or organizational positions (e.g. "Jefe de Seguridad de la Información", "Director", "Gerente") with surnames. Always assign job titles to rep_position.
+2. If text contains pseudonym tokens like [REPORTANTE_1], [CONTACTO_EMAIL_1], [CONTACTO_TEL_1], [ID_1], [SISTEMA_1], copy the EXACT token placeholder into the corresponding field.
+3. If [REPORTANTE_1] represents the reporting person, you may assign it to rep_first_name or rep_last_name_p, and if [REPORTANTE_2] represents the DPO, assign it to dpo_contact_name.
+4. Never invent dates or facts not mentioned in the text.`;
 
 const ENUM_FIELD_CATALOGS: Record<string, GuidedExplainOption[]> = {
   incident_type: [
@@ -183,6 +479,127 @@ const ENUM_FIELD_CATALOGS: Record<string, GuidedExplainOption[]> = {
       description: "Afectación masiva o crítica",
     },
   ],
+  status: [
+    {
+      code: "O",
+      label: "Abierto",
+      description: "Incidente recién registrado o en triaje inicial",
+    },
+    {
+      code: "P",
+      label: "En proceso",
+      description: "Contención, investigación o notificación en curso",
+    },
+    {
+      code: "C",
+      label: "Cerrado",
+      description: "Incidente resuelto con checklist y evidencia sellada",
+    },
+  ],
+  measure_updated_registry: [
+    {
+      code: "Y",
+      label: "Sí",
+      description: "El registro de incidentes fue actualizado formalmente",
+    },
+    {
+      code: "N",
+      label: "No",
+      description: "No se actualizó el registro de incidentes",
+    },
+    {
+      code: "U",
+      label: "En evaluación",
+      description: "Estado pendiente de verificación por el agente",
+    },
+  ],
+  measure_new_security: [
+    {
+      code: "Y",
+      label: "Sí",
+      description:
+        "Se adoptaron nuevas medidas de seguridad técnicas u organizativas",
+    },
+    {
+      code: "N",
+      label: "No",
+      description: "No se implementaron nuevas medidas de seguridad",
+    },
+    {
+      code: "U",
+      label: "En evaluación",
+      description: "Medidas en proceso de implementación",
+    },
+  ],
+  measure_improved_policies: [
+    {
+      code: "Y",
+      label: "Sí",
+      description:
+        "Se mejoraron procedimientos, políticas o planes de contingencia",
+    },
+    {
+      code: "N",
+      label: "No",
+      description: "No se requirieron cambios en políticas",
+    },
+    {
+      code: "U",
+      label: "En evaluación",
+      description: "Revisión de políticas en curso",
+    },
+  ],
+  measure_considered_resolved: [
+    {
+      code: "Y",
+      label: "Sí",
+      description: "El incidente ha sido mitigado y resuelto completamente",
+    },
+    {
+      code: "N",
+      label: "No",
+      description: "El incidente permanece activo o bajo mitigación",
+    },
+    {
+      code: "U",
+      label: "En evaluación",
+      description: "Verificación de resolución en curso",
+    },
+  ],
+  measure_reported_authorities: [
+    {
+      code: "Y",
+      label: "Sí",
+      description: "Notificado a la autoridad de protección de datos (Art 33)",
+    },
+    {
+      code: "N",
+      label: "No",
+      description: "No reportado o exento formalmente",
+    },
+    {
+      code: "U",
+      label: "En evaluación",
+      description: "Evaluación de umbral de riesgo en curso",
+    },
+  ],
+  action_type: [
+    {
+      code: "C",
+      label: "Contención",
+      description: "Acción inmediata de mitigación o aislamiento",
+    },
+    {
+      code: "A",
+      label: "Análisis",
+      description: "Investigación de causa raíz, alcance o evaluación legal",
+    },
+    {
+      code: "R",
+      label: "Resolución",
+      description: "Medida correctiva definitiva y cierre",
+    },
+  ],
 };
 
 function formatTodayDate(date: Date): string {
@@ -212,7 +629,16 @@ export async function draftGuidedIncident(
     ? `${narrative}\n\n[VALORES PARCIALES ACTUALES]:\n${partialStr}`
     : `[VALORES PARCIALES ACTUALES]:\n${partialStr}`;
 
-  const { redactedText, spans } = await deps.presidioClient.redact(combined);
+  const {
+    redactedText,
+    spans,
+    tokenMap,
+    originalPersons,
+    originalEmails,
+    originalPhones,
+    originalIds,
+    originalUrls,
+  } = await redactForGuidedDraft(combined, deps.presidioClient);
 
   const now = deps.now ? deps.now() : new Date();
   const today = formatTodayDate(now);
@@ -231,6 +657,143 @@ export async function draftGuidedIncident(
   });
 
   const extracted = (chatResponse.content ?? {}) as JsonObject;
+
+  // Restore all placeholder tokens
+  const restoreTokenString = (raw: unknown): string | null => {
+    if (typeof raw !== "string" || raw.trim() === "") {
+      return null;
+    }
+    let str = raw.trim();
+    for (const [token, item] of tokenMap.entries()) {
+      str = str.replaceAll(token, item.original);
+    }
+    return str;
+  };
+
+  // De-anonymize all extracted string fields
+  for (const [k, v] of Object.entries(extracted)) {
+    if (typeof v === "string") {
+      const restored = restoreTokenString(v);
+      if (restored !== null) {
+        extracted[k] = restored;
+      }
+    }
+  }
+
+  // Safety check on rep_last_name_p / rep_position
+  if (
+    typeof extracted.rep_last_name_p === "string" &&
+    isJobTitle(extracted.rep_last_name_p)
+  ) {
+    if (!extracted.rep_position || typeof extracted.rep_position !== "string") {
+      extracted.rep_position = extracted.rep_last_name_p;
+    }
+    extracted.rep_last_name_p = null;
+  }
+
+  // De-anonymize and parse reporter person name
+  if (originalPersons.length > 0) {
+    const repPerson = originalPersons[0];
+    if (repPerson) {
+      const parsed = parseSpanishPersonName(repPerson.original);
+      const isPlaceholder = (val: unknown) =>
+        typeof val === "string" && val.includes("[REPORTANTE");
+
+      if (
+        !extracted.rep_first_name ||
+        isPlaceholder(extracted.rep_first_name)
+      ) {
+        extracted.rep_first_name = parsed.firstName;
+      }
+      if (
+        !extracted.rep_last_name_p ||
+        isPlaceholder(extracted.rep_last_name_p) ||
+        isJobTitle(String(extracted.rep_last_name_p))
+      ) {
+        extracted.rep_last_name_p = parsed.lastNameP;
+      }
+      if (
+        !extracted.rep_last_name_m ||
+        isPlaceholder(extracted.rep_last_name_m)
+      ) {
+        extracted.rep_last_name_m = parsed.lastNameM;
+      }
+    }
+  }
+
+  // De-anonymize DPO name
+  if (originalPersons.length > 1) {
+    const dpoPerson = originalPersons[1];
+    if (
+      dpoPerson &&
+      (!extracted.dpo_contact_name ||
+        (typeof extracted.dpo_contact_name === "string" &&
+          extracted.dpo_contact_name.includes("[REPORTANTE")))
+    ) {
+      extracted.dpo_contact_name = dpoPerson.original;
+    }
+  }
+
+  // Fallback contacts from original token lists if LLM left them null or generic [CONTACTO] / [ID]
+  const isGenericToken = (val: unknown) =>
+    typeof val === "string" &&
+    (val === "[CONTACTO]" ||
+      val === "[ID]" ||
+      val === "[REPORTANTE]" ||
+      val === "[SISTEMA]" ||
+      val === "[DESCRIPCION]");
+
+  if (
+    (!extracted.rep_email || isGenericToken(extracted.rep_email)) &&
+    originalEmails.length > 0
+  ) {
+    const emailItem = originalEmails[0];
+    if (emailItem) {
+      extracted.rep_email = emailItem.original;
+    }
+  }
+  if (
+    (!extracted.dpo_contact_email ||
+      isGenericToken(extracted.dpo_contact_email)) &&
+    originalEmails.length > 1
+  ) {
+    const dpoEmailItem = originalEmails[1];
+    if (dpoEmailItem) {
+      extracted.dpo_contact_email = dpoEmailItem.original;
+    }
+  }
+
+  if (
+    (!extracted.rep_phone || isGenericToken(extracted.rep_phone)) &&
+    originalPhones.length > 0
+  ) {
+    const phoneItem = originalPhones[0];
+    if (phoneItem) {
+      extracted.rep_phone = phoneItem.original;
+    }
+  }
+
+  if (
+    (!extracted.rep_document_number ||
+      isGenericToken(extracted.rep_document_number)) &&
+    originalIds.length > 0
+  ) {
+    const idItem = originalIds[0];
+    if (idItem) {
+      extracted.rep_document_number = idItem.original;
+    }
+  }
+
+  if (
+    (!extracted.affected_url || isGenericToken(extracted.affected_url)) &&
+    originalUrls.length > 0
+  ) {
+    const urlItem = originalUrls.find((u) => u.original.startsWith("http"));
+    if (urlItem) {
+      extracted.affected_url = urlItem.original;
+    }
+  }
+
   const partial = request.partial ?? {};
 
   const provenance: Record<string, GuidedProvenance> = {};
@@ -361,6 +924,48 @@ export async function draftGuidedIncident(
       (extracted.entity_district as string) ??
       "Arequipa",
     reported_by: partial.reported_by ?? username,
+    assigned_to:
+      partial.assigned_to ?? (extracted.assigned_to as string) ?? null,
+    status: (partial.status ?? (extracted.status as string) ?? "O") as
+      | "O"
+      | "P"
+      | "C",
+    severity: (partial.severity ?? (extracted.severity as string) ?? null) as
+      | "L"
+      | "M"
+      | "H"
+      | "C"
+      | null,
+    impact: (partial.impact ?? (extracted.impact as string) ?? null) as
+      | "L"
+      | "M"
+      | "H"
+      | "V"
+      | null,
+    evidence_refs:
+      partial.evidence_refs ?? (extracted.evidence_refs as string) ?? null,
+    measure_updated_registry: (partial.measure_updated_registry ??
+      (extracted.measure_updated_registry as string) ??
+      null) as "Y" | "N" | "U" | null,
+    measure_new_security: (partial.measure_new_security ??
+      (extracted.measure_new_security as string) ??
+      null) as "Y" | "N" | "U" | null,
+    measure_improved_policies: (partial.measure_improved_policies ??
+      (extracted.measure_improved_policies as string) ??
+      null) as "Y" | "N" | "U" | null,
+    measure_considered_resolved: (partial.measure_considered_resolved ??
+      (extracted.measure_considered_resolved as string) ??
+      null) as "Y" | "N" | "U" | null,
+    measure_reported_authorities: (partial.measure_reported_authorities ??
+      (extracted.measure_reported_authorities as string) ??
+      null) as "Y" | "N" | "U" | null,
+    resolved_date:
+      partial.resolved_date ?? (extracted.resolved_date as string) ?? null,
+    actions: Array.isArray(partial.actions)
+      ? partial.actions
+      : Array.isArray(extracted.actions)
+        ? extracted.actions
+        : [],
     dpo_contact_name:
       partial.dpo_contact_name ??
       (extracted.dpo_contact_name as string) ??

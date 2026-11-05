@@ -5,9 +5,11 @@ import {
 } from "@pims/types/agent.ts";
 import { ExemptionEvaluationResultSchema } from "@pims/types/notices.ts";
 import {
+  ACTION_TYPES,
   AFFECTED_CID,
   ALL_AFFECTED_DATA_TYPES,
   ALL_SECURITY_MEASURES,
+  FORM_MEASURE_VALUES,
   INCIDENT_IMPACTS,
   INCIDENT_SEVERITIES,
   INCIDENT_STATUSES,
@@ -166,6 +168,15 @@ export const StreamSnapshotSchema = z.object({
 });
 export type StreamSnapshot = z.infer<typeof StreamSnapshotSchema>;
 
+export const GuidedActionSchema = z.object({
+  action_type: z.enum(ACTION_TYPES),
+  responsible: z.string().min(1),
+  action_date: z.string().min(1),
+  description: z.string().min(1),
+  evidence: z.string().nullable().optional(),
+});
+export type GuidedAction = z.infer<typeof GuidedActionSchema>;
+
 export const GuidedReportingSchema = z.object({
   title: z.string().min(1).max(150),
   description: z.string().max(1000).nullable().optional(),
@@ -175,11 +186,15 @@ export const GuidedReportingSchema = z.object({
   detection_time: z.string().nullable().optional(),
   incident_type: z.enum(INCIDENT_TYPES),
   involves_personal_data: z.boolean(),
+  status: z.enum(INCIDENT_STATUSES).default("O"),
+  severity: z.enum(INCIDENT_SEVERITIES).nullable().optional(),
+  impact: z.enum(INCIDENT_IMPACTS).nullable().optional(),
   affected_data_types: z.array(z.enum(ALL_AFFECTED_DATA_TYPES)).default([]),
   num_affected_subjects: z.number().nullable().optional(),
   affected_treatment: z.string().nullable().optional(),
   compromised_system: z.string().nullable().optional(),
   affected_url: z.string().nullable().optional(),
+  evidence_refs: z.string().nullable().optional(),
   security_measures_adopted: z.array(z.enum(ALL_SECURITY_MEASURES)).default([]),
   affected_cid: z.array(z.enum(AFFECTED_CID)).default([]),
   rep_document_number: z.string().nullable().optional(),
@@ -199,9 +214,23 @@ export const GuidedReportingSchema = z.object({
   entity_province: z.string().nullable().optional(),
   entity_district: z.string().nullable().optional(),
   reported_by: z.string().nullable().optional(),
+  assigned_to: z.string().nullable().optional(),
   dpo_contact_name: z.string().nullable().optional(),
   dpo_contact_email: z.string().nullable().optional(),
   dpo_contact_phone: z.string().nullable().optional(),
+  measure_updated_registry: z.enum(FORM_MEASURE_VALUES).nullable().optional(),
+  measure_new_security: z.enum(FORM_MEASURE_VALUES).nullable().optional(),
+  measure_improved_policies: z.enum(FORM_MEASURE_VALUES).nullable().optional(),
+  measure_considered_resolved: z
+    .enum(FORM_MEASURE_VALUES)
+    .nullable()
+    .optional(),
+  measure_reported_authorities: z
+    .enum(FORM_MEASURE_VALUES)
+    .nullable()
+    .optional(),
+  resolved_date: z.string().nullable().optional(),
+  actions: z.array(GuidedActionSchema).default([]),
 });
 export type GuidedReporting = z.infer<typeof GuidedReportingSchema>;
 
