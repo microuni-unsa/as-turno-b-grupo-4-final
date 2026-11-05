@@ -15,6 +15,13 @@ import {
   startIntegrationHarness,
 } from "@tests/helpers/integration-harness.ts";
 import {
+  TEST_GPT_4O_MINI,
+  TEST_OPENAI_API_KEY,
+  TEST_OPENAI_BASE_URL,
+  TEST_PRESIDIO_IMAGE,
+  TEST_TEXT_EMBEDDING_3_SMALL,
+} from "@tests/helpers/test-constants.ts";
+import {
   GenericContainer,
   type StartedTestContainer,
   Wait,
@@ -33,14 +40,14 @@ interface RedactionFixture {
 describe("Acceptance Tests A23 & A24: Presidio PII Redaction", {
   timeout: 180_000,
 }, () => {
-  let presidioContainer: StartedTestContainer;
+  let presidioContainer: StartedTestContainer | undefined;
   let presidioUrl: string;
   let presidioClient: PresidioClient;
   let harness: IntegrationHarness;
   let fixtures: RedactionFixture[];
 
   beforeAll(async () => {
-    presidioContainer = await new GenericContainer("presidio-analyzer:2.2.x-es")
+    presidioContainer = await new GenericContainer(TEST_PRESIDIO_IMAGE)
       .withExposedPorts(3000)
       .withWaitStrategy(Wait.forHttp("/health", 3000))
       .withStartupTimeout(60_000)
@@ -68,11 +75,15 @@ describe("Acceptance Tests A23 & A24: Presidio PII Redaction", {
   }, 180_000);
 
   afterAll(async () => {
-    if (presidioContainer) {
+    if (presidioContainer !== undefined) {
       await presidioContainer.stop();
+    } else {
+      // Presidio container was not initialized
     }
-    if (harness) {
+    if (harness !== undefined) {
       await harness.stop();
+    } else {
+      // Integration harness was not initialized
     }
   });
 
@@ -148,9 +159,9 @@ describe("Acceptance Tests A23 & A24: Presidio PII Redaction", {
 
       const modelConfig = {
         provider: "openai",
-        model: "gpt-4o-mini",
-        endpoint: "https://api.openai.com/v1",
-        auth_env: "OPENAI_API_KEY",
+        model: TEST_GPT_4O_MINI,
+        endpoint: TEST_OPENAI_BASE_URL,
+        auth_env: TEST_OPENAI_API_KEY,
         timeout_ms: 20000,
         max_retries: 0,
         fallback: "none" as const,
@@ -160,7 +171,10 @@ describe("Acceptance Tests A23 & A24: Presidio PII Redaction", {
         reasoningConfig: modelConfig,
         fastConfig: modelConfig,
         visionConfig: modelConfig,
-        embeddingsConfig: { ...modelConfig, model: "text-embedding-3-small" },
+        embeddingsConfig: {
+          ...modelConfig,
+          model: TEST_TEXT_EMBEDDING_3_SMALL,
+        },
         rerankerConfig: modelConfig,
         apiKey: "test-key",
       });

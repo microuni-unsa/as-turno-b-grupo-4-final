@@ -20,7 +20,20 @@ import {
   PostgreSqlContainer,
   type StartedPostgreSqlContainer,
 } from "@testcontainers/postgresql";
+import {
+  TEST_ADMIN_USERNAME,
+  TEST_DATE_2026_10_01,
+  TEST_POSTGRES_IMAGE,
+  TEST_SCHEMA,
+} from "@tests/helpers/test-constants.ts";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+
+const TEST_DPO_SECURITY_EMAIL = "dpo-security@unsa.pe";
+const TEST_FORENSICS_TXT = "forensics.txt";
+const TEST_MALWARE_EXE = "malware.exe";
+const TEST_ROUND_TRIP_TXT = "round-trip.txt";
+const SIMULATE_ERROR_HEADER = "X-Simulate-Error";
+const SIMULATE_403_LICENSE = "403_LICENSE";
 
 describe("PIMS Client Adapter & Reverse-Engineered DRF API Integration Suite", () => {
   let container: StartedPostgreSqlContainer;
@@ -37,21 +50,23 @@ describe("PIMS Client Adapter & Reverse-Engineered DRF API Integration Suite", (
     const seedPath = path.resolve(projectRoot, "data/02-init-unsa-seed.sql");
 
     if (!fs.existsSync(dumpPath) || !fs.existsSync(seedPath)) {
-      throw new Error(
+      expect.fail(
         `Required SQL initialization files missing in ${projectRoot}/data`,
       );
+    } else {
+      expect(fs.existsSync(dumpPath) && fs.existsSync(seedPath)).toBe(true);
     }
 
-    container = await new PostgreSqlContainer("postgres:16-alpine")
+    container = await new PostgreSqlContainer(TEST_POSTGRES_IMAGE)
       .withBindMounts([
         {
           source: dumpPath,
-          target: "/docker-entrypoint-initdb.d/01-gestitel.sql",
+          target: `${CONSTANTS.CONTAINER_POSTGRES_INITDB_DIR}/01-gestitel.sql`,
           mode: "ro",
         },
         {
           source: seedPath,
-          target: "/docker-entrypoint-initdb.d/02-seed.sql",
+          target: `${CONSTANTS.CONTAINER_POSTGRES_INITDB_DIR}/02-seed.sql`,
           mode: "ro",
         },
       ])
@@ -65,22 +80,28 @@ describe("PIMS Client Adapter & Reverse-Engineered DRF API Integration Suite", (
 
     adapter = new PimsAdapter({
       baseUrl: serverInstance.url,
-      schema: "unsa",
-      username: "admin",
+      schema: TEST_SCHEMA,
+      username: TEST_ADMIN_USERNAME,
       password: CONSTANTS.PIMS_TEST_SEED_PASSWORD,
-      timeoutMs: 15000,
+      timeoutMs: CONSTANTS.DEFAULT_PIMS_TIMEOUT_MS,
     });
   }, 120_000);
 
   afterAll(async () => {
     if (serverInstance) {
       await serverInstance.stop();
+    } else {
+      expect(serverInstance).toBeUndefined();
     }
     if (dbClient) {
       await dbClient.sql.end();
+    } else {
+      expect(dbClient).toBeUndefined();
     }
     if (container) {
       await container.stop();
+    } else {
+      expect(container).toBeUndefined();
     }
   }, 60_000);
 
@@ -89,7 +110,7 @@ describe("PIMS Client Adapter & Reverse-Engineered DRF API Integration Suite", (
       const res = await adapter.login();
       expect(res.access).toBeDefined();
       expect(res.refresh).toBeDefined();
-      expect(res.user.username).toBe("admin");
+      expect(res.user.username).toBe(TEST_ADMIN_USERNAME);
       expect(res.user.is_platform_admin).toBe(true);
       expect(adapter.accessToken).toBe(res.access);
     });
@@ -109,7 +130,7 @@ describe("PIMS Client Adapter & Reverse-Engineered DRF API Integration Suite", (
 
     it("E04: retrieves user profile", async () => {
       const profile = await adapter.getProfile();
-      expect(profile.username).toBe("admin");
+      expect(profile.username).toBe(TEST_ADMIN_USERNAME);
       expect(profile.email).toBe("admin@unsa.pe");
     });
   });
@@ -214,13 +235,15 @@ describe("PIMS Client Adapter & Reverse-Engineered DRF API Integration Suite", (
       const attachments = await adapter.uploadIncidentAttachment(
         createdIncidentId,
         fileContent,
-        "forensics.txt",
+        TEST_FORENSICS_TXT,
       );
 
       expect(attachments.length).toBeGreaterThanOrEqual(1);
-      const uploaded = attachments.find((a) => a.file_name === "forensics.txt");
+      const uploaded = attachments.find(
+        (a) => a.file_name === TEST_FORENSICS_TXT,
+      );
       expect(uploaded).toBeDefined();
-      expect(uploaded?.uploaded_by_name).toBe("admin");
+      expect(uploaded?.uploaded_by_name).toBe(TEST_ADMIN_USERNAME);
     });
 
     it("E12: rejects a disallowed extension before any HTTP request", async () => {
@@ -230,7 +253,7 @@ describe("PIMS Client Adapter & Reverse-Engineered DRF API Integration Suite", (
         adapter.uploadIncidentAttachment(
           createdIncidentId,
           Buffer.from("MZ binary"),
-          "malware.exe",
+          TEST_MALWARE_EXE,
         ),
       ).rejects.toThrow(AttachmentRejectedError);
 
@@ -243,7 +266,7 @@ describe("PIMS Client Adapter & Reverse-Engineered DRF API Integration Suite", (
       formData.append(
         "file",
         new Blob([Buffer.from("MZ binary")]),
-        "malware.exe",
+        TEST_MALWARE_EXE,
       );
 
       const res = await fetch(
@@ -264,7 +287,7 @@ describe("PIMS Client Adapter & Reverse-Engineered DRF API Integration Suite", (
       const attachments =
         await adapter.getIncidentAttachments(createdIncidentId);
       expect(attachments.length).toBeGreaterThanOrEqual(1);
-      expect(attachments.some((a) => a.file_name === "forensics.txt")).toBe(
+      expect(attachments.some((a) => a.file_name === TEST_FORENSICS_TXT)).toBe(
         true,
       );
     });
@@ -315,13 +338,13 @@ describe("PIMS Client Adapter & Reverse-Engineered DRF API Integration Suite", (
 
     it("E15: creates new notification recipient", async () => {
       const recipient = await adapter.createRecipient({
-        email: "dpo-security@unsa.pe",
+        email: TEST_DPO_SECURITY_EMAIL,
         label: "Data Protection Officer",
         is_active: true,
       });
 
       expect(recipient.id).toBeDefined();
-      expect(recipient.email).toBe("dpo-security@unsa.pe");
+      expect(recipient.email).toBe(TEST_DPO_SECURITY_EMAIL);
       expect(recipient.is_active).toBe(true);
       recipientId = recipient.id;
     });
@@ -329,7 +352,7 @@ describe("PIMS Client Adapter & Reverse-Engineered DRF API Integration Suite", (
     it("E15: fails with PIMS_VALIDATION on duplicate email", async () => {
       await expect(
         adapter.createRecipient({
-          email: "dpo-security@unsa.pe",
+          email: TEST_DPO_SECURITY_EMAIL,
           label: "Duplicate DPO",
           is_active: true,
         }),
@@ -503,7 +526,7 @@ describe("PIMS Client Adapter & Reverse-Engineered DRF API Integration Suite", (
         method: "GET",
         headers: {
           Authorization: `Bearer ${adapter.accessToken}`,
-          "X-Simulate-Error": "403_LICENSE",
+          [SIMULATE_ERROR_HEADER]: SIMULATE_403_LICENSE,
         },
       });
       expect(res.status).toBe(403);
@@ -513,9 +536,9 @@ describe("PIMS Client Adapter & Reverse-Engineered DRF API Integration Suite", (
       const testAdapter = new PimsAdapter({
         baseUrl: adapter.baseUrl,
         schema: adapter.schema,
-        username: "admin",
+        username: TEST_ADMIN_USERNAME,
         password: "test-password",
-        extraHeaders: { "X-Simulate-Error": "403_LICENSE" },
+        extraHeaders: { [SIMULATE_ERROR_HEADER]: SIMULATE_403_LICENSE },
         cookies: { session: "sess_123" },
       });
       await expect(testAdapter.listIncidents()).rejects.toThrow(
@@ -529,7 +552,7 @@ describe("PIMS Client Adapter & Reverse-Engineered DRF API Integration Suite", (
       const incident = await adapter.createIncident({
         title: "append-action replace mode",
         involves_personal_data: false,
-        incident_date: "2026-10-01",
+        incident_date: TEST_DATE_2026_10_01,
         incident_type: "OT",
         status: "O",
       });
@@ -537,7 +560,7 @@ describe("PIMS Client Adapter & Reverse-Engineered DRF API Integration Suite", (
       const first = await adapter.appendIncidentAction(incident.id, {
         action_type: "C",
         responsible: "SOC",
-        action_date: "2026-10-01",
+        action_date: TEST_DATE_2026_10_01,
         description: "contained the host",
         evidence: "file:host.txt",
       });
@@ -561,8 +584,8 @@ describe("PIMS Client Adapter & Reverse-Engineered DRF API Integration Suite", (
       try {
         const mergeAdapter = new PimsAdapter({
           baseUrl: mergeServer.url,
-          schema: "unsa",
-          username: "admin",
+          schema: TEST_SCHEMA,
+          username: TEST_ADMIN_USERNAME,
           password: CONSTANTS.PIMS_TEST_SEED_PASSWORD,
         });
         mergeAdapter.nestedActionMode = "merge";
@@ -570,7 +593,7 @@ describe("PIMS Client Adapter & Reverse-Engineered DRF API Integration Suite", (
         const incident = await mergeAdapter.createIncident({
           title: "append-action merge mode",
           involves_personal_data: false,
-          incident_date: "2026-10-01",
+          incident_date: TEST_DATE_2026_10_01,
           incident_type: "OT",
           status: "O",
         });
@@ -578,7 +601,7 @@ describe("PIMS Client Adapter & Reverse-Engineered DRF API Integration Suite", (
         await mergeAdapter.appendIncidentAction(incident.id, {
           action_type: "C",
           responsible: "SOC",
-          action_date: "2026-10-01",
+          action_date: TEST_DATE_2026_10_01,
           description: "contained the host",
           evidence: "file:host.txt",
         });
@@ -601,7 +624,7 @@ describe("PIMS Client Adapter & Reverse-Engineered DRF API Integration Suite", (
       const incident = await adapter.createIncident({
         title: "restore me",
         involves_personal_data: false,
-        incident_date: "2026-10-01",
+        incident_date: TEST_DATE_2026_10_01,
         incident_type: "OT",
         status: "O",
       });
@@ -614,7 +637,7 @@ describe("PIMS Client Adapter & Reverse-Engineered DRF API Integration Suite", (
         incidentCode: incident.incident_code,
       });
       expect(restored.is_deleted).toBe(false);
-      expect(restored.deleted_at ?? null).toBeNull();
+      expect(restored.deleted_at).toBeNull();
       expect(restored.incident_code).toBe(incident.incident_code);
     });
 
@@ -622,7 +645,7 @@ describe("PIMS Client Adapter & Reverse-Engineered DRF API Integration Suite", (
       const incident = await adapter.createIncident({
         title: "attachment round trip",
         involves_personal_data: false,
-        incident_date: "2026-10-01",
+        incident_date: TEST_DATE_2026_10_01,
         incident_type: "OT",
         status: "O",
       });
@@ -630,18 +653,18 @@ describe("PIMS Client Adapter & Reverse-Engineered DRF API Integration Suite", (
       const uploaded = await adapter.uploadIncidentAttachment(
         incident.id,
         bytes,
-        "round-trip.txt",
+        TEST_ROUND_TRIP_TXT,
       );
       const attachment = uploaded.find(
-        (row) => row.file_name === "round-trip.txt",
+        (row) => row.file_name === TEST_ROUND_TRIP_TXT,
       );
       expect(attachment).toBeDefined();
       if (attachment === undefined) {
-        throw new Error("upload returned no attachment");
+        expect.fail("upload returned no attachment");
+      } else {
+        const downloaded = await adapter.downloadAttachment(attachment.file);
+        expect(downloaded.equals(bytes)).toBe(true);
       }
-
-      const downloaded = await adapter.downloadAttachment(attachment.file);
-      expect(downloaded.equals(bytes)).toBe(true);
     });
   });
 
@@ -650,10 +673,10 @@ describe("PIMS Client Adapter & Reverse-Engineered DRF API Integration Suite", (
       const records: PimsMutationRecord[] = [];
       const observed = new PimsAdapter({
         baseUrl: serverInstance.url,
-        schema: "unsa",
-        username: "admin",
+        schema: TEST_SCHEMA,
+        username: TEST_ADMIN_USERNAME,
         password: CONSTANTS.PIMS_TEST_SEED_PASSWORD,
-        timeoutMs: 15000,
+        timeoutMs: CONSTANTS.DEFAULT_PIMS_TIMEOUT_MS,
         onMutation: (record) => {
           records.push(record);
         },
@@ -674,7 +697,7 @@ describe("PIMS Client Adapter & Reverse-Engineered DRF API Integration Suite", (
       const incident = await observed.createIncident({
         title: "mutation observer fixture",
         involves_personal_data: false,
-        incident_date: "2026-10-01",
+        incident_date: TEST_DATE_2026_10_01,
         incident_type: "OT",
         status: "O",
       });

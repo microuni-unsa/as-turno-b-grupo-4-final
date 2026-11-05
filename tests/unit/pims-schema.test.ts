@@ -4,14 +4,19 @@ import {
   PimsIncidentSchema,
   UserProfileSchema,
 } from "@pims/types/pims.ts";
+import {
+  TEST_ADMIN_USERNAME,
+  TEST_ALT_INCIDENT_CODE,
+  TEST_DATE_2026_10_01,
+} from "@tests/helpers/test-constants.ts";
 import { describe, expect, it } from "vitest";
 
 const incidentJson = {
   id: 1,
-  incident_code: "INC-001",
+  incident_code: TEST_ALT_INCIDENT_CODE,
   title: "Credential stuffing against the portal",
   involves_personal_data: true,
-  incident_date: "2026-10-01",
+  incident_date: TEST_DATE_2026_10_01,
   incident_type: "DL",
   status: "O",
   affected_data_types: [],
@@ -75,7 +80,7 @@ describe("Live PIMS serializer compatibility", () => {
 
   it("parses a live profile without id or must_change_password", () => {
     const parsed = UserProfileSchema.parse({
-      username: "grupob4",
+      username: TEST_ADMIN_USERNAME,
       first_name: "Grupo",
       last_name: "B4",
       email: "grupob4@unsa.edu.pe",
@@ -93,7 +98,7 @@ describe("Live PIMS serializer compatibility", () => {
       refresh: "refresh-token",
       user: {
         id: 7,
-        username: "grupob4",
+        username: TEST_ADMIN_USERNAME,
         email: "grupob4@unsa.edu.pe",
         is_platform_admin: false,
         must_change_password: false,

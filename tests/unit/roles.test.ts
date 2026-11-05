@@ -11,14 +11,13 @@ import {
   type AgentRole,
   type ToolName,
 } from "@pims/types/agent.ts";
+import { CONSTANTS } from "@pims/types/constants.ts";
 import {
   RoleToolDeniedError,
   RoleUnknownError,
   SkillUnknownError,
 } from "@pims/types/errors.ts";
 import { describe, expect, it } from "vitest";
-
-const HEX64 = /^[0-9a-f]{64}$/;
 
 describe("Phase 4 role registry (§5.1–§5.4)", () => {
   const registry = new RoleRegistry();
@@ -33,7 +32,7 @@ describe("Phase 4 role registry (§5.1–§5.4)", () => {
       const definition = registry.get(role);
       expect(definition.role).toBe(role);
       expect(definition.prompt_version).toBe("1.0");
-      expect(definition.prompt_sha256).toMatch(HEX64);
+      expect(definition.prompt_sha256).toMatch(CONSTANTS.SHA256_HEX_REGEX);
       expect(definition.system_prompt).toBe(ROLE_PROMPTS[role]);
       expect(definition.autonomy.length).toBeGreaterThan(0);
     }
@@ -96,7 +95,7 @@ describe("Phase 4 role registry (§5.1–§5.4)", () => {
     const handle = registry.createCapabilityHandle("triage");
     expect(handle.role).toBe("triage");
     expect(handle.promptSha256).toBe(registry.get("triage").prompt_sha256);
-    expect(handle.promptSha256).toMatch(HEX64);
+    expect(handle.promptSha256).toMatch(CONSTANTS.SHA256_HEX_REGEX);
   });
 
   it("exposes the ten skills with resolvable tool names", () => {

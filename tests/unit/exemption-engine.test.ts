@@ -1,6 +1,7 @@
 import { ExemptionEngine } from "@pims/notices";
 import type { ExemptionEvaluationInput } from "@pims/types";
 import { ExemptionUngroundedError, PimsValidationError } from "@pims/types";
+import { TEST_INCIDENT_CODE } from "@tests/helpers/test-constants.ts";
 import { describe, expect, it } from "vitest";
 
 describe("GDPR Article 34(3) Statutory Exemption Engine", () => {
@@ -9,7 +10,7 @@ describe("GDPR Article 34(3) Statutory Exemption Engine", () => {
   const verifiedAtUtc = "2026-10-30T12:00:00.000Z";
 
   const emptyInput: ExemptionEvaluationInput = {
-    incidentCode: "INC-2026-001",
+    incidentCode: TEST_INCIDENT_CODE,
     securityMeasuresAdopted: [],
     encryptionProofs: [],
     subsequentMeasures: [],
@@ -18,7 +19,7 @@ describe("GDPR Article 34(3) Statutory Exemption Engine", () => {
   };
 
   const encryptionProof = {
-    incident_code: "INC-2026-001",
+    incident_code: TEST_INCIDENT_CODE,
     source_file_sha256: sourceFileSha256,
     scope: "encrypt_rest" as const,
     algorithm: "AES-256-GCM",

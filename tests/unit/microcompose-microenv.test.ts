@@ -5,12 +5,13 @@ import {
   schema,
   stack,
 } from "@pims/config";
+import { TEST_OPENAI_API_KEY } from "@tests/helpers/test-constants.ts";
 import { describe, expect, it } from "vitest";
 
 describe("Microenv & Microcompose Adoption Suite", () => {
   it("schema defines expected variable keys with exact names", () => {
     expect(schema.flatKeys).toContain("PIMS_BASE_URL");
-    expect(schema.flatKeys).toContain("OPENAI_API_KEY");
+    expect(schema.flatKeys).toContain(TEST_OPENAI_API_KEY);
     expect(schema.flatKeys).toContain("EVIDENCE_DB_URL");
     expect(schema.flatKeys).toContain("AUTO_NOTIFY");
     expect(schema.flatKeys.length).toBe(41);

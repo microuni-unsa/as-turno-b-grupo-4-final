@@ -1,5 +1,16 @@
+import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
+
+function getVecElement(v: Float64Array, index: number): number {
+  if (index >= 0 && index < v.length) {
+    const val = v[index];
+    if (val !== undefined) {
+      return val;
+    }
+  }
+  return 0;
+}
 
 export function generateDeterministicEmbedding(
   text: string,
@@ -7,22 +18,21 @@ export function generateDeterministicEmbedding(
 ): number[] {
   const vec = new Float64Array(dim);
   const clean = text.toLowerCase();
-  const words = clean.match(/[a-z0-9_.]+/g) ?? [];
+  const wordsMatch = clean.match(/[a-z0-9_.]+/g);
+  const words = wordsMatch !== null ? wordsMatch : [];
   for (const w of words) {
-    let h = 2166136261;
-    for (let i = 0; i < w.length; i++) {
-      h ^= w.charCodeAt(i);
-      h = Math.imul(h, 16777619);
-    }
-    const idx = Math.abs(h) % dim;
+    const hashBuf = createHash("sha256").update(w).digest();
+    const h = hashBuf.readUInt32BE(0);
+    const idx = h % dim;
     const sign = (h & 1) === 0 ? 1 : -1;
-    const prev = vec[idx] ?? 0;
+    const prev = getVecElement(vec, idx);
     vec[idx] = prev + sign * (1.0 + (w.length > 3 ? 0.5 : 0.0));
   }
 
   let norm = 0;
   for (let i = 0; i < dim; i++) {
-    norm += (vec[i] ?? 0) * (vec[i] ?? 0);
+    const val = getVecElement(vec, i);
+    norm += val * val;
   }
   norm = Math.sqrt(norm);
   if (norm === 0) {
@@ -31,7 +41,8 @@ export function generateDeterministicEmbedding(
   }
   const result: number[] = new Array(dim);
   for (let i = 0; i < dim; i++) {
-    result[i] = Number(((vec[i] ?? 0) / norm).toFixed(6));
+    const val = getVecElement(vec, i);
+    result[i] = Number((val / norm).toFixed(6));
   }
   return result;
 }
@@ -82,11 +93,16 @@ export function getGdprArticleRanges(): ArticleRange[] {
   if (bounds.length === 0) {
     throw new Error(`No article boundaries found in ${fixturePath}`);
   }
-  const ranges: ArticleRange[] = bounds.map((b, i) => ({
-    art: b.art,
-    startLine: b.line,
-    endLine: (bounds[i + 1]?.line ?? lines.length + 1) - 1,
-  }));
+  const ranges: ArticleRange[] = bounds.map((b, i) => {
+    const nextBound = bounds[i + 1];
+    const nextLine =
+      nextBound !== undefined ? nextBound.line : lines.length + 1;
+    return {
+      art: b.art,
+      startLine: b.line,
+      endLine: nextLine - 1,
+    };
+  });
   cachedArticleRanges = ranges;
   return ranges;
 }
@@ -121,8 +137,15 @@ export function buildGdprTextAxes(
         axes.push(`gdpr:${range.art}`);
       }
     }
-    if (!map.has(chunk.text)) {
+    const existing = map.get(chunk.text);
+    if (existing === undefined) {
       map.set(chunk.text, axes);
+    } else {
+      for (const axis of axes) {
+        if (!existing.includes(axis)) {
+          existing.push(axis);
+        }
+      }
     }
   }
   cachedGdprTextAxes = map;
@@ -132,21 +155,24 @@ export function buildGdprTextAxes(
 function extractMarkerAxes(text: string): string[] {
   const lower = text.toLowerCase();
   const axes = new Set<string>();
-  const artMatches = lower.match(/art(?:icle)?\s*(\d+)|(\d+)\(\d+\)/g) ?? [];
+  const artMatchesRaw = lower.match(/art(?:icle)?\s*(\d+)|(\d+)\(\d+\)/g);
+  const artMatches = artMatchesRaw !== null ? artMatchesRaw : [];
   for (const m of artMatches) {
     const num = m.match(/(\d+)/)?.[1];
     if (num === "33" || num === "34") {
       axes.add(`gdpr:${num}`);
     }
   }
-  const annexMatches = lower.match(/[ab]\.\d+\.\d+/g) ?? [];
+  const annexMatchesRaw = lower.match(/[ab]\.\d+\.\d+/g);
+  const annexMatches = annexMatchesRaw !== null ? annexMatchesRaw : [];
   for (const m of annexMatches) {
     const key = `iso:${m}`;
     if (SPAN_AXIS_DIMS[key] !== undefined) {
       axes.add(key);
     }
   }
-  const dottedMatches = lower.match(/\d+(?:\.\d+)+/g) ?? [];
+  const dottedMatchesRaw = lower.match(/\d+(?:\.\d+)+/g);
+  const dottedMatches = dottedMatchesRaw !== null ? dottedMatchesRaw : [];
   const isoSuffixes = Object.keys(SPAN_AXIS_DIMS)
     .filter((k) => k.startsWith("iso:"))
     .map((k) => k.slice("iso:".length))
@@ -170,7 +196,8 @@ function classifyTextAxes(text: string): string[] {
         "GDPR text-axis registry not built before embed mock use",
       );
     }
-    return registry.get(text) ?? [];
+    const axes = registry.get(text);
+    return axes !== undefined ? axes : [];
   }
   return extractMarkerAxes(text);
 }
@@ -185,7 +212,8 @@ export function generateSpanAwareEmbedding(text: string, dim = 1024): number[] {
   for (const axis of axes) {
     const axisDim = SPAN_AXIS_DIMS[axis];
     if (axisDim !== undefined && axisDim < dim) {
-      vec[axisDim] = (vec[axisDim] ?? 0) + SPAN_WEIGHT;
+      const currentVal = vec[axisDim];
+      vec[axisDim] = (currentVal !== undefined ? currentVal : 0) + SPAN_WEIGHT;
     }
   }
   let norm = 0;

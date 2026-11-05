@@ -1,15 +1,20 @@
 import crypto from "node:crypto";
 import { PimsAdapter } from "@pims/pims-adapter";
 import { CONSTANTS } from "@pims/types/constants.ts";
-import {
-  AttachmentRejectedError,
-  PimsValidationError,
-} from "@pims/types/errors.ts";
+import { TEST_SCHEMA } from "@tests/helpers/test-constants.ts";
 import { describe, expect, it } from "vitest";
 
-const LIVE_BASE_URL = process.env.PIMS_LIVE_BASE_URL ?? "https://unsa.27k.pe";
+const LIVE_BASE_URL =
+  process.env.PIMS_LIVE_BASE_URL !== undefined &&
+  process.env.PIMS_LIVE_BASE_URL !== ""
+    ? process.env.PIMS_LIVE_BASE_URL
+    : CONSTANTS.DEFAULT_PIMS_BASE_URL;
 const LIVE_USERNAME = process.env.PIMS_USERNAME;
 const LIVE_PASSWORD = process.env.PIMS_PASSWORD;
+const LIVE_SCHEMA =
+  process.env.PIMS_SCHEMA !== undefined && process.env.PIMS_SCHEMA !== ""
+    ? process.env.PIMS_SCHEMA
+    : TEST_SCHEMA;
 
 const enabled =
   LIVE_USERNAME !== undefined &&
@@ -18,15 +23,17 @@ const enabled =
   LIVE_PASSWORD !== "";
 
 describe("Live PIMS smoke (no daemon, watcher stopped)", () => {
-  it("parses live serializers and walks a throwaway incident O→P→C", async () => {
+  it("parses live serializers and walks a throwaway incident O→P→C", async (ctx) => {
     if (!enabled) {
-      console.log("LIVE_PIMS_SMOKE_SKIPPED");
+      ctx.skip();
       return;
+    } else {
+      // Live credentials are provisioned, run smoke test
     }
 
     const adapter = new PimsAdapter({
       baseUrl: LIVE_BASE_URL,
-      schema: process.env.PIMS_SCHEMA ?? "unsa",
+      schema: LIVE_SCHEMA,
       username: LIVE_USERNAME,
       password: LIVE_PASSWORD,
       timeoutMs: 30000,
@@ -50,8 +57,12 @@ describe("Live PIMS smoke (no daemon, watcher stopped)", () => {
           row.recipients_snapshot !== undefined
         ) {
           expect(Array.isArray(row.recipients_snapshot)).toBe(true);
+        } else {
+          // Snapshot is empty/null for this history entry
         }
       }
+    } else {
+      // No incidents present in current tenant
     }
 
     const title = `LIVE-SMOKE-${crypto.randomUUID()}`;
@@ -81,32 +92,19 @@ describe("Live PIMS smoke (no daemon, watcher stopped)", () => {
       action_date: today,
       description: "Live smoke containment action.",
     });
-    expect(
-      (withAction.actions ?? []).some((action) => action.action_type === "C"),
-    ).toBe(true);
-
-    let jsonAttachmentAccepted = true;
-    try {
-      const uploaded = await adapter.uploadIncidentAttachment(
-        created.id,
-        Buffer.from(JSON.stringify({ smoke: true }), "utf8"),
-        CONSTANTS.BUNDLE_ATTACHMENT_NAME,
-      );
-      expect(uploaded.length).toBeGreaterThan(0);
-    } catch (error: unknown) {
-      if (
-        error instanceof AttachmentRejectedError ||
-        error instanceof PimsValidationError
-      ) {
-        jsonAttachmentAccepted = false;
-        console.warn(
-          `ATTACHMENT_REJECTED:${error.code}:json; set CONSTANTS.BUNDLE_ATTACHMENT_NAME to bundle.json.txt`,
-        );
-      } else {
-        throw error;
-      }
+    expect(withAction.actions).toBeDefined();
+    const actions = withAction.actions;
+    if (!actions) {
+      expect.fail("Expected actions to be present on updated incident");
     }
-    expect(jsonAttachmentAccepted).toBe(true);
+    expect(actions.some((action) => action.action_type === "C")).toBe(true);
+
+    const uploaded = await adapter.uploadIncidentAttachment(
+      created.id,
+      Buffer.from(JSON.stringify({ smoke: true }), "utf8"),
+      CONSTANTS.BUNDLE_ATTACHMENT_NAME,
+    );
+    expect(uploaded.length).toBeGreaterThan(0);
 
     const processing = await adapter.updateIncident(created.id, {
       status: "P",
@@ -134,6 +132,8 @@ describe("Live PIMS smoke (no daemon, watcher stopped)", () => {
         row.recipients_snapshot !== undefined
       ) {
         expect(Array.isArray(row.recipients_snapshot)).toBe(true);
+      } else {
+        // Snapshot is empty/null for this history entry
       }
     }
   });

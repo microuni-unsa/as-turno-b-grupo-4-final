@@ -10,16 +10,25 @@ import {
   RagIndexError,
   RagNoEvidenceError,
 } from "@pims/types";
+import { CONSTANTS } from "@pims/types/constants.ts";
 import type { RagRetrievalRecord } from "@pims/types/rag.ts";
+import {
+  TEST_ALT_INCIDENT_CODE,
+  TEST_CORPUS_DIR,
+  TEST_GPT_4O,
+  TEST_GPT_4O_MINI,
+  TEST_OPENAI_API_KEY,
+  TEST_OPENAI_BASE_URL,
+} from "@tests/helpers/test-constants.ts";
 import type postgres from "postgres";
 import { describe, expect, it, vi } from "vitest";
 
 describe("Tri-Modal RAG Subsystem Unit Suite", () => {
   const dummyModelConfig = {
     provider: "openai",
-    model: "gpt-4o",
-    endpoint: "https://api.openai.com/v1",
-    auth_env: "OPENAI_API_KEY",
+    model: TEST_GPT_4O,
+    endpoint: TEST_OPENAI_BASE_URL,
+    auth_env: TEST_OPENAI_API_KEY,
     timeout_ms: 5000,
     max_retries: 2,
     fallback: "none" as const,
@@ -34,7 +43,7 @@ describe("Tri-Modal RAG Subsystem Unit Suite", () => {
 
   const dummyProvider = new OpenAIModelProvider({
     reasoningConfig: dummyModelConfig,
-    fastConfig: { ...dummyModelConfig, model: "gpt-4o-mini" },
+    fastConfig: { ...dummyModelConfig, model: TEST_GPT_4O_MINI },
     visionConfig: dummyModelConfig,
     embeddingsConfig: dummyModelConfig,
     rerankerConfig: dummyModelConfig,
@@ -45,12 +54,12 @@ describe("Tri-Modal RAG Subsystem Unit Suite", () => {
     it("loads corpus files and formats contextual prefixes deterministically", async () => {
       const loader = new CorpusLoader({
         projectRoot: process.cwd(),
-        source: { type: "local", dirPath: "corpus" },
+        source: { type: "local", dirPath: TEST_CORPUS_DIR },
       });
       const corpus = await loader.loadAll();
 
       expect(corpus.version).toBeDefined();
-      expect(corpus.version).toMatch(/^[a-f0-9]{64}$/);
+      expect(corpus.version).toMatch(CONSTANTS.SHA256_HEX_REGEX);
       expect(corpus.chunks.length).toBeGreaterThan(10);
 
       for (const chunk of corpus.chunks.slice(0, 10)) {
@@ -58,7 +67,7 @@ describe("Tri-Modal RAG Subsystem Unit Suite", () => {
           /^\[DOC:[^|]+ \| CLAUSE:[^|]+ \| NORMATIVE:(true|false)\]$/,
         );
         expect(chunk.text.startsWith(chunk.header)).toBe(true);
-        expect(chunk.sha256).toMatch(/^[a-f0-9]{64}$/);
+        expect(chunk.sha256).toMatch(CONSTANTS.SHA256_HEX_REGEX);
       }
 
       expect(corpus.docHashes["gdpr-full"]).toBeDefined();
@@ -78,7 +87,7 @@ describe("Tri-Modal RAG Subsystem Unit Suite", () => {
     it("derives docIds from filename stems without hardcoded mappings", async () => {
       const loader = new CorpusLoader({
         projectRoot: process.cwd(),
-        source: { type: "local", dirPath: "corpus" },
+        source: { type: "local", dirPath: TEST_CORPUS_DIR },
       });
       const corpus = await loader.loadAll();
       const docIds = [...new Set(corpus.chunks.map((c) => c.doc_id))].sort();
@@ -205,7 +214,7 @@ Notify the designated Incident Commander within 30 minutes.
     it("rejects duplicate section loader extensions", () => {
       const loader = new CorpusLoader({
         projectRoot: process.cwd(),
-        source: { type: "local", dirPath: "corpus" },
+        source: { type: "local", dirPath: TEST_CORPUS_DIR },
       });
       expect(() =>
         loader.registerSectionLoader({
@@ -233,18 +242,22 @@ Notify the designated Incident Commander within 30 minutes.
         firstLine: 4,
         lastLine: 5,
       });
-      expect(Object.keys(windows[0] ?? {}).sort()).toEqual(
-        [
-          "body",
-          "firstLine",
-          "lastLine",
-          "sectionIndex",
-          "sectionLabel",
-          "tokenCount",
-          "windowCount",
-          "windowIndex",
-        ].sort(),
-      );
+      const firstWindow = windows[0];
+      expect(firstWindow).toBeDefined();
+      if (firstWindow) {
+        expect(Object.keys(firstWindow).sort()).toEqual(
+          [
+            "body",
+            "firstLine",
+            "lastLine",
+            "sectionIndex",
+            "sectionLabel",
+            "tokenCount",
+            "windowCount",
+            "windowIndex",
+          ].sort(),
+        );
+      }
       expect(() =>
         chunkSections({
           sections: [{ label: "records", lines: ["Alpha"], startLine: 1 }],
@@ -271,7 +284,7 @@ Notify the designated Incident Commander within 30 minutes.
           normative: true,
           header: "[DOC:gdpr-full | CLAUSE:art33 | NORMATIVE:true]",
           token_count: 20,
-          sha256: "a".repeat(64),
+          sha256: "a".repeat(CONSTANTS.SHA256_HEX_LENGTH),
         },
         {
           chunk_id: "c2",
@@ -282,7 +295,7 @@ Notify the designated Incident Commander within 30 minutes.
           normative: true,
           header: "[DOC:iso27701 | CLAUSE:b.3.12 | NORMATIVE:true]",
           token_count: 20,
-          sha256: "a".repeat(64),
+          sha256: "a".repeat(CONSTANTS.SHA256_HEX_LENGTH),
         },
       ];
 
@@ -315,7 +328,7 @@ Notify the designated Incident Commander within 30 minutes.
             normative: true,
             header: "[DOC:gdpr-full | CLAUSE:art33 | NORMATIVE:true]",
             token_count: 10,
-            sha256: "a".repeat(64),
+            sha256: "a".repeat(CONSTANTS.SHA256_HEX_LENGTH),
           },
         ],
         "v1",
@@ -371,7 +384,7 @@ Notify the designated Incident Commander within 30 minutes.
             normative: true,
             header: "[DOC:doc1 | CLAUSE:art1 | NORMATIVE:true]",
             token_count: 5,
-            sha256: "a".repeat(64),
+            sha256: "a".repeat(CONSTANTS.SHA256_HEX_LENGTH),
           },
         ],
         "v-low-score",
@@ -416,7 +429,7 @@ Notify the designated Incident Commander within 30 minutes.
         vectors: [[0.1, 0.2, 0.3]],
       });
 
-      const chunkSha = "b".repeat(64);
+      const chunkSha = "b".repeat(CONSTANTS.SHA256_HEX_LENGTH);
       await indexer.indexCorpus(
         [
           {
@@ -462,7 +475,7 @@ Notify the designated Incident Commander within 30 minutes.
 
       const result = await ragService.query(
         "personal data breach 72 hours supervisory authority",
-        { incident_code: "INC-001" },
+        { incident_code: TEST_ALT_INCIDENT_CODE },
       );
 
       const passage = result.passages[0];
@@ -478,7 +491,7 @@ Notify the designated Incident Commander within 30 minutes.
       expect(passage.rerank_score).toBe(0.91);
 
       expect(records).toHaveLength(1);
-      expect(records[0]?.incident_code).toBe("INC-001");
+      expect(records[0]?.incident_code).toBe(TEST_ALT_INCIDENT_CODE);
       expect(records[0]?.passages[0]?.chunk_sha256).toBe(chunkSha);
       expect(records[0]?.citations).toEqual(result.citations);
     });
@@ -493,7 +506,10 @@ Notify the designated Incident Commander within 30 minutes.
           if (queryText.includes("count(*)")) {
             return Promise.resolve([{ count: "1" }]);
           }
-          return Promise.resolve([]);
+          if (queryText.includes("CREATE EXTENSION")) {
+            return Promise.resolve([]);
+          }
+          throw new Error(`Unexpected query in sqlStub: ${queryText}`);
         }),
         {
           unsafe: vi.fn().mockResolvedValue([]),
@@ -519,7 +535,7 @@ Notify the designated Incident Commander within 30 minutes.
             normative: true,
             header: "[DOC:gdpr-full | CLAUSE:art33 | NORMATIVE:true]",
             token_count: 5,
-            sha256: "c".repeat(64),
+            sha256: "c".repeat(CONSTANTS.SHA256_HEX_LENGTH),
           },
         ],
         "v-cached",
@@ -570,7 +586,7 @@ Notify the designated Incident Commander within 30 minutes.
             normative: true,
             header: "[DOC:gdpr-full | CLAUSE:art33 | NORMATIVE:true]",
             token_count: 5,
-            sha256: "d".repeat(64),
+            sha256: "d".repeat(CONSTANTS.SHA256_HEX_LENGTH),
           },
         ],
         "v-query-cache",
@@ -620,7 +636,7 @@ Notify the designated Incident Commander within 30 minutes.
         normative: true,
         header: "[DOC:gdpr-full | CLAUSE:section | NORMATIVE:true]",
         token_count: 8,
-        sha256: "e".repeat(64),
+        sha256: "e".repeat(CONSTANTS.SHA256_HEX_LENGTH),
       }));
       await indexer.indexCorpus(chunks, "v-rerank-filter");
 
@@ -691,7 +707,7 @@ Notify the designated Incident Commander within 30 minutes.
             normative: true,
             header: "[DOC:gdpr-full | CLAUSE:section | NORMATIVE:true]",
             token_count: 8,
-            sha256: "f".repeat(64),
+            sha256: "f".repeat(CONSTANTS.SHA256_HEX_LENGTH),
           },
         ],
         "v-rerank-fail-closed",

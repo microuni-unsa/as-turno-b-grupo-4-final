@@ -11,6 +11,10 @@ import {
   SubjectCountForbiddenError,
   SubjectNoticePackSchema,
 } from "@pims/types";
+import {
+  TEST_INCIDENT_CODE,
+  TEST_NOW_ISO,
+} from "@tests/helpers/test-constants.ts";
 import { describe, expect, it } from "vitest";
 
 describe("Notice Composer (GDPR Art 33 Authority Pack & Art 34 Subject Notice)", () => {
@@ -40,8 +44,8 @@ describe("Notice Composer (GDPR Art 33 Authority Pack & Art 34 Subject Notice)",
 
   describe("composeAuthorityPack", () => {
     const baseAuthorityParams = {
-      incident_code: "INC-2026-001",
-      awareness_at_utc: "2026-10-30T10:00:00.000Z",
+      incident_code: TEST_INCIDENT_CODE,
+      awareness_at_utc: TEST_NOW_ISO,
       deadline_at_utc: "2026-11-02T10:00:00.000Z",
       submitted_at_utc: "2026-10-31T08:00:00.000Z",
       delay_reasons: null,
@@ -172,10 +176,10 @@ describe("Notice Composer (GDPR Art 33 Authority Pack & Art 34 Subject Notice)",
 
   describe("Canonical content hashing (hashCanonicalContent)", () => {
     const canonicalBasePack = {
-      incident_code: "INC-2026-001",
+      incident_code: TEST_INCIDENT_CODE,
       pack: "authority" as const,
       jurisdiction: "EU_GDPR" as const,
-      awareness_at_utc: "2026-10-30T10:00:00.000Z",
+      awareness_at_utc: TEST_NOW_ISO,
       deadline_at_utc: "2026-11-02T10:00:00.000Z",
       submitted_at_utc: "2026-10-31T08:00:00.000Z",
       review_approval_id: reviewApprovalId,
@@ -356,7 +360,7 @@ describe("Notice Composer (GDPR Art 33 Authority Pack & Art 34 Subject Notice)",
       "Le comunicamos que hemos detectado un incidente de seguridad. Nuestro equipo ha restablecido los accesos. Le sugerimos cambiar su contraseña.";
 
     const baseSubjectNoticeParams = {
-      incidentCode: "INC-2026-001",
+      incidentCode: TEST_INCIDENT_CODE,
       highRiskGate: sampleHighRiskGatePass,
       bodyPlain,
       contact: sampleDpoContact,

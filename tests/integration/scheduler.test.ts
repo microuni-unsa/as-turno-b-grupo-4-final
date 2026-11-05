@@ -9,10 +9,15 @@ import type { AgentConfig } from "@pims/config";
 import { EvidenceStore } from "@pims/evidence";
 import type { JsonObject, PageAlert, TimerKind } from "@pims/types";
 import { PimsBaseError } from "@pims/types";
+import { CONSTANTS } from "@pims/types/constants.ts";
 import {
   PostgreSqlContainer,
   type StartedPostgreSqlContainer,
 } from "@testcontainers/postgresql";
+import {
+  TEST_DATE_2026_10_01,
+  TEST_PGVECTOR_IMAGE,
+} from "@tests/helpers/test-constants.ts";
 import postgres, { type Sql } from "postgres";
 import {
   afterAll,
@@ -25,6 +30,13 @@ import {
 } from "vitest";
 
 const INCIDENT_PREFIX = "INC-SCHED";
+const TEST_ANCHOR_ISO = `${TEST_DATE_2026_10_01}T12:00:00.000Z`;
+const TIMER_T72_AUTHORITY: TimerKind = "T72_AUTHORITY";
+const TIMER_T_PROCESSOR: TimerKind = "T_PROCESSOR";
+const TIMER_T_SUBJECT: TimerKind = "T_SUBJECT";
+const TIMER_T_RETRY: TimerKind = "T_RETRY";
+const TIMER_T_REVIEW_SLA: TimerKind = "T_REVIEW_SLA";
+const RETRY_OF_KEY = "retry_of";
 
 interface PayloadRecord {
   incident_code: string;
@@ -45,7 +57,7 @@ let container: StartedPostgreSqlContainer;
 let store: EvidenceStore;
 let sql: Sql;
 let scheduler: DeadlineScheduler;
-let now = new Date("2026-10-01T12:00:00.000Z");
+let now = new Date(TEST_ANCHOR_ISO);
 
 const calls = {
   authority: [] as string[],
@@ -84,8 +96,9 @@ const effects: TimerEffects = {
     calls.review.push(incidentCode);
     if (reviewFailure !== null) {
       throw reviewFailure;
+    } else {
+      return outcomes.review;
     }
-    return outcomes.review;
   },
   async peruAdvisory(incidentCode) {
     calls.peru.push(incidentCode);
@@ -122,15 +135,16 @@ async function captureError(
   } catch (error: unknown) {
     if (!(error instanceof PimsBaseError)) {
       throw error;
+    } else {
+      return { code: error.code, message: error.message };
     }
-    return { code: error.code, message: error.message };
   }
-  throw new Error("Expected the scheduler call to fail but it resolved");
+  expect.fail("Expected the scheduler call to fail but it resolved");
 }
 
 describe("DeadlineScheduler integration (Testcontainers PostgreSQL)", () => {
   beforeAll(async () => {
-    container = await new PostgreSqlContainer("pgvector/pgvector:pg16").start();
+    container = await new PostgreSqlContainer(TEST_PGVECTOR_IMAGE).start();
     sql = postgres(container.getConnectionUri());
     store = new EvidenceStore({
       connectionUri: container.getConnectionUri(),
@@ -143,18 +157,24 @@ describe("DeadlineScheduler integration (Testcontainers PostgreSQL)", () => {
   afterAll(async () => {
     if (store) {
       await store.close();
+    } else {
+      expect(store).toBeUndefined();
     }
     if (sql) {
       await sql.end();
+    } else {
+      expect(sql).toBeUndefined();
     }
     if (container) {
       await container.stop();
+    } else {
+      expect(container).toBeUndefined();
     }
     fs.rmSync(storageDir, { recursive: true, force: true });
   });
 
   beforeEach(async () => {
-    now = new Date("2026-10-01T12:00:00.000Z");
+    now = new Date(TEST_ANCHOR_ISO);
     calls.authority.length = 0;
     calls.processor.length = 0;
     calls.subject.length = 0;
@@ -173,10 +193,10 @@ describe("DeadlineScheduler integration (Testcontainers PostgreSQL)", () => {
   });
 
   it("arms a timer and persists it for the incident", async () => {
-    const fireAt = futureIso(60 * 60 * 1000);
+    const fireAt = futureIso(CONSTANTS.MS_PER_HOUR);
     const result = await scheduler.arm({
       incident_code: `${INCIDENT_PREFIX}-001`,
-      kind: "T72_AUTHORITY",
+      kind: TIMER_T72_AUTHORITY,
       fire_at_utc: fireAt,
       payload: { stage: "triage" },
     });
@@ -187,7 +207,7 @@ describe("DeadlineScheduler integration (Testcontainers PostgreSQL)", () => {
     const active = await store.listActiveTimers(`${INCIDENT_PREFIX}-001`);
     expect(active).toHaveLength(1);
     expect(active[0]?.timer_id).toBe(result.timer_id);
-    expect(active[0]?.timer_type).toBe("T72_AUTHORITY");
+    expect(active[0]?.timer_type).toBe(TIMER_T72_AUTHORITY);
     expect(active[0]?.fire_at_utc).toBe(fireAt);
     expect(active[0]?.payload).toEqual({ stage: "triage" });
   });
@@ -196,16 +216,16 @@ describe("DeadlineScheduler integration (Testcontainers PostgreSQL)", () => {
     const code = `${INCIDENT_PREFIX}-002`;
     await scheduler.arm({
       incident_code: code,
-      kind: "T72_AUTHORITY",
-      fire_at_utc: futureIso(60 * 60 * 1000),
+      kind: TIMER_T72_AUTHORITY,
+      fire_at_utc: futureIso(CONSTANTS.MS_PER_HOUR),
       payload: {},
     });
 
     const duplicate = await captureError(() =>
       scheduler.arm({
         incident_code: code,
-        kind: "T72_AUTHORITY",
-        fire_at_utc: futureIso(2 * 60 * 60 * 1000),
+        kind: TIMER_T72_AUTHORITY,
+        fire_at_utc: futureIso(2 * CONSTANTS.MS_PER_HOUR),
         payload: {},
       }),
     );
@@ -218,12 +238,16 @@ describe("DeadlineScheduler integration (Testcontainers PostgreSQL)", () => {
     const codes = ["003", "004", "005"].map(
       (suffix) => `${INCIDENT_PREFIX}-${suffix}`,
     );
-    const kinds: TimerKind[] = ["T72_AUTHORITY", "T_PROCESSOR", "T_SUBJECT"];
+    const kinds: TimerKind[] = [
+      TIMER_T72_AUTHORITY,
+      TIMER_T_PROCESSOR,
+      TIMER_T_SUBJECT,
+    ];
     for (let index = 0; index < codes.length; index++) {
       await scheduler.arm({
         incident_code: codes[index] as string,
         kind: kinds[index] as TimerKind,
-        fire_at_utc: futureIso((index + 1) * 60 * 60 * 1000),
+        fire_at_utc: futureIso((index + 1) * CONSTANTS.MS_PER_HOUR),
         payload: {},
       });
     }
@@ -232,9 +256,9 @@ describe("DeadlineScheduler integration (Testcontainers PostgreSQL)", () => {
     const overflow = await captureError(() =>
       scheduler.arm({
         incident_code: `${INCIDENT_PREFIX}-006`,
-        kind: "T_RETRY",
-        fire_at_utc: futureIso(60 * 60 * 1000),
-        payload: { retry_of: "timer:x:T72_AUTHORITY:y" },
+        kind: TIMER_T_RETRY,
+        fire_at_utc: futureIso(CONSTANTS.MS_PER_HOUR),
+        payload: { [RETRY_OF_KEY]: "timer:x:T72_AUTHORITY:y" },
       }),
     );
     expect(overflow.code).toBe("SCHEDULER_OVERFLOW");
@@ -242,8 +266,8 @@ describe("DeadlineScheduler integration (Testcontainers PostgreSQL)", () => {
 
     const admitted = await scheduler.arm({
       incident_code: `${INCIDENT_PREFIX}-007`,
-      kind: "T72_AUTHORITY",
-      fire_at_utc: futureIso(60 * 60 * 1000),
+      kind: TIMER_T72_AUTHORITY,
+      fire_at_utc: futureIso(CONSTANTS.MS_PER_HOUR),
       payload: {},
     });
     expect(admitted.late).toBe(false);
@@ -259,7 +283,7 @@ describe("DeadlineScheduler integration (Testcontainers PostgreSQL)", () => {
     const result = await captureError(() =>
       scheduler.arm({
         incident_code: code,
-        kind: "T72_AUTHORITY",
+        kind: TIMER_T72_AUTHORITY,
         fire_at_utc: new Date(now.getTime() - 1000).toISOString(),
         payload: {},
       }),
@@ -285,8 +309,8 @@ describe("DeadlineScheduler integration (Testcontainers PostgreSQL)", () => {
     const code = `${INCIDENT_PREFIX}-009`;
     const armed = await scheduler.arm({
       incident_code: code,
-      kind: "T_SUBJECT",
-      fire_at_utc: futureIso(60 * 60 * 1000),
+      kind: TIMER_T_SUBJECT,
+      fire_at_utc: futureIso(CONSTANTS.MS_PER_HOUR),
       payload: {},
     });
     await scheduler.cancel(armed.timer_id, "incident closed");
@@ -309,32 +333,32 @@ describe("DeadlineScheduler integration (Testcontainers PostgreSQL)", () => {
     const subjectCode = `${INCIDENT_PREFIX}-012`;
     await scheduler.arm({
       incident_code: authorityCode,
-      kind: "T72_AUTHORITY",
-      fire_at_utc: futureIso(60 * 60 * 1000),
+      kind: TIMER_T72_AUTHORITY,
+      fire_at_utc: futureIso(CONSTANTS.MS_PER_HOUR),
       payload: {},
     });
     await scheduler.arm({
       incident_code: processorCode,
-      kind: "T_PROCESSOR",
-      fire_at_utc: futureIso(60 * 60 * 1000),
+      kind: TIMER_T_PROCESSOR,
+      fire_at_utc: futureIso(CONSTANTS.MS_PER_HOUR),
       payload: {},
     });
     await scheduler.arm({
       incident_code: subjectCode,
-      kind: "T_SUBJECT",
-      fire_at_utc: futureIso(60 * 60 * 1000),
+      kind: TIMER_T_SUBJECT,
+      fire_at_utc: futureIso(CONSTANTS.MS_PER_HOUR),
       payload: {},
     });
 
-    const tickAt = new Date(now.getTime() + 2 * 60 * 60 * 1000);
+    const tickAt = new Date(now.getTime() + 2 * CONSTANTS.MS_PER_HOUR);
     now = tickAt;
     const result = await scheduler.tick(tickAt);
 
     expect(result.fired).toHaveLength(3);
     expect(result.fired.map((entry) => entry.timer.timer_type).sort()).toEqual([
-      "T72_AUTHORITY",
-      "T_PROCESSOR",
-      "T_SUBJECT",
+      TIMER_T72_AUTHORITY,
+      TIMER_T_PROCESSOR,
+      TIMER_T_SUBJECT,
     ]);
     for (const entry of result.fired) {
       expect(entry.fired_at_utc).toBe(tickAt.toISOString());
@@ -352,7 +376,7 @@ describe("DeadlineScheduler integration (Testcontainers PostgreSQL)", () => {
     await scheduler.arm({
       incident_code: code,
       kind: "T_PERU_ADVISORY",
-      fire_at_utc: futureIso(60 * 60 * 1000),
+      fire_at_utc: futureIso(CONSTANTS.MS_PER_HOUR),
       payload: {},
     });
 
@@ -360,7 +384,7 @@ describe("DeadlineScheduler integration (Testcontainers PostgreSQL)", () => {
       .spyOn(console, "info")
       .mockImplementation(() => undefined);
     try {
-      const tickAt = new Date(now.getTime() + 2 * 60 * 60 * 1000);
+      const tickAt = new Date(now.getTime() + 2 * CONSTANTS.MS_PER_HOUR);
       now = tickAt;
       const result = await scheduler.tick(tickAt);
 
@@ -379,12 +403,12 @@ describe("DeadlineScheduler integration (Testcontainers PostgreSQL)", () => {
     const code = `${INCIDENT_PREFIX}-014`;
     await scheduler.arm({
       incident_code: code,
-      kind: "T72_AUTHORITY",
-      fire_at_utc: futureIso(60 * 60 * 1000),
+      kind: TIMER_T72_AUTHORITY,
+      fire_at_utc: futureIso(CONSTANTS.MS_PER_HOUR),
       payload: {},
     });
 
-    const tickAt = new Date(now.getTime() + 2 * 60 * 60 * 1000);
+    const tickAt = new Date(now.getTime() + 2 * CONSTANTS.MS_PER_HOUR);
     now = tickAt;
     const result = await scheduler.tick(tickAt);
 
@@ -392,7 +416,7 @@ describe("DeadlineScheduler integration (Testcontainers PostgreSQL)", () => {
     expect(pages).toEqual([
       {
         incident_code: code,
-        kind: "T72_AUTHORITY",
+        kind: TIMER_T72_AUTHORITY,
         reason: "DEADLINE_MISSED_72H",
       },
     ]);
@@ -403,14 +427,14 @@ describe("DeadlineScheduler integration (Testcontainers PostgreSQL)", () => {
     const armed = await scheduler.arm({
       incident_code: code,
       kind: "T_PHASE_FOLLOWUP",
-      fire_at_utc: futureIso(60 * 60 * 1000),
+      fire_at_utc: futureIso(CONSTANTS.MS_PER_HOUR),
       payload: { pack_type: "authority", phase: 2 },
     });
 
     const restarted = buildScheduler();
     expect(await store.listActiveTimers(code)).toHaveLength(1);
 
-    const tickAt = new Date(now.getTime() + 2 * 60 * 60 * 1000);
+    const tickAt = new Date(now.getTime() + 2 * CONSTANTS.MS_PER_HOUR);
     now = tickAt;
     const result = await restarted.tick(tickAt);
 
@@ -430,12 +454,12 @@ describe("DeadlineScheduler integration (Testcontainers PostgreSQL)", () => {
     reviewFailure = new Error("review effect exploded");
     const armed = await scheduler.arm({
       incident_code: code,
-      kind: "T_REVIEW_SLA",
-      fire_at_utc: futureIso(30 * 60 * 1000),
+      kind: TIMER_T_REVIEW_SLA,
+      fire_at_utc: futureIso(30 * CONSTANTS.MS_PER_MINUTE),
       payload: { incidence: "review" },
     });
 
-    const tickAt = new Date(now.getTime() + 60 * 60 * 1000);
+    const tickAt = new Date(now.getTime() + CONSTANTS.MS_PER_HOUR);
     now = tickAt;
 
     await expect(scheduler.tick(tickAt)).rejects.toThrow(
@@ -445,8 +469,8 @@ describe("DeadlineScheduler integration (Testcontainers PostgreSQL)", () => {
     expect(calls.review).toEqual([code]);
     const active = await store.listActiveTimers(code);
     expect(active).toHaveLength(1);
-    expect(active[0]?.timer_type).toBe("T_RETRY");
-    expect(active[0]?.payload.retry_of).toBe(armed.timer_id);
-    expect(active[0]?.payload.failed_kind).toBe("T_REVIEW_SLA");
+    expect(active[0]?.timer_type).toBe(TIMER_T_RETRY);
+    expect(active[0]?.payload[RETRY_OF_KEY]).toBe(armed.timer_id);
+    expect(active[0]?.payload.failed_kind).toBe(TIMER_T_REVIEW_SLA);
   });
 });

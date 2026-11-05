@@ -1,22 +1,28 @@
 import { loadConfig, loadModelProviderOptions } from "@pims/config";
 import { ConfigError } from "@pims/types";
+import {
+  TEST_ADMIN_PASSWORD,
+  TEST_ADMIN_USERNAME,
+  TEST_COHERE_BASE_URL,
+  TEST_CORPUS_DIR,
+  TEST_EVIDENCE_DB_URL,
+  TEST_MISTRAL_BASE_URL,
+  TEST_PRESIDIO_IMAGE,
+  TEST_PRESIDIO_MODEL,
+  TEST_PRESIDIO_URL,
+} from "@tests/helpers/test-constants.ts";
 import { describe, expect, it, vi } from "vitest";
 
 describe("Configuration Manager", () => {
   const baseValidEnv: Record<string, string> = {
-    PIMS_USERNAME: "grupob4",
-    PIMS_PASSWORD: "plain-test-password",
-    EVIDENCE_DB_URL: "postgres://pims:pims@localhost:5432/pims_evidence",
-    REASONING_MODEL:
-      "mistral,mistral-large-latest,https://api.mistral.ai,MISTRAL_API_KEY,30000,3,fallback:none",
-    FAST_MODEL:
-      "mistral,mistral-small-latest,https://api.mistral.ai,MISTRAL_API_KEY,10000,3,fallback:none",
-    VISION_MODEL:
-      "mistral,pixtral-12b-2409,https://api.mistral.ai,MISTRAL_API_KEY,20000,3,fallback:none",
-    EMBEDDINGS_MODEL:
-      "mistral,mistral-embed,https://api.mistral.ai,MISTRAL_API_KEY,5000,3,fallback:none",
-    RERANKER_MODEL:
-      "cohere,rerank-v3.5,https://api.cohere.com,COHERE_API_KEY,5000,3,fallback:none",
+    PIMS_USERNAME: TEST_ADMIN_USERNAME,
+    PIMS_PASSWORD: TEST_ADMIN_PASSWORD,
+    EVIDENCE_DB_URL: TEST_EVIDENCE_DB_URL,
+    REASONING_MODEL: `mistral,mistral-large-latest,${TEST_MISTRAL_BASE_URL},MISTRAL_API_KEY,30000,3,fallback:none`,
+    FAST_MODEL: `mistral,mistral-small-latest,${TEST_MISTRAL_BASE_URL},MISTRAL_API_KEY,10000,3,fallback:none`,
+    VISION_MODEL: `mistral,pixtral-12b-2409,${TEST_MISTRAL_BASE_URL},MISTRAL_API_KEY,20000,3,fallback:none`,
+    EMBEDDINGS_MODEL: `mistral,mistral-embed,${TEST_MISTRAL_BASE_URL},MISTRAL_API_KEY,5000,3,fallback:none`,
+    RERANKER_MODEL: `cohere,rerank-v3.5,${TEST_COHERE_BASE_URL},COHERE_API_KEY,5000,3,fallback:none`,
     MISTRAL_API_KEY: "dummy-mistral-key",
     COHERE_API_KEY: "dummy-key",
     EVIDENCE_KEY: "aes-256-gcm-secret-key-32-bytes",
@@ -37,18 +43,16 @@ describe("Configuration Manager", () => {
     expect(config.EVIDENCE_HASH).toBe("sha256");
     expect(config.JURISDICTION_DEADLINES_JSON).toBeDefined();
     expect(config.JURISDICTION_DEADLINES_JSON.EU_GDPR?.authority_h).toBe(72);
-    expect(config.PIMS_USERNAME).toBe("grupob4");
-    expect(config.PIMS_PASSWORD).toBe("plain-test-password");
-    expect(config.EVIDENCE_DB_URL).toBe(
-      "postgres://pims:pims@localhost:5432/pims_evidence",
-    );
+    expect(config.PIMS_USERNAME).toBe(TEST_ADMIN_USERNAME);
+    expect(config.PIMS_PASSWORD).toBe(TEST_ADMIN_PASSWORD);
+    expect(config.EVIDENCE_DB_URL).toBe(TEST_EVIDENCE_DB_URL);
     expect(config.AUTO_NOTIFY).toBe(false);
     expect(config.MODEL_LOGPROBS).toBe(true);
     expect(config.WATCHER_POLL_INTERVAL_MS).toBe(5000);
-    expect(config.RAG_CORPUS_DIR).toBe("corpus");
-    expect(config.PRESIDIO_URL).toBe("http://127.0.0.1:3001");
-    expect(config.PRESIDIO_IMAGE).toBe("presidio-analyzer:2.2.x-es");
-    expect(config.PRESIDIO_MODEL).toBe("es_core_news_md");
+    expect(config.RAG_CORPUS_DIR).toBe(TEST_CORPUS_DIR);
+    expect(config.PRESIDIO_URL).toBe(TEST_PRESIDIO_URL);
+    expect(config.PRESIDIO_IMAGE).toBe(TEST_PRESIDIO_IMAGE);
+    expect(config.PRESIDIO_MODEL).toBe(TEST_PRESIDIO_MODEL);
     expect(config.PRESIDIO_TIMEOUT_MS).toBe(1500);
     expect(config.PRESIDIO_MIN_SCORE).toBe(0.5);
     expect(config.FORM_NARRATIVE_MAX_CHARS).toBe(4000);
@@ -268,7 +272,7 @@ describe("Configuration Manager", () => {
     vi.stubEnv("PIMS_EXTRA_HEADERS_JSON", '{"FromEnv":"1"}');
     vi.stubEnv(
       "VISION_MODEL",
-      "mistral,pixtral-12b-2409,https://api.mistral.ai,MISTRAL_API_KEY,20000,3,fallback:none",
+      `mistral,pixtral-12b-2409,${TEST_MISTRAL_BASE_URL},MISTRAL_API_KEY,20000,3,fallback:none`,
     );
     try {
       const env = { ...baseValidEnv };

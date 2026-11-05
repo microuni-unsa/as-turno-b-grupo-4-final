@@ -16,6 +16,12 @@ import {
   PostgreSqlContainer,
   type StartedPostgreSqlContainer,
 } from "@testcontainers/postgresql";
+import {
+  TEST_ALT_INCIDENT_CODE,
+  TEST_MIME_TEXT,
+  TEST_POSTGRES_IMAGE,
+  TEST_STORAGE_PUBLIC,
+} from "@tests/helpers/test-constants.ts";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 describe("BundleSealer Integration Suite (Testcontainers PostgreSQL)", {
@@ -29,10 +35,12 @@ describe("BundleSealer Integration Suite (Testcontainers PostgreSQL)", {
     "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
 
   beforeAll(async () => {
-    container = await new PostgreSqlContainer("postgres:16-alpine").start();
+    container = await new PostgreSqlContainer(TEST_POSTGRES_IMAGE).start();
 
     if (fs.existsSync(storageRootDir)) {
       await fs.promises.rm(storageRootDir, { recursive: true, force: true });
+    } else {
+      // Storage directory does not exist prior to creation
     }
     await fs.promises.mkdir(storageRootDir, { recursive: true });
 
@@ -49,16 +57,22 @@ describe("BundleSealer Integration Suite (Testcontainers PostgreSQL)", {
   afterAll(async () => {
     if (store) {
       await store.close();
+    } else {
+      // EvidenceStore was not initialized
     }
     if (container) {
       await container.stop();
+    } else {
+      // Container was not started
     }
     if (fs.existsSync(storageRootDir)) {
       await fs.promises.rm(storageRootDir, { recursive: true, force: true });
+    } else {
+      // Storage directory already cleaned up
     }
   });
 
-  const incidentCode = "INC-001";
+  const incidentCode = TEST_ALT_INCIDENT_CODE;
 
   const incidentFacts: EvidenceBundleIncident = {
     description:
@@ -98,21 +112,21 @@ describe("BundleSealer Integration Suite (Testcontainers PostgreSQL)", {
   describe("Evidence bundle assembly and sealing", () => {
     it("stages two attachments bound to PIMS ids", async () => {
       await store.stageAttachment(
-        "public",
+        TEST_STORAGE_PUBLIC,
         incidentCode,
         "firewall-traffic.log",
         Buffer.from("Observed suspicious outbound traffic log entries"),
-        "text/plain",
+        TEST_MIME_TEXT,
         "security-analyst",
         null,
         101,
       );
       await store.stageAttachment(
-        "public",
+        TEST_STORAGE_PUBLIC,
         incidentCode,
         "database-access.log",
         Buffer.from("Database queries containing exfiltration markers"),
-        "text/plain",
+        TEST_MIME_TEXT,
         "security-analyst",
         null,
         102,
@@ -158,11 +172,11 @@ describe("BundleSealer Integration Suite (Testcontainers PostgreSQL)", {
 
     it("rejects reconciliation when a staged attachment has no PIMS id", async () => {
       await store.stageAttachment(
-        "public",
+        TEST_STORAGE_PUBLIC,
         "INC-NO-PIMS",
         "unuploaded.log",
         Buffer.from("staged but never uploaded"),
-        "text/plain",
+        TEST_MIME_TEXT,
         "security-analyst",
       );
 

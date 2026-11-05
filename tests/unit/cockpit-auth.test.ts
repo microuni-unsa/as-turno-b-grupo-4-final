@@ -18,30 +18,45 @@ import {
   CockpitSessionInvalidError,
 } from "@pims/types/errors.ts";
 import type { PimsPermission } from "@pims/types/pims.ts";
+import {
+  TEST_ALT_INCIDENT_CODE,
+  TEST_DATE_2026_10_01,
+  TEST_SCHEMA,
+} from "@tests/helpers/test-constants.ts";
 import { describe, expect, it } from "vitest";
 
 function session(
   role: CockpitRole,
   permissions: CockpitPermission[],
-  canSwitch = false,
+  canSwitch: boolean,
 ): CockpitSession {
+  let default_persona: "dpo" | "auditor" | "executive";
+  if (role === "Editor") {
+    default_persona = "dpo";
+  } else if (role === "Lector") {
+    default_persona = "auditor";
+  } else if (role === "Operador" || role === "Administrador") {
+    default_persona = "executive";
+  } else {
+    throw new Error(`Unhandled CockpitRole: ${role}`);
+  }
+
   return {
     access_token: "token",
     expires_at_utc: new Date("2030-01-01T00:00:00.000Z").toISOString(),
     user_id: 1,
     username: "operator",
-    schema: "unsa",
+    schema: TEST_SCHEMA,
     native_role: role,
     permissions,
-    default_persona:
-      role === "Editor" ? "dpo" : role === "Lector" ? "auditor" : "executive",
+    default_persona,
     can_switch_persona: canSwitch,
   };
 }
 
 function permission(
   modulo: string,
-  overrides: Partial<PimsPermission> = {},
+  overrides: Partial<PimsPermission>,
 ): PimsPermission {
   return {
     modulo,
@@ -56,8 +71,8 @@ function permission(
 
 const roleEvent: AgentEvent = {
   type: "role:transition",
-  at_utc: "2026-10-01T10:00:00.000Z",
-  incident_code: "INC-001",
+  at_utc: `${TEST_DATE_2026_10_01}T10:00:00.000Z`,
+  incident_code: TEST_ALT_INCIDENT_CODE,
   role: "triage",
   previous_role: null,
   lease_holder: "agent:1",
@@ -65,8 +80,8 @@ const roleEvent: AgentEvent = {
 
 const mutationEvent: AgentEvent = {
   type: "tool:mutation",
-  at_utc: "2026-10-01T10:00:00.000Z",
-  incident_code: "INC-001",
+  at_utc: `${TEST_DATE_2026_10_01}T10:00:00.000Z`,
+  incident_code: TEST_ALT_INCIDENT_CODE,
   method: "PATCH",
   endpoint: "/api/incidents/1/",
   operation: "update_incident",
@@ -150,13 +165,13 @@ describe("Cockpit native role adaptation", () => {
 describe("Cockpit persona authorization", () => {
   it("uses the session default persona when none is requested", () => {
     expect(
-      resolvePersona(session("Editor", ["view_incident"]), undefined),
+      resolvePersona(session("Editor", ["view_incident"], false), undefined),
     ).toBe("dpo");
   });
 
   it("rejects persona switching for pinned roles", () => {
     expect(() =>
-      resolvePersona(session("Lector", ["view_incident"]), "executive"),
+      resolvePersona(session("Lector", ["view_incident"], false), "executive"),
     ).toThrow(CockpitPermissionDeniedError);
   });
 
@@ -169,21 +184,27 @@ describe("Cockpit persona authorization", () => {
 
 describe("Cockpit SSE event filtering", () => {
   it("drops every event without view_incident", () => {
-    expect(canReceiveEvent(session("Lector", []), roleEvent)).toBe(false);
+    expect(canReceiveEvent(session("Lector", [], false), roleEvent)).toBe(
+      false,
+    );
   });
 
   it("hides tool mutations without view_securitylog", () => {
-    const reader = session("Editor", [
-      "view_incident",
-      "change_incident",
-      "view_audit",
-    ]);
+    const reader = session(
+      "Editor",
+      ["view_incident", "change_incident", "view_audit"],
+      false,
+    );
     expect(canReceiveEvent(reader, roleEvent)).toBe(true);
     expect(canReceiveEvent(reader, mutationEvent)).toBe(false);
   });
 
   it("streams tool mutations to operators with view_securitylog", () => {
-    const operator = session("Operador", ["view_incident", "view_securitylog"]);
+    const operator = session(
+      "Operador",
+      ["view_incident", "view_securitylog"],
+      false,
+    );
     expect(canReceiveEvent(operator, mutationEvent)).toBe(true);
   });
 });
@@ -193,7 +214,7 @@ describe("Cockpit session registry", () => {
     const registry = new SessionRegistry(
       () => new Date("2031-01-01T00:00:00.000Z"),
     );
-    const expired = session("Operador", ["view_incident"]);
+    const expired = session("Operador", ["view_incident"], false);
     expired.access_token = "expired";
     registry.add(expired);
     expect(() => registry.get("expired")).toThrow(CockpitSessionInvalidError);

@@ -44,10 +44,25 @@ import {
   type StartedPostgreSqlContainer,
 } from "@testcontainers/postgresql";
 import { generateSpanAwareEmbedding } from "@tests/helpers/span-geometry.ts";
+import {
+  TEST_ADMIN_USERNAME,
+  TEST_DATE_2026_10_01,
+  TEST_DPO_EMAIL,
+  TEST_GPT_4O,
+  TEST_GPT_4O_MINI,
+  TEST_MIME_TEXT,
+  TEST_OPENAI_API_KEY,
+  TEST_OPENAI_BASE_URL,
+  TEST_POSTGRES_IMAGE,
+  TEST_SCHEMA,
+  TEST_TEXT_EMBEDDING_3_SMALL,
+} from "@tests/helpers/test-constants.ts";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
+const TEST_EVIDENCE_TXT = "evidence.txt";
+
 const TEST_CONFIG = {
-  PIMS_SCHEMA: "unsa",
+  PIMS_SCHEMA: TEST_SCHEMA,
   IDEMPOTENCY_KEY_PREFIX: "agi1",
   CORRECTIVE_DEFAULT_DUE_DAYS: 30,
   RAG_TOP_K: 5,
@@ -65,7 +80,7 @@ function baseIncidentArgs(overrides: JsonObject = {}): JsonObject {
     title: "Tools integration incident",
     description: "Synthetic incident used to exercise agent tools",
     involves_personal_data: true,
-    incident_date: "2026-10-01",
+    incident_date: TEST_DATE_2026_10_01,
     incident_type: "OT",
     status: "O",
     affected_data_types: ["email"],
@@ -176,16 +191,16 @@ describe("Agent Tool Registry integration suite", {
     );
     const seedPath = path.resolve(projectRoot, "data/02-init-unsa-seed.sql");
 
-    container = await new PostgreSqlContainer("postgres:16-alpine")
+    container = await new PostgreSqlContainer(TEST_POSTGRES_IMAGE)
       .withBindMounts([
         {
           source: dumpPath,
-          target: "/docker-entrypoint-initdb.d/01-gestitel.sql",
+          target: `${CONSTANTS.CONTAINER_POSTGRES_INITDB_DIR}/01-gestitel.sql`,
           mode: "ro",
         },
         {
           source: seedPath,
-          target: "/docker-entrypoint-initdb.d/02-seed.sql",
+          target: `${CONSTANTS.CONTAINER_POSTGRES_INITDB_DIR}/02-seed.sql`,
           mode: "ro",
         },
       ])
@@ -197,10 +212,10 @@ describe("Agent Tool Registry integration suite", {
     });
     adapter = new PimsAdapter({
       baseUrl: serverInstance.url,
-      schema: "unsa",
-      username: "admin",
+      schema: TEST_SCHEMA,
+      username: TEST_ADMIN_USERNAME,
       password: CONSTANTS.PIMS_TEST_SEED_PASSWORD,
-      timeoutMs: 15_000,
+      timeoutMs: CONSTANTS.DEFAULT_PIMS_TIMEOUT_MS,
     });
 
     storageDir = fs.mkdtempSync(path.join(os.tmpdir(), "pims-tools-"));
@@ -213,21 +228,21 @@ describe("Agent Tool Registry integration suite", {
 
     const modelConfig = {
       provider: "openai",
-      model: "gpt-4o",
-      endpoint: "https://api.openai.com/v1",
-      auth_env: "OPENAI_API_KEY",
+      model: TEST_GPT_4O,
+      endpoint: TEST_OPENAI_BASE_URL,
+      auth_env: TEST_OPENAI_API_KEY,
       timeout_ms: 20_000,
-      max_retries: 3,
+      max_retries: CONSTANTS.DEFAULT_PIMS_MAX_RETRIES,
       fallback: "none" as const,
     };
     const provider = new OpenAIModelProvider({
       reasoningConfig: modelConfig,
-      fastConfig: { ...modelConfig, model: "gpt-4o-mini" },
+      fastConfig: { ...modelConfig, model: TEST_GPT_4O_MINI },
       visionConfig: modelConfig,
-      embeddingsConfig: { ...modelConfig, model: "text-embedding-3-small" },
-      rerankerConfig: { ...modelConfig, model: "gpt-4o-mini" },
+      embeddingsConfig: { ...modelConfig, model: TEST_TEXT_EMBEDDING_3_SMALL },
+      rerankerConfig: { ...modelConfig, model: TEST_GPT_4O_MINI },
       apiKey: "tools-integration-key",
-      baseURL: "https://api.openai.com/v1",
+      baseURL: TEST_OPENAI_BASE_URL,
     });
 
     vi.spyOn(provider, "embed").mockImplementation(async ({ texts }) => ({
@@ -330,18 +345,28 @@ describe("Agent Tool Registry integration suite", {
   afterAll(async () => {
     if (store) {
       await store.sql.end();
+    } else {
+      expect(store).toBeUndefined();
     }
     if (serverInstance) {
       await serverInstance.stop();
+    } else {
+      expect(serverInstance).toBeUndefined();
     }
     if (dbClient) {
       await dbClient.sql.end();
+    } else {
+      expect(dbClient).toBeUndefined();
     }
     if (container) {
       await container.stop();
+    } else {
+      expect(container).toBeUndefined();
     }
     if (storageDir) {
       fs.rmSync(storageDir, { recursive: true, force: true });
+    } else {
+      expect(storageDir).toBeUndefined();
     }
   }, 120_000);
 
@@ -563,8 +588,12 @@ describe("Agent Tool Registry integration suite", {
     expect(resolvedIncident.actions?.at(-1)?.action_type).toBe("R");
 
     const afterResolution = await adapter.getIncident(incident.id);
+    expect(afterResolution.actions).toBeDefined();
+    if (!afterResolution.actions) {
+      expect.fail("afterResolution.actions is missing");
+    }
     await store.setAgentState(`REOPEN_BASELINE:${incident.incident_code}`, {
-      action_count: afterResolution.actions?.length ?? 0,
+      action_count: afterResolution.actions.length,
       at_utc: CLOCK_NOW.toISOString(),
     });
     await call("investigator", "pims_add_action", {
@@ -590,11 +619,11 @@ describe("Agent Tool Registry integration suite", {
     const bytes = Buffer.from("forensic evidence payload", "utf8");
     const sha256 = crypto.createHash("sha256").update(bytes).digest("hex");
     await store.stageAttachment(
-      "unsa",
+      TEST_SCHEMA,
       incident.incident_code,
-      "evidence.txt",
+      TEST_EVIDENCE_TXT,
       bytes,
-      "text/plain",
+      TEST_MIME_TEXT,
       "test",
       null,
     );
@@ -603,8 +632,8 @@ describe("Agent Tool Registry integration suite", {
       call("investigator", "pims_upload_attachment", {
         incident_id: incident.id,
         bytes_ref: "0".repeat(64),
-        file_name: "evidence.txt",
-        mime: "text/plain",
+        file_name: TEST_EVIDENCE_TXT,
+        mime: TEST_MIME_TEXT,
       }),
     ).rejects.toMatchObject({ code: "ATTACHMENT_HASH_MISMATCH" });
 
@@ -614,15 +643,15 @@ describe("Agent Tool Registry integration suite", {
     const uploaded = await call("investigator", "pims_upload_attachment", {
       incident_id: incident.id,
       bytes_ref: sha256,
-      file_name: "evidence.txt",
-      mime: "text/plain",
+      file_name: TEST_EVIDENCE_TXT,
+      mime: TEST_MIME_TEXT,
     });
     downloadSpy.mockRestore();
     expect(uploaded.sha256).toBe(sha256);
     expect(uploaded.sha256).toMatch(/^[0-9a-f]{64}$/);
 
     const staged = await store.listStagedAttachments(incident.incident_code);
-    const row = staged.find((entry) => entry.file_name === "evidence.txt");
+    const row = staged.find((entry) => entry.file_name === TEST_EVIDENCE_TXT);
     expect(row?.pims_attachment_id).toBeGreaterThan(0);
     expect(row?.pims_attachment_id).toBe(uploaded.attachment_id);
   });
@@ -670,13 +699,13 @@ describe("Agent Tool Registry integration suite", {
       "pims_manage_recipient",
       {
         op: "create",
-        email: "dpo@example.test",
+        email: TEST_DPO_EMAIL,
         label: "DPO",
         operator_jwt_sub: "test-op",
       },
       { operatorJwtSub: "test-op" },
     );
-    expect(recipient.email).toBe("dpo@example.test");
+    expect(recipient.email).toBe(TEST_DPO_EMAIL);
 
     const notified = await call(
       "notifier",
@@ -689,7 +718,7 @@ describe("Agent Tool Registry integration suite", {
       { incidentId: incident.id, incidentCode: incident.incident_code },
     );
     const snapshot = notified.recipients_snapshot as unknown as string[];
-    expect(snapshot).toContain("dpo@example.test");
+    expect(snapshot).toContain(TEST_DPO_EMAIL);
 
     const sent = await store.getDraftPack(incident.incident_code, "authority");
     expect(sent?.state).toBe("sent");
@@ -820,8 +849,13 @@ describe("Agent Tool Registry integration suite", {
     const audit = audits.results.find(
       (candidate) => candidate.id === first.audit_id,
     );
+    expect(audit).toBeDefined();
+    expect(audit?.findings).toBeDefined();
+    if (!audit?.findings) {
+      expect.fail("audit or audit.findings is missing");
+    }
     const prefix = `10.2 corrective action for ${incident.incident_code}`;
-    const matching = (audit?.findings ?? []).filter((finding) =>
+    const matching = audit.findings.filter((finding) =>
       finding.description.startsWith(prefix),
     );
     expect(matching).toHaveLength(1);

@@ -12,6 +12,7 @@ import {
   isSpeechSupported,
 } from "@pims/cockpit/ui/lib/speech-recognition.ts";
 import type { ChatFormMutation, ChatResponse } from "@pims/types/cockpit.ts";
+import { TEST_INCIDENT_CODE } from "@tests/helpers/test-constants.ts";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 // Lightweight typed Mock DOM for testing browser utilities in node/bun
@@ -21,8 +22,16 @@ class MockEvent {
   detail: unknown;
   constructor(type: string, options?: { bubbles?: boolean; detail?: unknown }) {
     this.type = type;
-    this.bubbles = options?.bubbles ?? false;
-    this.detail = options?.detail;
+    if (options && typeof options.bubbles === "boolean") {
+      this.bubbles = options.bubbles;
+    } else {
+      this.bubbles = false;
+    }
+    if (options && options.detail !== undefined) {
+      this.detail = options.detail;
+    } else {
+      this.detail = undefined;
+    }
   }
 }
 
@@ -53,13 +62,23 @@ class MockElement {
   listeners: Record<string, EventCallback[]> = {};
 
   addEventListener(type: string, fn: EventCallback) {
-    if (!this.listeners[type]) this.listeners[type] = [];
-    this.listeners[type]?.push(fn);
+    let list = this.listeners[type];
+    if (!list) {
+      list = [];
+      this.listeners[type] = list;
+    }
+    list.push(fn);
   }
 
   dispatchEvent(ev: { type: string }) {
-    const list = this.listeners[ev.type] || [];
-    for (const fn of list) fn(ev);
+    const list = this.listeners[ev.type];
+    if (list) {
+      for (const fn of list) {
+        fn(ev);
+      }
+    } else {
+      // No listeners registered for this event type
+    }
     return true;
   }
 
@@ -69,7 +88,10 @@ class MockElement {
   }
 
   closest(_selector: string) {
-    return this.parentElement ?? this;
+    if (this.parentElement) {
+      return this.parentElement;
+    }
+    return this;
   }
 
   querySelectorAll(selector: string): MockElement[] {
@@ -90,7 +112,11 @@ class MockElement {
 
   querySelector(selector: string): MockElement | null {
     const list = this.querySelectorAll(selector);
-    return list[0] ?? null;
+    const first = list[0];
+    if (first !== undefined) {
+      return first;
+    }
+    return null;
   }
 
   tagName = "DIV";
@@ -156,11 +182,15 @@ describe("Speech Recognition Client Utility", () => {
     if (env.window) {
       delete env.window.SpeechRecognition;
       delete env.window.webkitSpeechRecognition;
+    } else {
+      throw new Error("Window environment not initialized");
     }
     expect(isSpeechSupported()).toBe(false);
 
     if (env.window) {
       env.window.SpeechRecognition = class {};
+    } else {
+      throw new Error("Window environment not initialized");
     }
     expect(isSpeechSupported()).toBe(true);
   });
@@ -199,6 +229,8 @@ describe("Speech Recognition Client Utility", () => {
 
     if (env.window) {
       env.window.SpeechRecognition = MockSpeechRecognition;
+    } else {
+      throw new Error("Window environment not initialized");
     }
 
     const recognizer = new CockpitSpeechRecognizer();
@@ -269,6 +301,8 @@ describe("Speech Recognition Client Utility", () => {
 
     if (env.window) {
       env.window.SpeechRecognition = MockSpeechRecognition;
+    } else {
+      throw new Error("Window environment not initialized");
     }
 
     const recognizer = new CockpitSpeechRecognizer();
@@ -301,7 +335,13 @@ describe("Form Draft Bus & Persistence", () => {
       dispatchEvent: () => true,
       addEventListener: () => {},
       sessionStorage: {
-        getItem: (key: string) => mockStorage[key] ?? null,
+        getItem: (key: string) => {
+          const val = mockStorage[key];
+          if (val !== undefined) {
+            return val;
+          }
+          return null;
+        },
         setItem: (key: string, val: string) => {
           mockStorage[key] = val;
         },
@@ -424,9 +464,13 @@ describe("Form Draft Bus & Persistence", () => {
       env.window.dispatchEvent = (ev: unknown) => {
         if ((ev as { type: string }).type === "cockpit:form-updated") {
           eventFired = true;
+        } else {
+          // Unhandled event type
         }
         return true;
       };
+    } else {
+      throw new Error("Window environment not initialized");
     }
 
     const updated = applyFormMutationToDom(
@@ -452,7 +496,7 @@ describe("ChatStore updates for form context and mutations", () => {
     expect(activeId.length).toBeGreaterThan(0);
 
     const userNode = store.addUserMessage(
-      "Por favor redactar incidente de fuga de datos",
+      `Por favor redactar incidente ${TEST_INCIDENT_CODE} de fuga de datos`,
     );
 
     const response: ChatResponse = {
@@ -479,7 +523,7 @@ describe("ChatStore updates for form context and mutations", () => {
         action: "draft",
         summary: "Borrador de incidente generado",
         fields: {
-          title: "Fuga de datos en base de postulantes",
+          title: `Fuga de datos en base de postulantes ${TEST_INCIDENT_CODE}`,
           incident_type: "DL",
           involves_personal_data: true,
         },
@@ -494,7 +538,7 @@ describe("ChatStore updates for form context and mutations", () => {
     expect(assistantNode.form_mutation).toBeDefined();
     expect(assistantNode.form_mutation?.action).toBe("draft");
     expect(assistantNode.form_mutation?.fields.title).toBe(
-      "Fuga de datos en base de postulantes",
+      `Fuga de datos en base de postulantes ${TEST_INCIDENT_CODE}`,
     );
   });
 });

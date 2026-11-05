@@ -4,6 +4,7 @@ import {
 } from "@pims/cockpit/guided-create.ts";
 import { IntakePayloadSchema } from "@pims/types/agent.ts";
 import { GuidedReportingSchema } from "@pims/types/cockpit.ts";
+import { TEST_DATE_2026_11_05 } from "@tests/helpers/test-constants.ts";
 import { describe, expect, it } from "vitest";
 
 describe("Spanish Name Parsing & Job Title Separation", () => {
@@ -48,7 +49,7 @@ describe("GuidedReportingSchema & IntakePayload Alignment", () => {
   it("parses minimal valid guided incident with completely empty measures and actions", () => {
     const minimal = {
       title: "Filtración sospechosa en servidor",
-      incident_date: "2026-11-05",
+      incident_date: TEST_DATE_2026_11_05,
       incident_type: "OT",
       involves_personal_data: false,
     };
@@ -72,9 +73,9 @@ describe("GuidedReportingSchema & IntakePayload Alignment", () => {
     const full = {
       title: "Filtración de base de datos de postulantes",
       description: "Compromiso de credenciales de base de datos.",
-      incident_date: "2026-11-05",
+      incident_date: TEST_DATE_2026_11_05,
       incident_time: "10:30:00",
-      detection_date: "2026-11-05",
+      detection_date: TEST_DATE_2026_11_05,
       detection_time: "11:00:00",
       incident_type: "DL",
       involves_personal_data: true,
@@ -108,7 +109,7 @@ describe("GuidedReportingSchema & IntakePayload Alignment", () => {
         {
           action_type: "C",
           responsible: "operador",
-          action_date: "2026-11-05",
+          action_date: TEST_DATE_2026_11_05,
           description: "Aislamiento inmediato del host de base de datos",
           evidence: "firewall-rule-992",
         },
@@ -128,7 +129,7 @@ describe("GuidedReportingSchema & IntakePayload Alignment", () => {
     const intakePayload = {
       channel: "cockpit_guided" as const,
       title: "Prueba de ingesta con todos los campos",
-      incident_date: "2026-11-05",
+      incident_date: TEST_DATE_2026_11_05,
       involves_personal_data: true,
       incident_type: "DL" as const,
       status: "O" as const,
@@ -147,7 +148,7 @@ describe("GuidedReportingSchema & IntakePayload Alignment", () => {
         {
           action_type: "C" as const,
           responsible: "operador",
-          action_date: "2026-11-05",
+          action_date: TEST_DATE_2026_11_05,
           description: "Contención de red",
         },
       ],

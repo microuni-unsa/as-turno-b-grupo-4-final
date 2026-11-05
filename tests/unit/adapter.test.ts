@@ -5,6 +5,12 @@ import {
   PimsThrottledError,
 } from "@pims/types";
 import { CONSTANTS } from "@pims/types/constants.ts";
+import {
+  TEST_ALT_INCIDENT_CODE,
+  TEST_DATE_2026_10_29,
+  TEST_MIME_JSON,
+  TEST_SCHEMA,
+} from "@tests/helpers/test-constants.ts";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 describe("PIMS Adapter Unit & Resilience Suite", () => {
@@ -13,7 +19,7 @@ describe("PIMS Adapter Unit & Resilience Suite", () => {
   beforeEach(() => {
     adapter = new PimsAdapter({
       baseUrl: "https://mock.pims.test",
-      schema: "unsa",
+      schema: TEST_SCHEMA,
       username: "admin",
       password: CONSTANTS.PIMS_TEST_SEED_PASSWORD,
       timeoutMs: 5000,
@@ -37,8 +43,11 @@ describe("PIMS Adapter Unit & Resilience Suite", () => {
       .mockImplementation(async (_url, init) => {
         attempts++;
         const headers = init?.headers as Record<string, string>;
-        if (headers["Idempotency-Key"]) {
-          keysSent.push(headers["Idempotency-Key"]);
+        const idempotencyKey = headers["Idempotency-Key"];
+        if (idempotencyKey) {
+          keysSent.push(idempotencyKey);
+        } else {
+          throw new Error("Missing Idempotency-Key in request headers");
         }
 
         if (attempts === 1) {
@@ -47,12 +56,12 @@ describe("PIMS Adapter Unit & Resilience Suite", () => {
         return new Response(
           JSON.stringify({
             id: 123,
-            incident_code: "INC-123",
-            created_at: "2026-10-29T10:00:00Z",
-            updated_at: "2026-10-29T10:00:00Z",
+            incident_code: TEST_ALT_INCIDENT_CODE,
+            created_at: `${TEST_DATE_2026_10_29}T10:00:00Z`,
+            updated_at: `${TEST_DATE_2026_10_29}T10:00:00Z`,
             is_deleted: false,
             involves_personal_data: false,
-            incident_date: "2026-10-29",
+            incident_date: TEST_DATE_2026_10_29,
             incident_type: "OT",
             status: "O",
             title: "Test Incident",
@@ -60,14 +69,14 @@ describe("PIMS Adapter Unit & Resilience Suite", () => {
             security_measures_adopted: [],
             affected_cid: [],
           }),
-          { status: 201, headers: { "Content-Type": "application/json" } },
+          { status: 201, headers: { "Content-Type": TEST_MIME_JSON } },
         );
       });
 
     const createPromise = adapter.createIncident({
       title: "Test Incident",
       involves_personal_data: false,
-      incident_date: "2026-10-29",
+      incident_date: TEST_DATE_2026_10_29,
       incident_type: "OT",
       status: "O",
     });
@@ -89,7 +98,7 @@ describe("PIMS Adapter Unit & Resilience Suite", () => {
     vi.spyOn(globalThis, "fetch").mockImplementation(async () => {
       return new Response(JSON.stringify({ detail: "Too Many Requests" }), {
         status: 429,
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": TEST_MIME_JSON },
       });
     });
 
@@ -108,7 +117,7 @@ describe("PIMS Adapter Unit & Resilience Suite", () => {
           JSON.stringify({ detail: "bad_authorization_header" }),
           {
             status: 401,
-            headers: { "Content-Type": "application/json" },
+            headers: { "Content-Type": TEST_MIME_JSON },
           },
         );
       });
@@ -123,7 +132,7 @@ describe("PIMS Adapter Unit & Resilience Suite", () => {
         JSON.stringify({ detail: "DOCUMENT_LIMIT_REACHED" }),
         {
           status: 403,
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": TEST_MIME_JSON },
         },
       );
     });
@@ -143,12 +152,12 @@ describe("PIMS Adapter Unit & Resilience Suite", () => {
           results: [
             {
               id: 1,
-              incident_code: "INC-001",
-              created_at: "2026-10-29T10:00:00Z",
-              updated_at: "2026-10-29T10:00:00Z",
+              incident_code: TEST_ALT_INCIDENT_CODE,
+              created_at: `${TEST_DATE_2026_10_29}T10:00:00Z`,
+              updated_at: `${TEST_DATE_2026_10_29}T10:00:00Z`,
               is_deleted: false,
               involves_personal_data: false,
-              incident_date: "2026-10-29",
+              incident_date: TEST_DATE_2026_10_29,
               incident_type: "OT",
               status: "O",
               severity: "H",
@@ -160,11 +169,11 @@ describe("PIMS Adapter Unit & Resilience Suite", () => {
             {
               id: 2,
               incident_code: "INC-002",
-              created_at: "2026-10-29T10:00:00Z",
-              updated_at: "2026-10-29T10:00:00Z",
+              created_at: `${TEST_DATE_2026_10_29}T10:00:00Z`,
+              updated_at: `${TEST_DATE_2026_10_29}T10:00:00Z`,
               is_deleted: false,
               involves_personal_data: false,
-              incident_date: "2026-10-29",
+              incident_date: TEST_DATE_2026_10_29,
               incident_type: "OT",
               status: "O",
               severity: "L",
@@ -177,7 +186,7 @@ describe("PIMS Adapter Unit & Resilience Suite", () => {
         }),
         {
           status: 200,
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": TEST_MIME_JSON },
         },
       );
     });

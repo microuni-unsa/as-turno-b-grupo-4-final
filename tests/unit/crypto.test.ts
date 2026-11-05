@@ -72,7 +72,7 @@ describe("Evidence Store Cryptographic Primitives (AES-256-GCM)", () => {
       expect(encrypted.length).toBe(binaryPayload.length + 12 + 16);
 
       const decrypted = decryptPayload(encrypted, validHexKey);
-      expect(Buffer.compare(decrypted, binaryPayload)).toBe(0);
+      expect(decrypted.equals(binaryPayload)).toBe(true);
     });
 
     it("handles empty string payload round-trip", () => {
@@ -92,7 +92,14 @@ describe("Evidence Store Cryptographic Primitives (AES-256-GCM)", () => {
 
       const corrupted = Buffer.from(encrypted);
       const ciphertextOffset = 28;
-      corrupted[ciphertextOffset] = (corrupted[ciphertextOffset] ?? 0) ^ 0xff;
+      if (ciphertextOffset >= corrupted.length) {
+        throw new Error("Ciphertext offset out of bounds");
+      }
+      const originalByte = corrupted[ciphertextOffset];
+      if (originalByte === undefined) {
+        throw new Error("Byte at ciphertext offset undefined");
+      }
+      corrupted[ciphertextOffset] = originalByte ^ 0xff;
 
       expect(() => decryptPayload(corrupted, validHexKey)).toThrow(
         EvidenceStoreEncryptionError,
@@ -108,7 +115,14 @@ describe("Evidence Store Cryptographic Primitives (AES-256-GCM)", () => {
 
       const corrupted = Buffer.from(encrypted);
       const tagOffset = 15;
-      corrupted[tagOffset] = (corrupted[tagOffset] ?? 0) ^ 0x01;
+      if (tagOffset >= corrupted.length) {
+        throw new Error("Tag offset out of bounds");
+      }
+      const originalByte = corrupted[tagOffset];
+      if (originalByte === undefined) {
+        throw new Error("Byte at tag offset undefined");
+      }
+      corrupted[tagOffset] = originalByte ^ 0x01;
 
       expect(() => decryptPayload(corrupted, validHexKey)).toThrow(
         EvidenceStoreEncryptionError,
@@ -124,7 +138,14 @@ describe("Evidence Store Cryptographic Primitives (AES-256-GCM)", () => {
 
       const corrupted = Buffer.from(encrypted);
       const ivOffset = 4;
-      corrupted[ivOffset] = (corrupted[ivOffset] ?? 0) ^ 0x5a;
+      if (ivOffset >= corrupted.length) {
+        throw new Error("IV offset out of bounds");
+      }
+      const originalByte = corrupted[ivOffset];
+      if (originalByte === undefined) {
+        throw new Error("Byte at IV offset undefined");
+      }
+      corrupted[ivOffset] = originalByte ^ 0x5a;
 
       expect(() => decryptPayload(corrupted, validHexKey)).toThrow(
         EvidenceStoreEncryptionError,

@@ -19,6 +19,12 @@ import {
   PostgreSqlContainer,
   type StartedPostgreSqlContainer,
 } from "@testcontainers/postgresql";
+import {
+  TEST_ALT_INCIDENT_CODE,
+  TEST_MIME_TEXT,
+  TEST_POSTGRES_IMAGE,
+  TEST_STORAGE_PUBLIC,
+} from "@tests/helpers/test-constants.ts";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 describe("EvidenceStore Integration Suite (Testcontainers PostgreSQL)", {
@@ -34,10 +40,12 @@ describe("EvidenceStore Integration Suite (Testcontainers PostgreSQL)", {
     crypto.createHash("sha256").update(value).digest("hex");
 
   beforeAll(async () => {
-    container = await new PostgreSqlContainer("postgres:16-alpine").start();
+    container = await new PostgreSqlContainer(TEST_POSTGRES_IMAGE).start();
 
     if (fs.existsSync(storageRootDir)) {
       await fs.promises.rm(storageRootDir, { recursive: true, force: true });
+    } else {
+      // Storage directory does not exist prior to creation
     }
     await fs.promises.mkdir(storageRootDir, { recursive: true });
 
@@ -53,12 +61,18 @@ describe("EvidenceStore Integration Suite (Testcontainers PostgreSQL)", {
   afterAll(async () => {
     if (store) {
       await store.close();
+    } else {
+      // EvidenceStore was not initialized
     }
     if (container) {
       await container.stop();
+    } else {
+      // Container was not started
     }
     if (fs.existsSync(storageRootDir)) {
       await fs.promises.rm(storageRootDir, { recursive: true, force: true });
+    } else {
+      // Storage directory already cleaned up
     }
   });
 
@@ -88,8 +102,17 @@ describe("EvidenceStore Integration Suite (Testcontainers PostgreSQL)", {
     });
 
     it("resolves legitimate segments without creating directories", () => {
-      const resolved = store.assertSafePath("public", "INC-001");
-      expect(resolved).toBe(path.resolve(storageRootDir, "public", "INC-001"));
+      const resolved = store.assertSafePath(
+        TEST_STORAGE_PUBLIC,
+        TEST_ALT_INCIDENT_CODE,
+      );
+      expect(resolved).toBe(
+        path.resolve(
+          storageRootDir,
+          TEST_STORAGE_PUBLIC,
+          TEST_ALT_INCIDENT_CODE,
+        ),
+      );
       expect(fs.existsSync(resolved)).toBe(false);
     });
 
@@ -128,11 +151,11 @@ describe("EvidenceStore Integration Suite (Testcontainers PostgreSQL)", {
       };
 
       const staged = await store.stageAttachment(
-        "public",
-        "INC-001",
+        TEST_STORAGE_PUBLIC,
+        TEST_ALT_INCIDENT_CODE,
         "forensic-memory-dump.txt",
         fileBytes,
-        "text/plain",
+        TEST_MIME_TEXT,
         "evidence-collector",
         scanResult,
         101,
@@ -147,8 +170,8 @@ describe("EvidenceStore Integration Suite (Testcontainers PostgreSQL)", {
 
       const diskPath = path.join(
         storageRootDir,
-        "public",
-        "INC-001",
+        TEST_STORAGE_PUBLIC,
+        TEST_ALT_INCIDENT_CODE,
         "attachments",
         "forensic-memory-dump.txt.enc",
       );
@@ -157,13 +180,15 @@ describe("EvidenceStore Integration Suite (Testcontainers PostgreSQL)", {
       expect(encryptedDiskBytes.includes(Buffer.from(rawText))).toBe(false);
 
       const retrievedBytes = await store.getStagedAttachmentBytes(
-        "public",
-        "INC-001",
+        TEST_STORAGE_PUBLIC,
+        TEST_ALT_INCIDENT_CODE,
         "forensic-memory-dump.txt",
       );
       expect(retrievedBytes.equals(fileBytes)).toBe(true);
 
-      const stagedList = await store.listStagedAttachments("INC-001");
+      const stagedList = await store.listStagedAttachments(
+        TEST_ALT_INCIDENT_CODE,
+      );
       const target = stagedList.find(
         (att) => att.file_name === "forensic-memory-dump.txt",
       );
@@ -282,8 +307,9 @@ describe("EvidenceStore Integration Suite (Testcontainers PostgreSQL)", {
       );
       expect(rows).toHaveLength(1);
       const row = rows[0];
+      expect(row).toBeDefined();
       if (!row) {
-        throw new Error("Expected draft pack row in database");
+        expect.fail("Expected draft pack row in database");
       }
       expect(draftId).toBe(row.id);
       expect(row.payload_encrypted).not.toContain(
@@ -423,8 +449,9 @@ describe("EvidenceStore Integration Suite (Testcontainers PostgreSQL)", {
       expect(fulfilled).toHaveLength(1);
       expect(rejected).toHaveLength(1);
       const rejection = rejected[0];
+      expect(rejection).toBeDefined();
       if (rejection?.status !== "rejected") {
-        throw new Error("Expected exactly one rejected acquisition");
+        expect.fail("Expected exactly one rejected acquisition");
       }
       expect(rejection.reason).toBeInstanceOf(LeaseHeldError);
 
@@ -432,8 +459,9 @@ describe("EvidenceStore Integration Suite (Testcontainers PostgreSQL)", {
         `SELECT holder_id FROM evidence.leases WHERE incident_code = 'INC-LEASE-RACE';`,
       );
       const holder = holderRows[0]?.holder_id;
+      expect(holder).toBeDefined();
       if (holder === undefined) {
-        throw new Error("Expected a lease holder row");
+        expect.fail("Expected a lease holder row");
       }
       await store.releaseLease("INC-LEASE-RACE", holder);
     });

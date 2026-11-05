@@ -1,14 +1,21 @@
 import type { ModelConfig } from "@pims/config";
 import { OpenAIModelProvider } from "@pims/models";
 import { ModelSchemaViolationError, ModelUnavailableError } from "@pims/types";
+import {
+  TEST_GPT_4O,
+  TEST_GPT_4O_MINI,
+  TEST_OPENAI_API_KEY,
+  TEST_OPENAI_BASE_URL,
+  TEST_TEXT_EMBEDDING_3_SMALL,
+} from "@tests/helpers/test-constants.ts";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 describe("OpenAIModelProvider (§4.3 Unit Suite)", () => {
   const dummyModelConfig: ModelConfig = {
     provider: "openai",
-    model: "gpt-4o",
-    endpoint: "https://api.openai.com/v1",
-    auth_env: "OPENAI_API_KEY",
+    model: TEST_GPT_4O,
+    endpoint: TEST_OPENAI_BASE_URL,
+    auth_env: TEST_OPENAI_API_KEY,
     timeout_ms: 5000,
     max_retries: 2,
     fallback: "none",
@@ -16,9 +23,9 @@ describe("OpenAIModelProvider (§4.3 Unit Suite)", () => {
 
   const dummyVisionConfig: ModelConfig = {
     provider: "openai",
-    model: "gpt-4o",
-    endpoint: "https://api.openai.com/v1",
-    auth_env: "OPENAI_API_KEY",
+    model: TEST_GPT_4O,
+    endpoint: TEST_OPENAI_BASE_URL,
+    auth_env: TEST_OPENAI_API_KEY,
     timeout_ms: 5000,
     max_retries: 2,
     fallback: "none",
@@ -26,9 +33,9 @@ describe("OpenAIModelProvider (§4.3 Unit Suite)", () => {
 
   const dummyEmbedConfig: ModelConfig = {
     provider: "openai",
-    model: "text-embedding-3-small",
-    endpoint: "https://api.openai.com/v1",
-    auth_env: "OPENAI_API_KEY",
+    model: TEST_TEXT_EMBEDDING_3_SMALL,
+    endpoint: TEST_OPENAI_BASE_URL,
+    auth_env: TEST_OPENAI_API_KEY,
     timeout_ms: 5000,
     max_retries: 2,
     fallback: "none",
@@ -36,9 +43,9 @@ describe("OpenAIModelProvider (§4.3 Unit Suite)", () => {
 
   const dummyRerankConfig: ModelConfig = {
     provider: "openai",
-    model: "gpt-4o-mini",
-    endpoint: "https://api.openai.com/v1",
-    auth_env: "OPENAI_API_KEY",
+    model: TEST_GPT_4O_MINI,
+    endpoint: TEST_OPENAI_BASE_URL,
+    auth_env: TEST_OPENAI_API_KEY,
     timeout_ms: 5000,
     max_retries: 2,
     fallback: "none",
@@ -49,7 +56,7 @@ describe("OpenAIModelProvider (§4.3 Unit Suite)", () => {
   beforeEach(() => {
     provider = new OpenAIModelProvider({
       reasoningConfig: dummyModelConfig,
-      fastConfig: { ...dummyModelConfig, model: "gpt-4o-mini" },
+      fastConfig: { ...dummyModelConfig, model: TEST_GPT_4O_MINI },
       visionConfig: dummyVisionConfig,
       embeddingsConfig: dummyEmbedConfig,
       rerankerConfig: dummyRerankConfig,

@@ -8,6 +8,12 @@ import {
   intakeFixture,
   startIntegrationHarness,
 } from "@tests/helpers/integration-harness.ts";
+import {
+  TEST_ADMIN_USERNAME,
+  TEST_ALT_INCIDENT_CODE,
+  TEST_DPO_EMAIL,
+  TEST_SCHEMA,
+} from "@tests/helpers/test-constants.ts";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 type HonoApp = ReturnType<typeof createCockpitApp>;
@@ -25,13 +31,16 @@ async function readSseUntil(
     const { value, done } = await reader.read();
     if (done) {
       return accumulated;
-    }
-    accumulated += decoder.decode(value, { stream: true });
-    if (matcher(accumulated)) {
-      return accumulated;
+    } else {
+      accumulated += decoder.decode(value, { stream: true });
+      if (matcher(accumulated)) {
+        return accumulated;
+      } else {
+        // Continue accumulating until matched or timeout
+      }
     }
   }
-  throw new Error(`SSE read timed out; received: ${accumulated.slice(-500)}`);
+  expect.fail(`SSE read timed out; received: ${accumulated.slice(-500)}`);
 }
 
 describe("Cockpit backend", { timeout: 240_000 }, () => {
@@ -51,80 +60,91 @@ describe("Cockpit backend", { timeout: 240_000 }, () => {
           args.system.includes("Data Protection Officer assistant");
         if (!isCockpitPersona) {
           return null;
-        }
-        let context: JsonObject = {};
-        try {
-          context = JSON.parse(args.messages[0]?.content ?? "{}") as JsonObject;
-        } catch {
-          const sanitized = (args.messages[0]?.content ?? "{}").replace(
-            /(:\s*)(\[[A-Z0-9_]+\])/g,
-            '$1"$2"',
-          );
+        } else {
+          const firstMsg = args.messages[0];
+          if (!firstMsg) {
+            expect.fail("Missing message");
+          }
+          const rawContent = firstMsg.content;
+          let context: JsonObject = {};
           try {
-            context = JSON.parse(sanitized) as JsonObject;
+            context = JSON.parse(rawContent) as JsonObject;
           } catch {
-            context = {};
+            const sanitized = rawContent.replace(
+              /(:\s*)(\[[A-Z0-9_]+\])/g,
+              '$1"$2"',
+            );
+            try {
+              context = JSON.parse(sanitized) as JsonObject;
+            } catch {
+              context = {};
+            }
           }
-        }
-        const citations = Array.isArray(context.citations)
-          ? context.citations
-          : [];
-        const first = citations[0];
-        let firstCitation =
-          typeof first === "object" &&
-          first !== null &&
-          !Array.isArray(first) &&
-          typeof (first as JsonObject).citation_id === "string"
-            ? String((first as JsonObject).citation_id)
-            : null;
-        if (firstCitation === null) {
-          const match = (args.messages[0]?.content ?? "").match(
-            /"citation_id":\s*"([^"]+)"/,
-          );
-          if (match?.[1]) {
-            firstCitation = match[1];
+          let citations: unknown[] = [];
+          if (Array.isArray(context.citations)) {
+            citations = context.citations;
+          } else {
+            citations = [];
           }
-        }
+          const first = citations[0];
+          let firstCitation: string | null = null;
+          if (
+            typeof first === "object" &&
+            first !== null &&
+            !Array.isArray(first) &&
+            typeof (first as JsonObject).citation_id === "string"
+          ) {
+            firstCitation = String((first as JsonObject).citation_id);
+          } else {
+            const match = rawContent.match(/"citation_id":\s*"([^"]+)"/);
+            if (match?.[1]) {
+              firstCitation = match[1];
+            } else {
+              firstCitation = null;
+            }
+          }
 
-        if (chatMode === "fabricated") {
-          return {
-            reply: "Fabricated citation test.",
-            citations_used: ["gdpr-full:invented:1-2"],
-            suggested_actions: [],
-          };
+          if (chatMode === "fabricated") {
+            return {
+              reply: "Fabricated citation test.",
+              citations_used: ["gdpr-full:invented:1-2"],
+              suggested_actions: [],
+            };
+          } else if (chatMode === "pii") {
+            return {
+              reply: "Contact the applicant at leak@example.com immediately.",
+              citations_used: [],
+              suggested_actions: [],
+            };
+          } else if (firstCitation === null) {
+            return {
+              reply:
+                "No normative citation is available in the supplied context.",
+              citations_used: [],
+              suggested_actions: [],
+            };
+          } else {
+            return {
+              reply: `El incidente está contenido. ${firstCitation}`,
+              citations_used: [firstCitation],
+              suggested_actions: ["Revisar el paquete de evidencias."],
+            };
+          }
         }
-        if (chatMode === "pii") {
-          return {
-            reply: "Contact the applicant at leak@example.com immediately.",
-            citations_used: [],
-            suggested_actions: [],
-          };
-        }
-        if (firstCitation === null) {
-          return {
-            reply:
-              "No normative citation is available in the supplied context.",
-            citations_used: [],
-            suggested_actions: [],
-          };
-        }
-        return {
-          reply: `El incidente está contenido. ${firstCitation}`,
-          citations_used: [firstCitation],
-          suggested_actions: ["Revisar el paquete de evidencias."],
-        };
       },
     });
     authorityCitation = harness.authorityCitation;
 
     const recipients = await harness.adapter.listRecipients();
-    if (!recipients.results.some((row) => row.email === "dpo@example.test")) {
+    if (!recipients.results.some((row) => row.email === TEST_DPO_EMAIL)) {
       await harness.callTool("orchestrator", "pims_manage_recipient", {
         op: "create",
-        email: "dpo@example.test",
+        email: TEST_DPO_EMAIL,
         label: "DPO",
         operator_jwt_sub: "test-op",
       });
+    } else {
+      // Recipient already provisioned
     }
 
     sessions = new SessionRegistry();
@@ -143,6 +163,8 @@ describe("Cockpit backend", { timeout: 240_000 }, () => {
   afterAll(async () => {
     if (harness) {
       await harness.stop();
+    } else {
+      // Harness was not initialized
     }
   });
 
@@ -151,7 +173,7 @@ describe("Cockpit backend", { timeout: 240_000 }, () => {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        username: "admin",
+        username: TEST_ADMIN_USERNAME,
         password: CONSTANTS.PIMS_TEST_SEED_PASSWORD,
       }),
     });
@@ -175,7 +197,7 @@ describe("Cockpit backend", { timeout: 240_000 }, () => {
   it("authenticates against live PIMS permissions", async () => {
     const session = await login();
     expect(session.native_role).toBe("Administrador");
-    expect(session.schema).toBe("unsa");
+    expect(session.schema).toBe(TEST_SCHEMA);
     expect(session.default_persona).toBe("executive");
     expect(session.can_switch_persona).toBe(true);
     expect(session.permissions).toContain("view_securitylog");
@@ -211,8 +233,9 @@ describe("Cockpit backend", { timeout: 240_000 }, () => {
     });
     expect(response.status).toBe(200);
     const reader = response.body?.getReader();
+    expect(reader).toBeDefined();
     if (reader === undefined) {
-      throw new Error("SSE body missing");
+      expect.fail("SSE body missing");
     }
     const decoder = new TextDecoder();
     let text = await readSseUntil(reader, decoder, "", (value) =>
@@ -239,7 +262,7 @@ describe("Cockpit backend", { timeout: 240_000 }, () => {
     harness.events.emit({
       type: "role:transition",
       at_utc: harness.now.toISOString(),
-      incident_code: "INC-001",
+      incident_code: TEST_ALT_INCIDENT_CODE,
       role: "triage",
       previous_role: null,
       lease_holder: "test",
@@ -376,7 +399,9 @@ describe("Cockpit backend", { timeout: 240_000 }, () => {
       }),
     });
     if (okResponse.status !== 200) {
-      throw new Error(`CHAT_FAILED:${await okResponse.text()}`);
+      expect.fail(`CHAT_FAILED:${await okResponse.text()}`);
+    } else {
+      // Chat returned 200 OK
     }
     const okBody = (await okResponse.json()) as {
       reply: string;
@@ -447,7 +472,7 @@ describe("Cockpit backend", { timeout: 240_000 }, () => {
       expires_at_utc: new Date("2030-01-01T00:00:00.000Z").toISOString(),
       user_id: 2,
       username: "lector",
-      schema: "unsa",
+      schema: TEST_SCHEMA,
       native_role: "Lector",
       permissions: ["view_incident"],
       default_persona: "auditor",
@@ -482,8 +507,9 @@ describe("Cockpit backend", { timeout: 240_000 }, () => {
       signal: controller.signal,
     });
     const reader = stream.body?.getReader();
+    expect(reader).toBeDefined();
     if (reader === undefined) {
-      throw new Error("SSE body missing");
+      expect.fail("SSE body missing");
     }
     const decoder = new TextDecoder();
     let text = await readSseUntil(reader, decoder, "", (value) =>
@@ -507,7 +533,7 @@ describe("Cockpit backend", { timeout: 240_000 }, () => {
     harness.events.emit({
       type: "role:transition",
       at_utc: harness.now.toISOString(),
-      incident_code: "INC-001",
+      incident_code: TEST_ALT_INCIDENT_CODE,
       role: "monitor",
       previous_role: "notifier",
       lease_holder: "test",

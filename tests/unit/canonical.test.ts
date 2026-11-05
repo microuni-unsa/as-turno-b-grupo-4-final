@@ -1,5 +1,6 @@
 import { hashCanonicalContent } from "@pims/notices";
 import { CanonicalizationError, canonicalizeJson } from "@pims/types";
+import { TEST_INCIDENT_CODE } from "@tests/helpers/test-constants.ts";
 import { describe, expect, it } from "vitest";
 
 describe("Canonical JSON (single implementation)", () => {
@@ -43,13 +44,13 @@ describe("Canonical JSON (single implementation)", () => {
 
   it("strips only top-level envelope keys when hashing notice content", () => {
     const withNestedEnvelope = {
-      incident_code: "INC-2026-001",
+      incident_code: TEST_INCIDENT_CODE,
       state: "draft",
       nested: { state: "sent", review_approval_id: "kept" },
     };
 
     const withoutTopLevelKeys = {
-      incident_code: "INC-2026-001",
+      incident_code: TEST_INCIDENT_CODE,
       nested: { state: "sent", review_approval_id: "kept" },
     };
 
@@ -58,7 +59,7 @@ describe("Canonical JSON (single implementation)", () => {
     );
 
     const alteredNested = {
-      incident_code: "INC-2026-001",
+      incident_code: TEST_INCIDENT_CODE,
       nested: { state: "approved", review_approval_id: "kept" },
     };
     expect(hashCanonicalContent(withNestedEnvelope)).not.toBe(

@@ -1,5 +1,6 @@
 import { ChatStore } from "@pims/cockpit/ui/lib/chat-store.ts";
 import type { ChatResponse } from "@pims/types/cockpit.ts";
+import { TEST_ALT_INCIDENT_CODE } from "@tests/helpers/test-constants.ts";
 import { beforeEach, describe, expect, it } from "vitest";
 
 describe("ChatStore Tree Branching & Multi-Session", () => {
@@ -53,13 +54,15 @@ describe("ChatStore Tree Branching & Multi-Session", () => {
 
   it("handles conversation tree branching when user edits a message", () => {
     // Turn 1: User message
-    const userMsg1 = store.addUserMessage("¿Cuál es el estado de INC-001?");
+    const userMsg1 = store.addUserMessage(
+      `¿Cuál es el estado de ${TEST_ALT_INCIDENT_CODE}?`,
+    );
     expect(userMsg1.parentId).toBeNull();
 
     // Turn 1: Assistant response
     const assistantMsg1 = store.addAssistantResponse(
       userMsg1.id,
-      mockResponse("INC-001 está abierto."),
+      mockResponse(`${TEST_ALT_INCIDENT_CODE} está abierto.`),
     );
     expect(assistantMsg1.parentId).toBe(userMsg1.id);
 
@@ -73,8 +76,8 @@ describe("ChatStore Tree Branching & Multi-Session", () => {
     let branch = store.getActiveBranchMessages();
     expect(branch.length).toBe(4);
     expect(branch.map((b) => b.node.text)).toEqual([
-      "¿Cuál es el estado de INC-001?",
-      "INC-001 está abierto.",
+      `¿Cuál es el estado de ${TEST_ALT_INCIDENT_CODE}?`,
+      `${TEST_ALT_INCIDENT_CODE} está abierto.`,
       "¿Quién es el asignado?",
       "Asignado a Operador 1.",
     ]);
@@ -84,14 +87,16 @@ describe("ChatStore Tree Branching & Multi-Session", () => {
     // Edit userMsg1 -> forks branch at root!
     const userMsg1Edited = store.editUserMessage(
       userMsg1.id,
-      "¿Cuál es la severidad de INC-001?",
+      `¿Cuál es la severidad de ${TEST_ALT_INCIDENT_CODE}?`,
     );
     expect(userMsg1Edited.parentId).toBeNull();
 
     branch = store.getActiveBranchMessages();
     // After edit, the active branch starts at userMsg1Edited (leaf is userMsg1Edited)
     expect(branch.length).toBe(1);
-    expect(branch[0]?.node.text).toBe("¿Cuál es la severidad de INC-001?");
+    expect(branch[0]?.node.text).toBe(
+      `¿Cuál es la severidad de ${TEST_ALT_INCIDENT_CODE}?`,
+    );
     expect(branch[0]?.totalBranches).toBe(2);
     expect(branch[0]?.branchIndex).toBe(1);
 
@@ -108,7 +113,9 @@ describe("ChatStore Tree Branching & Multi-Session", () => {
     store.switchBranch(userMsg1.id);
     branch = store.getActiveBranchMessages();
     expect(branch.length).toBe(4);
-    expect(branch[0]?.node.text).toBe("¿Cuál es el estado de INC-001?");
+    expect(branch[0]?.node.text).toBe(
+      `¿Cuál es el estado de ${TEST_ALT_INCIDENT_CODE}?`,
+    );
     expect(branch[0]?.branchIndex).toBe(0);
     expect(branch[0]?.totalBranches).toBe(2);
   });

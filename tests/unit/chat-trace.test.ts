@@ -7,6 +7,10 @@ import {
   ChatResponseSchema,
   type CockpitSession,
 } from "@pims/types/cockpit.ts";
+import {
+  TEST_ALT_INCIDENT_CODE,
+  TEST_SCHEMA,
+} from "@tests/helpers/test-constants.ts";
 import { describe, expect, it, vi } from "vitest";
 
 describe("Cockpit Chat Trace and Reasoning", () => {
@@ -16,7 +20,7 @@ describe("Cockpit Chat Trace and Reasoning", () => {
       expires_at_utc: "2030-01-01T00:00:00Z",
       user_id: 1,
       username: "operador1",
-      schema: "unsa",
+      schema: TEST_SCHEMA,
       native_role: "Operador",
       permissions: ["view_incident", "change_incident"],
       default_persona: "auditor",
@@ -32,7 +36,7 @@ describe("Cockpit Chat Trace and Reasoning", () => {
               results: [
                 {
                   id: 1,
-                  incident_code: "INC-001",
+                  incident_code: TEST_ALT_INCIDENT_CODE,
                   status: "O",
                   title: "Breach test",
                   summary: "Breach test",
@@ -154,7 +158,7 @@ describe("Cockpit Chat Trace and Reasoning", () => {
       expires_at_utc: "2030-01-01T00:00:00Z",
       user_id: 1,
       username: "operador1",
-      schema: "unsa",
+      schema: TEST_SCHEMA,
       native_role: "Operador",
       permissions: ["view_incident"],
       default_persona: "executive",

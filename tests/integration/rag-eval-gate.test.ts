@@ -2,6 +2,7 @@ import type { AgentConfig } from "@pims/config";
 import { OpenAIModelProvider } from "@pims/models";
 import { CorpusLoader, RAGService, RagIndexer } from "@pims/rag";
 import type { RankedPassage } from "@pims/types";
+import { CONSTANTS } from "@pims/types/constants.ts";
 import {
   PostgreSqlContainer,
   type StartedPostgreSqlContainer,
@@ -10,6 +11,15 @@ import {
   buildGdprTextAxes,
   generateSpanAwareEmbedding,
 } from "@tests/helpers/span-geometry.ts";
+import {
+  TEST_CORPUS_DIR,
+  TEST_GPT_4O,
+  TEST_GPT_4O_MINI,
+  TEST_OPENAI_API_KEY,
+  TEST_OPENAI_BASE_URL,
+  TEST_PGVECTOR_IMAGE,
+  TEST_TEXT_EMBEDDING_3_SMALL,
+} from "@tests/helpers/test-constants.ts";
 import postgres from "postgres";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
@@ -130,27 +140,27 @@ describe("Automated RAG Evaluation Gate (§7.6 Integration Suite)", () => {
   let indexer: RagIndexer;
 
   beforeAll(async () => {
-    container = await new PostgreSqlContainer("pgvector/pgvector:pg16").start();
+    container = await new PostgreSqlContainer(TEST_PGVECTOR_IMAGE).start();
     sql = postgres(container.getConnectionUri());
 
     const modelConfig = {
       provider: "openai",
-      model: "gpt-4o",
-      endpoint: "https://api.openai.com/v1",
-      auth_env: "OPENAI_API_KEY",
+      model: TEST_GPT_4O,
+      endpoint: TEST_OPENAI_BASE_URL,
+      auth_env: TEST_OPENAI_API_KEY,
       timeout_ms: 20000,
-      max_retries: 3,
+      max_retries: CONSTANTS.DEFAULT_PIMS_MAX_RETRIES,
       fallback: "none" as const,
     };
 
     const modelProvider = new OpenAIModelProvider({
       reasoningConfig: modelConfig,
-      fastConfig: { ...modelConfig, model: "gpt-4o-mini" },
+      fastConfig: { ...modelConfig, model: TEST_GPT_4O_MINI },
       visionConfig: modelConfig,
-      embeddingsConfig: { ...modelConfig, model: "text-embedding-3-small" },
-      rerankerConfig: { ...modelConfig, model: "gpt-4o-mini" },
+      embeddingsConfig: { ...modelConfig, model: TEST_TEXT_EMBEDDING_3_SMALL },
+      rerankerConfig: { ...modelConfig, model: TEST_GPT_4O_MINI },
       apiKey: "eval-gate-test-key",
-      baseURL: "https://api.openai.com/v1",
+      baseURL: TEST_OPENAI_BASE_URL,
     });
 
     vi.spyOn(modelProvider, "embed").mockImplementation(async ({ texts }) => {
@@ -160,17 +170,25 @@ describe("Automated RAG Evaluation Gate (§7.6 Integration Suite)", () => {
 
     vi.spyOn(modelProvider, "rerank").mockImplementation(
       async ({ query, passages }) => {
-        const queryWords = query.toLowerCase().match(/[a-z0-9_.]+/g) ?? [];
+        const queryMatches = query.toLowerCase().match(/[a-z0-9_.]+/g);
+        if (queryMatches === null || queryMatches.length === 0) {
+          throw new Error(
+            `RAG rerank query contains no indexable terms: "${query}"`,
+          );
+        }
+        const queryWords = queryMatches;
         const scored = passages.map((passage) => {
           const textLower = passage.text.toLowerCase();
           let matches = 0;
+          let _nonMatches = 0;
           for (const w of queryWords) {
             if (textLower.includes(w)) {
               matches++;
+            } else {
+              _nonMatches++;
             }
           }
-          const ratio =
-            queryWords.length > 0 ? matches / queryWords.length : 0.5;
+          const ratio = matches / queryWords.length;
           const score = Number((0.45 + ratio * 0.5).toFixed(4));
           return {
             ...passage,
@@ -189,7 +207,7 @@ describe("Automated RAG Evaluation Gate (§7.6 Integration Suite)", () => {
 
     const loader = new CorpusLoader({
       projectRoot: process.cwd(),
-      source: { type: "local", dirPath: "corpus" },
+      source: { type: "local", dirPath: TEST_CORPUS_DIR },
     });
     const corpus = await loader.loadAll();
     buildGdprTextAxes(corpus.chunks);
@@ -207,7 +225,7 @@ describe("Automated RAG Evaluation Gate (§7.6 Integration Suite)", () => {
       config: {
         RAG_TOP_K: 100,
         RAG_RERANK_K: 20,
-        RAG_MIN_SCORE: 0.35,
+        RAG_MIN_SCORE: CONSTANTS.DEFAULT_RAG_MIN_SCORE,
         RAG_TIMEOUT_MS: 30000,
       } as unknown as AgentConfig,
     });
@@ -216,9 +234,13 @@ describe("Automated RAG Evaluation Gate (§7.6 Integration Suite)", () => {
   afterAll(async () => {
     if (sql) {
       await sql.end();
+    } else {
+      expect(sql).toBeUndefined();
     }
     if (container) {
       await container.stop();
+    } else {
+      expect(container).toBeUndefined();
     }
   });
 
@@ -232,7 +254,9 @@ describe("Automated RAG Evaluation Gate (§7.6 Integration Suite)", () => {
       const topPassage = res.passages[0];
       expect(topPassage).toBeDefined();
 
-      expect(topPassage?.score).toBeGreaterThanOrEqual(0.35);
+      expect(topPassage?.score).toBeGreaterThanOrEqual(
+        CONSTANTS.DEFAULT_RAG_MIN_SCORE,
+      );
 
       const matchingPassage = res.passages.find(
         (p) =>

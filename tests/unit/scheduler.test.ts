@@ -1,16 +1,20 @@
 import { awarenessFromIncident, limaLocalToUtc } from "@pims/agent";
 import { PimsIncidentSchema } from "@pims/types/pims.ts";
+import {
+  TEST_ALT_INCIDENT_CODE,
+  TEST_DATE_2026_10_01,
+} from "@tests/helpers/test-constants.ts";
 import { describe, expect, it } from "vitest";
 
-function incidentFixture(overrides: Record<string, unknown> = {}) {
+function incidentFixture(overrides: Record<string, unknown>) {
   return PimsIncidentSchema.parse({
     id: 1,
-    incident_code: "INC-001",
+    incident_code: TEST_ALT_INCIDENT_CODE,
     created_at: "2026-10-01T12:00:00.000Z",
     updated_at: "2026-10-01T12:00:00.000Z",
     is_deleted: false,
     involves_personal_data: true,
-    incident_date: "2026-10-01",
+    incident_date: TEST_DATE_2026_10_01,
     incident_type: "DL",
     status: "P",
     severity: "H",
@@ -25,10 +29,10 @@ function incidentFixture(overrides: Record<string, unknown> = {}) {
 
 describe("Phase 4 deadline scheduler pure functions (§6.4)", () => {
   it("converts a Lima local detection instant to UTC", () => {
-    expect(limaLocalToUtc("2026-10-01", "10:00:00").toISOString()).toBe(
+    expect(limaLocalToUtc(TEST_DATE_2026_10_01, "10:00:00").toISOString()).toBe(
       "2026-10-01T15:00:00.000Z",
     );
-    expect(limaLocalToUtc("2026-10-01", "00:00:00").toISOString()).toBe(
+    expect(limaLocalToUtc(TEST_DATE_2026_10_01, "00:00:00").toISOString()).toBe(
       "2026-10-01T05:00:00.000Z",
     );
     expect(limaLocalToUtc("2026-12-31", "23:59:59").toISOString()).toBe(
@@ -38,7 +42,7 @@ describe("Phase 4 deadline scheduler pure functions (§6.4)", () => {
 
   it("derives awareness from detection date and time, then created_at", () => {
     const withDetection = incidentFixture({
-      detection_date: "2026-10-01",
+      detection_date: TEST_DATE_2026_10_01,
       detection_time: "10:00:00",
     });
     expect(awarenessFromIncident(withDetection).toISOString()).toBe(
@@ -50,7 +54,7 @@ describe("Phase 4 deadline scheduler pure functions (§6.4)", () => {
       "2026-10-02T05:00:00.000Z",
     );
 
-    const fallback = incidentFixture();
+    const fallback = incidentFixture({});
     expect(awarenessFromIncident(fallback).toISOString()).toBe(
       "2026-10-01T12:00:00.000Z",
     );

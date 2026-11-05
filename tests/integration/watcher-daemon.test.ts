@@ -11,6 +11,7 @@ import {
   intakeFixture,
   startIntegrationHarness,
 } from "@tests/helpers/integration-harness.ts";
+import { TEST_DPO_EMAIL } from "@tests/helpers/test-constants.ts";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 describe("Autonomous watcher daemon lifecycle", { timeout: 240_000 }, () => {
@@ -23,6 +24,8 @@ describe("Autonomous watcher daemon lifecycle", { timeout: 240_000 }, () => {
   afterAll(async () => {
     if (harness) {
       await harness.stop();
+    } else {
+      expect(harness).toBeUndefined();
     }
   });
 
@@ -30,13 +33,18 @@ describe("Autonomous watcher daemon lifecycle", { timeout: 240_000 }, () => {
     const { adapter, agent, config, store, events, ragService, now } = harness;
 
     const recipients = await adapter.listRecipients();
-    if (!recipients.results.some((row) => row.email === "dpo@example.test")) {
+    const hasDpo = recipients.results.some(
+      (row) => row.email === TEST_DPO_EMAIL,
+    );
+    if (!hasDpo) {
       await harness.callTool("orchestrator", "pims_manage_recipient", {
         op: "create",
-        email: "dpo@example.test",
+        email: TEST_DPO_EMAIL,
         label: "DPO",
         operator_jwt_sub: "test-op",
       });
+    } else {
+      expect(hasDpo).toBe(true);
     }
 
     const intake = await agent.orchestrator.intake(intakeFixture());
@@ -153,7 +161,11 @@ describe("Autonomous watcher daemon lifecycle", { timeout: 240_000 }, () => {
     expect(closed.measure_considered_resolved).toBe("Y");
     expect(closed.measure_reported_authorities).toBe("Y");
 
-    const actions = closed.actions ?? [];
+    expect(closed.actions).toBeDefined();
+    if (!closed.actions) {
+      expect.fail("closed.actions is missing");
+    }
+    const actions = closed.actions;
     expect(actions.some((action) => action.action_type === "C")).toBe(true);
     expect(actions.some((action) => action.action_type === "A")).toBe(true);
     expect(actions.some((action) => action.action_type === "R")).toBe(true);
@@ -168,17 +180,19 @@ describe("Autonomous watcher daemon lifecycle", { timeout: 240_000 }, () => {
 
     const sealed = await store.getBundleManifest(code);
     if (sealed === null || sealed.seal_sha256 === null) {
-      throw new Error("sealed manifest missing");
+      expect.fail("sealed manifest missing");
+    } else {
+      const expectedBytes = Buffer.from(canonicalizeJson(sealed), "utf8");
+      const firstBundle = bundleAttachments[0];
+      if (firstBundle === undefined) {
+        expect.fail("bundle attachment missing");
+      } else {
+        const downloaded = await adapter.downloadAttachment(firstBundle.file);
+        expect(
+          crypto.createHash("sha256").update(downloaded).digest("hex"),
+        ).toBe(crypto.createHash("sha256").update(expectedBytes).digest("hex"));
+      }
     }
-    const expectedBytes = Buffer.from(canonicalizeJson(sealed), "utf8");
-    const firstBundle = bundleAttachments[0];
-    if (firstBundle === undefined) {
-      throw new Error("bundle attachment missing");
-    }
-    const downloaded = await adapter.downloadAttachment(firstBundle.file);
-    expect(crypto.createHash("sha256").update(downloaded).digest("hex")).toBe(
-      crypto.createHash("sha256").update(expectedBytes).digest("hex"),
-    );
 
     const markers = readMarkers(closed.evidence_refs);
     expect(

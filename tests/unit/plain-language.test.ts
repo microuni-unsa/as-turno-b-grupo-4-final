@@ -9,7 +9,7 @@ import { describe, expect, it } from "vitest";
 
 describe("Plain Language Validator (GDPR Art 34 Plain Language Rules)", () => {
   const reviewApprovalId = "00000000-0000-0000-0000-000000000001";
-  const approvalFor = (value: string, occurrence = 0): NumericApproval => ({
+  const approvalFor = (value: string, occurrence: number): NumericApproval => ({
     value,
     occurrence,
     reason: "reviewed by DPO",
@@ -170,7 +170,7 @@ describe("Plain Language Validator (GDPR Art 34 Plain Language Rules)", () => {
     it("accepts a subject count approved token by token", () => {
       expect(() =>
         PlainLanguageValidator.validate("El incidente afectó a 500 personas.", {
-          numericApprovals: [approvalFor("500")],
+          numericApprovals: [approvalFor("500", 0)],
         }),
       ).not.toThrow();
     });
@@ -188,7 +188,7 @@ describe("Plain Language Validator (GDPR Art 34 Plain Language Rules)", () => {
       const normalized = "Se registraron 10 000 usuarios afectados.";
       expect(() =>
         PlainLanguageValidator.validate(normalized, {
-          numericApprovals: [approvalFor("10 000")],
+          numericApprovals: [approvalFor("10 000", 0)],
         }),
       ).not.toThrow();
     });

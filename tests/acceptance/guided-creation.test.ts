@@ -17,6 +17,12 @@ import {
   startIntegrationHarness,
 } from "@tests/helpers/integration-harness.ts";
 import {
+  TEST_ADMISSIONS_PORTAL,
+  TEST_PRESIDIO_IMAGE,
+  TEST_PRESIDIO_URL,
+  TEST_SCHEMA,
+} from "@tests/helpers/test-constants.ts";
+import {
   GenericContainer,
   type StartedTestContainer,
   Wait,
@@ -26,7 +32,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 describe("Acceptance Tests A18–A22: Cockpit Guided Incident Creation", {
   timeout: 240_000,
 }, () => {
-  let presidioContainer: StartedTestContainer;
+  let presidioContainer: StartedTestContainer | undefined;
   let presidioUrl: string;
   let presidioClient: PresidioClient;
   let harness: IntegrationHarness;
@@ -35,7 +41,7 @@ describe("Acceptance Tests A18–A22: Cockpit Guided Incident Creation", {
   const operatorToken = "operator-guided-token";
 
   beforeAll(async () => {
-    const defaultUrl = process.env.PRESIDIO_URL ?? "http://127.0.0.1:3001";
+    const defaultUrl = TEST_PRESIDIO_URL;
     let isAlreadyUp = false;
     try {
       const probe = await fetch(`${defaultUrl}/health`, {
@@ -44,15 +50,21 @@ describe("Acceptance Tests A18–A22: Cockpit Guided Incident Creation", {
       if (probe.ok) {
         isAlreadyUp = true;
         presidioUrl = defaultUrl;
+      } else {
+        isAlreadyUp = false;
       }
-    } catch {
-      isAlreadyUp = false;
+    } catch (probeError) {
+      if (probeError instanceof Error) {
+        isAlreadyUp = false;
+      } else {
+        throw new Error(
+          `Unexpected probe error while probing Presidio sidecar: ${String(probeError)}`,
+        );
+      }
     }
 
     if (!isAlreadyUp) {
-      presidioContainer = await new GenericContainer(
-        "presidio-analyzer:2.2.x-es",
-      )
+      presidioContainer = await new GenericContainer(TEST_PRESIDIO_IMAGE)
         .withExposedPorts(3000)
         .withWaitStrategy(Wait.forHttp("/health", 3000))
         .withStartupTimeout(60_000)
@@ -61,6 +73,8 @@ describe("Acceptance Tests A18–A22: Cockpit Guided Incident Creation", {
       const host = presidioContainer.getHost();
       const port = presidioContainer.getMappedPort(3000);
       presidioUrl = `http://${host}:${port}`;
+    } else {
+      // Presidio sidecar is already active at TEST_PRESIDIO_URL
     }
 
     presidioClient = new PresidioClient({
@@ -92,7 +106,7 @@ describe("Acceptance Tests A18–A22: Cockpit Guided Incident Creation", {
             security_measures_adopted: ["encrypt_rest"],
             affected_cid: ["C"],
             num_affected_subjects: 50,
-            compromised_system: "admissions-portal",
+            compromised_system: TEST_ADMISSIONS_PORTAL,
             affected_url: "https://admissions.unsa.edu.pe",
             rep_first_name: "Carlos",
             rep_last_name_p: "Mendoza",
@@ -125,7 +139,7 @@ describe("Acceptance Tests A18–A22: Cockpit Guided Incident Creation", {
       expires_at_utc: new Date(Date.now() + 3600 * 1000).toISOString(),
       user_id: 1,
       username: "operator_test",
-      schema: "unsa",
+      schema: TEST_SCHEMA,
       native_role: "Operador",
       permissions: ["view_incident", "change_incident"],
       default_persona: "auditor",
@@ -158,11 +172,15 @@ describe("Acceptance Tests A18–A22: Cockpit Guided Incident Creation", {
   }, 180_000);
 
   afterAll(async () => {
-    if (presidioContainer) {
+    if (presidioContainer !== undefined) {
       await presidioContainer.stop();
+    } else {
+      // Presidio container was not initialized
     }
-    if (harness) {
+    if (harness !== undefined) {
       await harness.stop();
+    } else {
+      // Integration harness was not initialized
     }
   });
 
@@ -184,10 +202,6 @@ describe("Acceptance Tests A18–A22: Cockpit Guided Incident Creation", {
         body: JSON.stringify({ narrative: narrativeText }),
       });
 
-      if (res.status !== 200) {
-        console.error("DRAFT ERROR BODY:", await res.json());
-      }
-
       expect(res.status).toBe(200);
       const draft = (await res.json()) as GuidedDraftResponse;
 
@@ -198,7 +212,7 @@ describe("Acceptance Tests A18–A22: Cockpit Guided Incident Creation", {
       expect(draft.draft.incident_type).toBe("DL");
       expect(draft.draft.involves_personal_data).toBe(true);
       expect(draft.draft.num_affected_subjects).toBe(50);
-      expect(draft.draft.compromised_system).toBe("admissions-portal");
+      expect(draft.draft.compromised_system).toBe(TEST_ADMISSIONS_PORTAL);
 
       // Provenance tracking
       expect(draft.provenance.title).toBe("narrative");
@@ -228,14 +242,10 @@ describe("Acceptance Tests A18–A22: Cockpit Guided Incident Creation", {
         body: JSON.stringify({ narrative: narrativeText }),
       });
 
-      if (res.status !== 200) {
-        console.error("DRAFT ERROR BODY:", await res.json());
-      }
-
       expect(res.status).toBe(200);
       const draft = (await res.json()) as GuidedDraftResponse;
       expect(draft.draft.incident_type).toBe("DL");
-      expect(draft.draft.compromised_system).toBe("admissions-portal");
+      expect(draft.draft.compromised_system).toBe(TEST_ADMISSIONS_PORTAL);
       expect(draft.provenance.compromised_system).toBe("narrative");
     });
   });
@@ -308,7 +318,7 @@ describe("Acceptance Tests A18–A22: Cockpit Guided Incident Creation", {
         security_measures_adopted: ["encrypt_rest"],
         affected_cid: ["C"],
         num_affected_subjects: 50,
-        compromised_system: "admissions-portal",
+        compromised_system: TEST_ADMISSIONS_PORTAL,
         rep_first_name: "Carlos",
         rep_last_name_p: "Mendoza",
         rep_document_number: "72345678",
@@ -352,7 +362,7 @@ describe("Acceptance Tests A18–A22: Cockpit Guided Incident Creation", {
       expect(created.title).toBe(submitPayload.title);
       expect(created.incident_type).toBe("DL");
       expect(created.involves_personal_data).toBe(true);
-      expect(created.compromised_system).toBe("admissions-portal");
+      expect(created.compromised_system).toBe(TEST_ADMISSIONS_PORTAL);
       expect(created.severity).toBeNull();
       expect(created.impact).toBeNull();
       expect(created.measure_reported_authorities).toBeNull();
@@ -381,7 +391,7 @@ describe("Acceptance Tests A18–A22: Cockpit Guided Incident Creation", {
         security_measures_adopted: [],
         affected_cid: ["C"],
         num_affected_subjects: 50,
-        compromised_system: "admissions-portal", // Same system
+        compromised_system: TEST_ADMISSIONS_PORTAL, // Same system
       };
 
       const res = await app.request("/api/incidents", {

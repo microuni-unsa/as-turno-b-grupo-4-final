@@ -45,6 +45,14 @@ import {
   buildGdprTextAxes,
   generateSpanAwareEmbedding,
 } from "@tests/helpers/span-geometry.ts";
+import {
+  TEST_ADMIN_USERNAME,
+  TEST_DATE_2026_10_01,
+  TEST_DPO_EMAIL,
+  TEST_MIME_TEXT,
+  TEST_PGVECTOR_IMAGE,
+  TEST_SCHEMA,
+} from "@tests/helpers/test-constants.ts";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 function scenarioFixture(params: {
@@ -56,15 +64,15 @@ function scenarioFixture(params: {
     channel: "form",
     title: params.title,
     involves_personal_data: true,
-    incident_date: "2026-10-01",
-    detection_date: "2026-10-01",
+    incident_date: TEST_DATE_2026_10_01,
+    detection_date: TEST_DATE_2026_10_01,
     detection_time: params.detectionTime,
     incident_type: "DL",
     affected_data_types: ["id_doc", "email"],
     security_measures_adopted: ["encrypt_rest"],
     num_affected_subjects: 500,
     compromised_system: params.system,
-    dpo: { name: "DPO Name", email: "dpo@example.test" },
+    dpo: { name: "DPO Name", email: TEST_DPO_EMAIL },
     description: "Dry-walk fixture: exfiltration of admissions records.",
   });
 }
@@ -73,15 +81,15 @@ const FIXTURE = IntakePayloadSchema.parse({
   channel: "form",
   title: "DL breach dry-walk",
   involves_personal_data: true,
-  incident_date: "2026-10-01",
-  detection_date: "2026-10-01",
+  incident_date: TEST_DATE_2026_10_01,
+  detection_date: TEST_DATE_2026_10_01,
   detection_time: "10:00:00",
   incident_type: "DL",
   affected_data_types: ["id_doc", "email"],
   security_measures_adopted: ["encrypt_rest"],
   num_affected_subjects: 500,
   compromised_system: "admissions-portal",
-  dpo: { name: "DPO Name", email: "dpo@example.test" },
+  dpo: { name: "DPO Name", email: TEST_DPO_EMAIL },
   description: "Dry-walk fixture: exfiltration of admissions records.",
 });
 
@@ -89,14 +97,14 @@ const NON_PII_FIXTURE = IntakePayloadSchema.parse({
   channel: "siem",
   title: "Port scan against edge router",
   involves_personal_data: false,
-  incident_date: "2026-10-01",
-  detection_date: "2026-10-01",
+  incident_date: TEST_DATE_2026_10_01,
+  detection_date: TEST_DATE_2026_10_01,
   detection_time: "09:00:00",
   incident_type: "OT",
   affected_data_types: [],
   security_measures_adopted: ["encrypt_rest"],
   compromised_system: "edge-router",
-  dpo: { name: "DPO Name", email: "dpo@example.test" },
+  dpo: { name: "DPO Name", email: TEST_DPO_EMAIL },
   description:
     "Repeated port scan against the edge router with no successful logon.",
 });
@@ -126,7 +134,7 @@ describe("Phase 4 autonomous lifecycle loop (§6, §9, §14.2)", {
     );
     const seedPath = path.resolve(projectRoot, "data/02-init-unsa-seed.sql");
 
-    container = await new PostgreSqlContainer("pgvector/pgvector:pg16")
+    container = await new PostgreSqlContainer(TEST_PGVECTOR_IMAGE)
       .withBindMounts([
         {
           source: dumpPath,
@@ -152,8 +160,8 @@ describe("Phase 4 autonomous lifecycle loop (§6, §9, §14.2)", {
 
     adapter = new PimsAdapter({
       baseUrl: server.url,
-      schema: "unsa",
-      username: "admin",
+      schema: TEST_SCHEMA,
+      username: TEST_ADMIN_USERNAME,
       password: CONSTANTS.PIMS_TEST_SEED_PASSWORD,
       timeoutMs: 15000,
     });
@@ -212,11 +220,12 @@ describe("Phase 4 autonomous lifecycle loop (§6, §9, §14.2)", {
     });
     await indexer.indexCorpus(corpus.chunks, corpus.version, 25);
 
-    const authorityChunk =
-      indexer.getAllChunks().find((chunk) => chunk.doc_id === "gdpr-full") ??
-      indexer.getAllChunks()[0];
+    const authorityChunk = indexer
+      .getAllChunks()
+      .find((chunk) => chunk.doc_id === "gdpr-full");
+    expect(authorityChunk).toBeDefined();
     if (authorityChunk === undefined) {
-      throw new Error("Corpus index produced no chunks");
+      expect.fail("Corpus index produced no gdpr-full chunks");
     }
 
     ragService = new RAGService({
@@ -237,7 +246,11 @@ describe("Phase 4 autonomous lifecycle loop (§6, §9, §14.2)", {
         citations_requested: false,
         semantic_entropy: 0.2,
       });
-      const prompt = args.messages[0]?.content ?? "";
+      const firstMsg = args.messages[0];
+      if (!firstMsg) {
+        expect.fail("Missing message");
+      }
+      const prompt = firstMsg.content;
       const isNonPii =
         prompt.includes('"involves_personal_data":false') ||
         prompt.includes('"incident_type":"OT"') ||
@@ -382,8 +395,8 @@ describe("Phase 4 autonomous lifecycle loop (§6, §9, §14.2)", {
 
     config = loadConfig({
       PIMS_BASE_URL: server.url,
-      PIMS_SCHEMA: "unsa",
-      PIMS_USERNAME: "admin",
+      PIMS_SCHEMA: TEST_SCHEMA,
+      PIMS_USERNAME: TEST_ADMIN_USERNAME,
       PIMS_PASSWORD: CONSTANTS.PIMS_TEST_SEED_PASSWORD,
       EVIDENCE_DB_URL: container.getConnectionUri(),
       OPENAI_API_KEY: "lifecycle-loop-test-key",
@@ -423,18 +436,28 @@ describe("Phase 4 autonomous lifecycle loop (§6, §9, §14.2)", {
   afterAll(async () => {
     if (server) {
       await server.stop();
+    } else {
+      // Server was not started
     }
     if (store) {
       await store.close();
+    } else {
+      // Store was not initialized
     }
     if (dbClient) {
       await dbClient.sql.end();
+    } else {
+      // DB client was not initialized
     }
     if (container) {
       await container.stop();
+    } else {
+      // Container was not started
     }
     if (storageDir) {
       fs.rmSync(storageDir, { recursive: true, force: true });
+    } else {
+      // Storage dir was not created
     }
   });
 
@@ -452,15 +475,16 @@ describe("Phase 4 autonomous lifecycle loop (§6, §9, §14.2)", {
 
   async function ensureRecipient(): Promise<void> {
     const recipients = await adapter.listRecipients();
-    if (recipients.results.some((row) => row.email === "dpo@example.test")) {
+    if (recipients.results.some((row) => row.email === TEST_DPO_EMAIL)) {
       return;
+    } else {
+      await callTool("orchestrator", "pims_manage_recipient", {
+        op: "create",
+        email: TEST_DPO_EMAIL,
+        label: "DPO",
+        operator_jwt_sub: "test-op",
+      });
     }
-    await callTool("orchestrator", "pims_manage_recipient", {
-      op: "create",
-      email: "dpo@example.test",
-      label: "DPO",
-      operator_jwt_sub: "test-op",
-    });
   }
 
   async function removeAllRecipients(): Promise<void> {
@@ -516,7 +540,11 @@ describe("Phase 4 autonomous lifecycle loop (§6, §9, §14.2)", {
     const investigation = await agent.orchestrator.investigate(
       intake.incident.id,
     );
-    const actions = investigation.incident.actions ?? [];
+    expect(investigation.incident.actions).toBeDefined();
+    const actions = investigation.incident.actions;
+    if (!actions) {
+      expect.fail("expected incident actions");
+    }
     expect(actions.map((action) => action.action_type)).toEqual([
       "C",
       "A",
@@ -532,14 +560,19 @@ describe("Phase 4 autonomous lifecycle loop (§6, §9, §14.2)", {
     expect(risks.results.length).toBeGreaterThan(0);
 
     const auditLink = investigation.auditLink;
+    expect(auditLink).not.toBeNull();
     if (auditLink === null) {
-      throw new Error("expected an audit link");
+      expect.fail("expected an audit link");
     }
     const audits = await adapter.listAudits();
     const audit = audits.results.find((row) => row.id === auditLink.audit_id);
-    const finding = (audit?.findings ?? []).find(
-      (row) => row.id === auditLink.finding_id,
-    );
+    expect(audit).toBeDefined();
+    expect(audit?.findings).toBeDefined();
+    const findings = audit?.findings;
+    if (!findings) {
+      expect.fail("expected audit findings");
+    }
+    const finding = findings.find((row) => row.id === auditLink.finding_id);
     expect(finding?.classification).toBe("N");
     expect(finding?.description).toContain(
       `10.2 corrective action for ${code}`,
@@ -589,15 +622,18 @@ describe("Phase 4 autonomous lifecycle loop (§6, §9, §14.2)", {
 
     const afterNotify = await adapter.getIncident(intake.incident.id);
     expect(afterNotify.measure_reported_authorities).toBe("Y");
-    expect(afterNotify.evidence_refs ?? "").toContain("SUBJECT_NOTIFIED:");
-    expect(afterNotify.evidence_refs ?? "").toContain("CLOSE_APPROVED:");
+    expect(afterNotify.evidence_refs).toBeDefined();
+    expect(afterNotify.evidence_refs).toContain("SUBJECT_NOTIFIED:");
+    expect(afterNotify.evidence_refs).toContain("CLOSE_APPROVED:");
 
     const history = await adapter.getIncidentHistory(intake.incident.id);
     expect(
       history.some(
         (row) =>
           row.event_type === "notified" &&
-          (row.recipients_snapshot ?? []).length > 0,
+          row.recipients_snapshot !== null &&
+          row.recipients_snapshot !== undefined &&
+          row.recipients_snapshot.length > 0,
       ),
     ).toBe(true);
 
@@ -606,7 +642,8 @@ describe("Phase 4 autonomous lifecycle loop (§6, §9, §14.2)", {
     expect(closed.incident.resolved_date).toBeTruthy();
     expect(closed.incident.measure_considered_resolved).toBe("Y");
     expect(closed.marker).toMatch(/^BUNDLE_SEALED:[0-9a-f]{64}$/);
-    expect(closed.incident.evidence_refs ?? "").toContain(closed.marker);
+    expect(closed.incident.evidence_refs).toBeDefined();
+    expect(closed.incident.evidence_refs).toContain(closed.marker);
 
     const closedEvents = (await spool()).filter(
       (row) =>
@@ -620,7 +657,7 @@ describe("Phase 4 autonomous lifecycle loop (§6, §9, §14.2)", {
     expect(attrs.mttd_hours).toBeCloseTo(10, 6);
 
     expect(await store.listActiveTimers(code)).toHaveLength(0);
-    expect(closed.incident.evidence_refs ?? "").toContain("CLOSE_APPROVED:");
+    expect(closed.incident.evidence_refs).toContain("CLOSE_APPROVED:");
   });
 
   it("A05: blocks notify with zero recipients, keeps the pack approved and resumes", async () => {
@@ -661,7 +698,9 @@ describe("Phase 4 autonomous lifecycle loop (§6, §9, §14.2)", {
       history.some(
         (row) =>
           row.event_type === "notified" &&
-          (row.recipients_snapshot ?? []).length > 0,
+          row.recipients_snapshot !== null &&
+          row.recipients_snapshot !== undefined &&
+          row.recipients_snapshot.length > 0,
       ),
     ).toBe(true);
   });
@@ -701,7 +740,8 @@ describe("Phase 4 autonomous lifecycle loop (§6, §9, §14.2)", {
     const vetoed = await store.getDraftPack(code, "authority");
     expect(vetoed?.state).toBe("draft");
     const vetoIncident = await adapter.getIncident(intake.incident.id);
-    expect(vetoIncident.evidence_refs ?? "").toContain(
+    expect(vetoIncident.evidence_refs).toBeDefined();
+    expect(vetoIncident.evidence_refs).toContain(
       "VETOED_BY:operator-1:unsafe wording",
     );
 
@@ -718,7 +758,8 @@ describe("Phase 4 autonomous lifecycle loop (§6, §9, §14.2)", {
     expect(sent).toBeGreaterThan(0);
 
     const afterExpiry = await adapter.getIncident(intake.incident.id);
-    expect(afterExpiry.evidence_refs ?? "").toContain("VETO_WINDOW_EXPIRED");
+    expect(afterExpiry.evidence_refs).toBeDefined();
+    expect(afterExpiry.evidence_refs).toContain("VETO_WINDOW_EXPIRED");
     const history = await adapter.getIncidentHistory(intake.incident.id);
     expect(history.some((row) => row.event_type === "notified")).toBe(true);
   });
@@ -749,7 +790,7 @@ describe("Phase 4 autonomous lifecycle loop (§6, §9, §14.2)", {
       code,
       "post-close.txt",
       bytes,
-      "text/plain",
+      TEST_MIME_TEXT,
       "investigator",
       null,
     );
@@ -758,7 +799,7 @@ describe("Phase 4 autonomous lifecycle loop (§6, §9, §14.2)", {
       incident_id: intake.incident.id,
       bytes_ref: sha256,
       file_name: "post-close.txt",
-      mime: "text/plain",
+      mime: TEST_MIME_TEXT,
     });
     const attachmentId = upload.attachment_id;
     expect(typeof attachmentId).toBe("number");
@@ -769,7 +810,8 @@ describe("Phase 4 autonomous lifecycle loop (§6, §9, §14.2)", {
 
     const reopened = await adapter.getIncident(intake.incident.id);
     expect(reopened.status).toBe("P");
-    expect(reopened.evidence_refs ?? "").toContain(`REOPENED:${attachmentId}`);
+    expect(reopened.evidence_refs).toBeDefined();
+    expect(reopened.evidence_refs).toContain(`REOPENED:${attachmentId}`);
     expect(await store.listReviewApprovals(code)).toHaveLength(0);
     expect(await store.getAgentState(`REOPEN_BASELINE:${code}`)).not.toBeNull();
   });
@@ -796,8 +838,9 @@ describe("Phase 4 autonomous lifecycle loop (§6, §9, §14.2)", {
     expect(investigation.riskSignal).toBeNull();
     expect(investigation.auditLink).toBeNull();
     const incident = await adapter.getIncident(intake.incident.id);
-    expect(incident.evidence_refs ?? "").toContain("systemic:false");
-    expect(incident.evidence_refs ?? "").toContain(
+    expect(incident.evidence_refs).toBeDefined();
+    expect(incident.evidence_refs).toContain("systemic:false");
+    expect(incident.evidence_refs).toContain(
       "audit_link_skipped:not_qualifying",
     );
 
@@ -823,8 +866,9 @@ describe("Phase 4 autonomous lifecycle loop (§6, §9, §14.2)", {
   it("stamps the tool ledger for every executed tool", async () => {
     const page = await adapter.listIncidents({});
     const code = page.results[0]?.incident_code;
+    expect(code).toBeDefined();
     if (code === undefined) {
-      throw new Error("no incidents created");
+      expect.fail("no incidents created");
     }
     const ledger = await store.listToolLedger(code);
     expect(ledger.length).toBeGreaterThan(0);

@@ -44,6 +44,18 @@ import {
   buildGdprTextAxes,
   generateSpanAwareEmbedding,
 } from "@tests/helpers/span-geometry.ts";
+import {
+  TEST_ADMISSIONS_PORTAL,
+  TEST_DEFAULT_ADMIN,
+  TEST_EVIDENCE_KEY_HEX,
+  TEST_GPT_4O,
+  TEST_GPT_4O_MINI,
+  TEST_OPENAI_API_KEY,
+  TEST_OPENAI_BASE_URL,
+  TEST_PRESIDIO_URL,
+  TEST_SCHEMA,
+  TEST_TEXT_EMBEDDING_3_SMALL,
+} from "@tests/helpers/test-constants.ts";
 import { vi } from "vitest";
 
 export interface HarnessChatContext {
@@ -93,7 +105,7 @@ export function intakeFixture(
     affected_data_types: ["id_doc", "email"],
     security_measures_adopted: ["encrypt_rest"],
     num_affected_subjects: 500,
-    compromised_system: "admissions-portal",
+    compromised_system: TEST_ADMISSIONS_PORTAL,
     dpo: { name: "DPO Name", email: "dpo@example.test" },
     description: "Integration fixture: exfiltration of admissions records.",
     ...overrides,
@@ -117,9 +129,22 @@ export async function startIntegrationHarness(options?: {
   const now = new Date("2026-10-01T20:00:00.000Z");
   const stack = createStack({ projectRoot, includePresidio: false });
   const stackEnv = await stack.up();
-  const connectionUri = stackEnv.EVIDENCE_DB_URL ?? process.env.EVIDENCE_DB_URL;
-  if (!connectionUri) {
-    throw new Error("EVIDENCE_DB_URL was not populated by microcompose stack");
+
+  let connectionUri: string | undefined;
+  if (
+    typeof stackEnv.EVIDENCE_DB_URL === "string" &&
+    stackEnv.EVIDENCE_DB_URL.length > 0
+  ) {
+    connectionUri = stackEnv.EVIDENCE_DB_URL;
+  } else if (
+    typeof process.env.EVIDENCE_DB_URL === "string" &&
+    process.env.EVIDENCE_DB_URL.length > 0
+  ) {
+    connectionUri = process.env.EVIDENCE_DB_URL;
+  } else {
+    throw new Error(
+      "EVIDENCE_DB_URL was not populated by microcompose stack or process.env",
+    );
   }
 
   const container = {
@@ -134,15 +159,15 @@ export async function startIntegrationHarness(options?: {
     nestedActionMode: "replace",
   });
   await dbClient.sql.unsafe(
-    "UPDATE unsa.core_asset SET name='admissions-portal' WHERE id=1;",
+    `UPDATE ${TEST_SCHEMA}.core_asset SET name='${TEST_ADMISSIONS_PORTAL}' WHERE id=1;`,
   );
 
   const adapter = new PimsAdapter({
     baseUrl: server.url,
-    schema: "unsa",
-    username: "admin",
+    schema: TEST_SCHEMA,
+    username: TEST_DEFAULT_ADMIN,
     password: CONSTANTS.PIMS_TEST_SEED_PASSWORD,
-    timeoutMs: 15000,
+    timeoutMs: CONSTANTS.DEFAULT_PIMS_TIMEOUT_MS,
   });
 
   const storageDir = fs.mkdtempSync(
@@ -150,28 +175,28 @@ export async function startIntegrationHarness(options?: {
   );
   const store = new EvidenceStore({
     connectionUri: container.getConnectionUri(),
-    keyHex: "a1".repeat(32),
+    keyHex: TEST_EVIDENCE_KEY_HEX,
     baseStorageDir: storageDir,
   });
   await store.init();
 
   const modelConfig = {
     provider: "openai",
-    model: "gpt-4o",
-    endpoint: "https://api.openai.com/v1",
-    auth_env: "OPENAI_API_KEY",
+    model: TEST_GPT_4O,
+    endpoint: TEST_OPENAI_BASE_URL,
+    auth_env: TEST_OPENAI_API_KEY,
     timeout_ms: 20000,
     max_retries: 0,
     fallback: "none" as const,
   };
   const provider = new OpenAIModelProvider({
     reasoningConfig: modelConfig,
-    fastConfig: { ...modelConfig, model: "gpt-4o-mini" },
+    fastConfig: { ...modelConfig, model: TEST_GPT_4O_MINI },
     visionConfig: modelConfig,
-    embeddingsConfig: { ...modelConfig, model: "text-embedding-3-small" },
-    rerankerConfig: { ...modelConfig, model: "gpt-4o-mini" },
+    embeddingsConfig: { ...modelConfig, model: TEST_TEXT_EMBEDDING_3_SMALL },
+    rerankerConfig: { ...modelConfig, model: TEST_GPT_4O_MINI },
     apiKey: "integration-test-key",
-    baseURL: "https://api.openai.com/v1",
+    baseURL: TEST_OPENAI_BASE_URL,
   });
 
   vi.spyOn(provider, "embed").mockImplementation(async ({ texts }) => ({
@@ -188,7 +213,7 @@ export async function startIntegrationHarness(options?: {
 
   const loader = new CorpusLoader({
     projectRoot,
-    source: { type: "local", dirPath: "corpus" },
+    source: { type: "local", dirPath: CONSTANTS.DEFAULT_CORPUS_DIR },
   });
   const corpus = await loader.loadAll();
   buildGdprTextAxes(corpus.chunks);
@@ -199,13 +224,12 @@ export async function startIntegrationHarness(options?: {
   });
   await indexer.indexCorpus(corpus.chunks, corpus.version, 25);
 
-  const authorityChunk =
-    indexer.getAllChunks().find((chunk) => chunk.doc_id === "gdpr-full") ??
-    indexer.getAllChunks()[0];
-  if (authorityChunk === undefined) {
-    throw new Error("Corpus index produced no chunks");
+  const allChunks = indexer.getAllChunks();
+  const gdprChunk = allChunks.find((chunk) => chunk.doc_id === "gdpr-full");
+  if (gdprChunk === undefined) {
+    throw new Error("Required 'gdpr-full' chunk not found in corpus index");
   }
-  const authorityCitation = `${authorityChunk.doc_id}:${authorityChunk.chunk_id}:${authorityChunk.lines}`;
+  const authorityCitation = `${gdprChunk.doc_id}:${gdprChunk.chunk_id}:${gdprChunk.lines}`;
 
   const events = new AgentEventEmitter();
   const ragService = new RAGService({
@@ -214,7 +238,7 @@ export async function startIntegrationHarness(options?: {
     config: {
       RAG_TOP_K: 24,
       RAG_RERANK_K: 6,
-      RAG_MIN_SCORE: 0.35,
+      RAG_MIN_SCORE: CONSTANTS.DEFAULT_RAG_MIN_SCORE,
       RAG_TIMEOUT_MS: 30000,
     } as unknown as AgentConfig,
     onRetrieval: async (record) => {
@@ -224,7 +248,16 @@ export async function startIntegrationHarness(options?: {
   });
 
   vi.spyOn(provider, "chat_json").mockImplementation(async (args) => {
-    const prompt = args.messages[0]?.content ?? "";
+    const firstMessage = args.messages[0];
+    if (
+      firstMessage === undefined ||
+      typeof firstMessage.content !== "string"
+    ) {
+      throw new Error(
+        "chat_json requires at least one message with string content",
+      );
+    }
+    const prompt = firstMessage.content;
     const isNonPii =
       prompt.includes('"involves_personal_data":false') ||
       prompt.includes('"incident_type":"OT"') ||
@@ -374,35 +407,39 @@ export async function startIntegrationHarness(options?: {
     );
   });
 
+  const autoNotify =
+    options !== undefined && options.autoNotify !== undefined
+      ? options.autoNotify
+      : CONSTANTS.DEFAULT_AUTO_NOTIFY;
+  const presidioUrl =
+    options !== undefined && options.presidioUrl !== undefined
+      ? options.presidioUrl
+      : TEST_PRESIDIO_URL;
+
   const config = loadConfig({
     PIMS_BASE_URL: server.url,
-    PIMS_SCHEMA: "unsa",
-    PIMS_USERNAME: "admin",
+    PIMS_SCHEMA: TEST_SCHEMA,
+    PIMS_USERNAME: TEST_DEFAULT_ADMIN,
     PIMS_PASSWORD: CONSTANTS.PIMS_TEST_SEED_PASSWORD,
     EVIDENCE_DB_URL: container.getConnectionUri(),
     OPENAI_API_KEY: "integration-test-key",
-    REASONING_MODEL:
-      "openai,gpt-4o,https://api.openai.com/v1,OPENAI_API_KEY,20000,0,fallback:none",
-    FAST_MODEL:
-      "openai,gpt-4o-mini,https://api.openai.com/v1,OPENAI_API_KEY,20000,0,fallback:none",
-    VISION_MODEL:
-      "openai,gpt-4o,https://api.openai.com/v1,OPENAI_API_KEY,20000,0,fallback:none",
-    EMBEDDINGS_MODEL:
-      "openai,text-embedding-3-small,https://api.openai.com/v1,OPENAI_API_KEY,20000,0,fallback:none",
-    RERANKER_MODEL:
-      "openai,gpt-4o-mini,https://api.openai.com/v1,OPENAI_API_KEY,20000,0,fallback:none",
-    EVIDENCE_KEY: "a1".repeat(32),
+    REASONING_MODEL: `openai,${TEST_GPT_4O},${TEST_OPENAI_BASE_URL},${TEST_OPENAI_API_KEY},20000,0,fallback:none`,
+    FAST_MODEL: `openai,${TEST_GPT_4O_MINI},${TEST_OPENAI_BASE_URL},${TEST_OPENAI_API_KEY},20000,0,fallback:none`,
+    VISION_MODEL: `openai,${TEST_GPT_4O},${TEST_OPENAI_BASE_URL},${TEST_OPENAI_API_KEY},20000,0,fallback:none`,
+    EMBEDDINGS_MODEL: `openai,${TEST_TEXT_EMBEDDING_3_SMALL},${TEST_OPENAI_BASE_URL},${TEST_OPENAI_API_KEY},20000,0,fallback:none`,
+    RERANKER_MODEL: `openai,${TEST_GPT_4O_MINI},${TEST_OPENAI_BASE_URL},${TEST_OPENAI_API_KEY},20000,0,fallback:none`,
+    EVIDENCE_KEY: TEST_EVIDENCE_KEY_HEX,
     ASSIGNEES: '["analyst-1","analyst-2"]',
     RAG_TOP_K: "24",
     RAG_RERANK_K: "6",
-    RAG_MIN_SCORE: "0.35",
+    RAG_MIN_SCORE: `${CONSTANTS.DEFAULT_RAG_MIN_SCORE}`,
     RAG_TIMEOUT_MS: "30000",
-    MAX_REVIEW_CYCLES: "3",
+    MAX_REVIEW_CYCLES: `${CONSTANTS.MAX_REVIEW_CYCLES}`,
     SCHEDULER_MAX_TIMERS: "100",
-    AUTO_NOTIFY: options?.autoNotify === true ? "true" : "false",
-    WATCHER_POLL_INTERVAL_MS: "5000",
-    PRESIDIO_URL: options?.presidioUrl ?? "http://127.0.0.1:3001",
-    PRESIDIO_TIMEOUT_MS: "5000",
+    AUTO_NOTIFY: autoNotify ? "true" : "false",
+    WATCHER_POLL_INTERVAL_MS: `${CONSTANTS.DEFAULT_WATCHER_POLL_INTERVAL_MS}`,
+    PRESIDIO_URL: presidioUrl,
+    PRESIDIO_TIMEOUT_MS: `${CONSTANTS.DEFAULT_WATCHER_POLL_INTERVAL_MS}`,
   });
 
   const agent = await createAgent(
