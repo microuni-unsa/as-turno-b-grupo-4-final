@@ -1,9 +1,10 @@
 ---
 import BaseLayout from "@pims/cockpit/ui/layouts/BaseLayout.astro";
+import { CONSTANTS } from "@pims/types/constants.ts";
 import { Lock, LogIn, Shield, User } from "lucide-astro";
 ---
 
-<BaseLayout title="Iniciar Sesión | Glass-Box Cockpit UNSA">
+<BaseLayout title={CONSTANTS.BRAND_TITLE_LOGIN}>
   <div class="flex items-center justify-center min-h-screen bg-slate-950 p-4">
     <div class="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl p-8 space-y-6">
       <!-- Tenant Logo & Title -->
@@ -98,56 +99,89 @@ import { Lock, LogIn, Shield, User } from "lucide-astro";
 <script>
   import { login } from "@pims/cockpit/ui/lib/api.ts";
   import { clearSession, getSession, saveSession } from "@pims/cockpit/ui/lib/session.ts";
+  import { CONSTANTS } from "@pims/types/constants.ts";
 
   function initLoginPage() {
     const urlParams = new URLSearchParams(window.location.search);
     const noticeEl = document.getElementById("login-notice");
-    if (urlParams.get("expired") === "1") {
+    const isExpired = urlParams.get("expired") === "1";
+    const existingSession = getSession();
+
+    if (isExpired) {
       clearSession();
-      if (noticeEl) {
+      if (noticeEl !== null) {
         noticeEl.textContent = "Su sesión previa ha caducado. Ingrese sus credenciales para reanudar el acceso.";
         noticeEl.classList.remove("hidden");
+      } else {
+        throw new Error("Missing #login-notice container element");
       }
-    } else if (getSession()) {
-      window.location.href = "/incidents";
+    } else if (existingSession !== null) {
+      window.location.href = CONSTANTS.COCKPIT_ROUTE_INCIDENTS;
       return;
+    } else {
+      if (noticeEl !== null) {
+        noticeEl.classList.add("hidden");
+      } else {
+        throw new Error("Missing #login-notice container element");
+      }
     }
 
     const form = document.getElementById("form-login") as HTMLFormElement | null;
     const errorEl = document.getElementById("login-error");
-    const submitBtn = document.getElementById("btn-submit");
+    const submitBtn = document.getElementById("btn-submit") as HTMLButtonElement | null;
 
-    if (form) {
-      form.onsubmit = async (e) => {
-        e.preventDefault();
-        if (errorEl) errorEl.classList.add("hidden");
-        if (submitBtn) {
-          submitBtn.setAttribute("disabled", "true");
-          submitBtn.textContent = "Autenticando...";
-        }
-
-        const username = ((document.getElementById("username") as HTMLInputElement | null)?.value || "").trim();
-        const password = (document.getElementById("password") as HTMLInputElement | null)?.value || "";
-
-        try {
-          const session = await login({ username, password });
-          saveSession(session);
-          window.location.href = "/incidents";
-        } catch (err: unknown) {
-          if (errorEl) {
-            errorEl.textContent = err instanceof Error ? err.message : "Error al autenticar con el servidor PIMS.";
-            errorEl.classList.remove("hidden");
-          }
-        } finally {
-          if (submitBtn) {
-            submitBtn.removeAttribute("disabled");
-            submitBtn.innerHTML = `<span>Acceder a la Consola</span>`;
-          }
-        }
-      };
+    if (!form) {
+      throw new Error("Missing #form-login element in login page");
     }
+    if (!errorEl) {
+      throw new Error("Missing #login-error element in login page");
+    }
+    if (!submitBtn) {
+      throw new Error("Missing #btn-submit element in login page");
+    }
+
+    form.onsubmit = async (e) => {
+      e.preventDefault();
+      errorEl.classList.add("hidden");
+      submitBtn.setAttribute("disabled", "true");
+      submitBtn.textContent = "Autenticando...";
+
+      const usernameEl = document.getElementById("username") as HTMLInputElement | null;
+      const passwordEl = document.getElementById("password") as HTMLInputElement | null;
+
+      if (!usernameEl) {
+        throw new Error("Missing #username input element");
+      }
+      if (!passwordEl) {
+        throw new Error("Missing #password input element");
+      }
+
+      const username = usernameEl.value.trim();
+      const password = passwordEl.value;
+
+      if (username.length === 0 || password.length === 0) {
+        errorEl.textContent = "Debe ingresar usuario y contraseña.";
+        errorEl.classList.remove("hidden");
+        submitBtn.removeAttribute("disabled");
+        submitBtn.innerHTML = `<span>Acceder a la Consola</span>`;
+        return;
+      }
+
+      try {
+        const session = await login({ username, password });
+        saveSession(session);
+        window.location.href = CONSTANTS.COCKPIT_ROUTE_INCIDENTS;
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        errorEl.textContent = message;
+        errorEl.classList.remove("hidden");
+      } finally {
+        submitBtn.removeAttribute("disabled");
+        submitBtn.innerHTML = `<span>Acceder a la Consola</span>`;
+      }
+    };
   }
 
-  document.addEventListener("astro:page-load", initLoginPage);
+  document.addEventListener(CONSTANTS.EVENT_ASTRO_PAGE_LOAD, initLoginPage);
   initLoginPage();
 </script>

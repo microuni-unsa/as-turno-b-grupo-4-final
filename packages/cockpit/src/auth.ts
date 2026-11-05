@@ -5,6 +5,7 @@ import type {
   CockpitRole,
   CockpitSession,
 } from "@pims/types/cockpit.ts";
+import { CONSTANTS } from "@pims/types/constants.ts";
 import {
   CockpitPermissionDeniedError,
   CockpitPermissionsMissingError,
@@ -124,6 +125,11 @@ export class SessionRegistry {
   }
 
   get(accessToken: string): CockpitSession {
+    if (typeof accessToken !== "string" || accessToken.trim() === "") {
+      throw new CockpitSessionInvalidError(
+        "Cockpit session token missing or empty",
+      );
+    }
     const session = this.sessions.get(accessToken);
     if (session === undefined) {
       throw new CockpitSessionInvalidError("Unknown cockpit session token");
@@ -187,27 +193,42 @@ export async function loginWithPims(
   });
 
   const login = await adapter.login(username, password);
+  if (!login?.access || !login.user) {
+    throw new PimsAuthFailedError("Invalid login response from PIMS");
+  }
   const profile = await adapter.getProfile();
+  if (!profile) {
+    throw new PimsAuthFailedError("Failed to retrieve user profile");
+  }
   const claims = PimsJwtClaimsSchema.parse(decodeJwtClaims(login.access));
 
   if (claims.schema !== config.PIMS_SCHEMA) {
     throw new PimsAuthFailedError("TENANT_SCHEMA_MISMATCH");
   }
-  if (claims.exp * 1000 <= Date.now()) {
+  if (claims.exp * CONSTANTS.MS_PER_SECOND <= Date.now()) {
     throw new PimsAuthFailedError("ACCESS_TOKEN_EXPIRED");
   }
 
+  const loginPlatformRole =
+    login.user.platform_role !== undefined && login.user.platform_role !== null
+      ? login.user.platform_role
+      : null;
+  const profilePlatformRole =
+    profile.platform_role !== undefined && profile.platform_role !== null
+      ? profile.platform_role
+      : null;
+
   const loginRole = resolveNativeRole({
     is_platform_admin: login.user.is_platform_admin,
-    platform_role: login.user.platform_role ?? null,
+    platform_role: loginPlatformRole,
   });
   const profileRole = resolveNativeRole({
     is_platform_admin: profile.is_platform_admin,
     is_external_advisor: profile.is_external_advisor,
-    platform_role: profile.platform_role ?? null,
+    platform_role: profilePlatformRole,
   });
-  const loginRawRole = login.user.platform_role ?? null;
-  const profileRawRole = profile.platform_role ?? null;
+  const loginRawRole = loginPlatformRole;
+  const profileRawRole = profilePlatformRole;
   if (
     loginRawRole !== null &&
     profileRawRole !== null &&
@@ -233,7 +254,9 @@ export async function loginWithPims(
 
   return {
     access_token: login.access,
-    expires_at_utc: new Date(claims.exp * 1000).toISOString(),
+    expires_at_utc: new Date(
+      claims.exp * CONSTANTS.MS_PER_SECOND,
+    ).toISOString(),
     user_id: login.user.id,
     username: login.user.username,
     schema: claims.schema,

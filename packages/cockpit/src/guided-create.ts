@@ -14,7 +14,10 @@ import {
   type PresidioRecognizerResult,
 } from "@pims/types/cockpit.ts";
 import { CONSTANTS } from "@pims/types/constants.ts";
-import { FormNarrativeTooLongError } from "@pims/types/errors.ts";
+import {
+  CitationFabricatedError,
+  FormNarrativeTooLongError,
+} from "@pims/types/errors.ts";
 import type { JsonObject } from "@pims/types/models.ts";
 import {
   AFFECTED_CID,
@@ -609,6 +612,20 @@ function formatTodayDate(date: Date): string {
   return `${yyyy}-${mm}-${dd}`;
 }
 
+function resolveField<T>(
+  partialVal: T | undefined | null,
+  extractedVal: unknown,
+  fallbackVal: T,
+): T {
+  if (partialVal !== undefined && partialVal !== null) {
+    return partialVal;
+  }
+  if (extractedVal !== undefined && extractedVal !== null) {
+    return extractedVal as T;
+  }
+  return fallbackVal;
+}
+
 export async function draftGuidedIncident(
   request: GuidedDraftRequest,
   deps: GuidedCreateDependencies,
@@ -652,7 +669,7 @@ export async function draftGuidedIncident(
         content: `Extraiga los campos del siguiente reporte:\n${redactedText}`,
       },
     ],
-    max_tokens: 4096,
+    max_tokens: CONSTANTS.MAX_CHAT_MAX_TOKENS,
     temperature: deps.config.TEMP_CLASSIFIER,
   });
 
@@ -794,18 +811,26 @@ export async function draftGuidedIncident(
     }
   }
 
-  const partial = request.partial ?? {};
+  const partial =
+    request.partial !== undefined && request.partial !== null
+      ? request.partial
+      : {};
 
   const provenance: Record<string, GuidedProvenance> = {};
   const warnings: string[] = [];
 
-  const rawIncidentType = (partial.incident_type ??
-    extracted.incident_type) as string;
+  const rawIncidentType = (
+    partial.incident_type !== undefined && partial.incident_type !== null
+      ? partial.incident_type
+      : typeof extracted.incident_type === "string"
+        ? extracted.incident_type
+        : ""
+  ) as string;
   const incidentType = (INCIDENT_TYPES as readonly string[]).includes(
     rawIncidentType,
   )
     ? rawIncidentType
-    : "OT";
+    : CONSTANTS.DEFAULT_INCIDENT_TYPE;
 
   const rawAffectedCid = Array.isArray(partial.affected_cid)
     ? partial.affected_cid
@@ -835,7 +860,11 @@ export async function draftGuidedIncident(
   );
 
   const rawIncidentDate =
-    partial.incident_date ?? (extracted.incident_date as string);
+    partial.incident_date !== undefined && partial.incident_date !== null
+      ? partial.incident_date
+      : typeof extracted.incident_date === "string"
+        ? extracted.incident_date
+        : null;
   const incidentDate =
     typeof rawIncidentDate === "string" && rawIncidentDate.length > 0
       ? rawIncidentDate.slice(0, 10)
@@ -845,139 +874,198 @@ export async function draftGuidedIncident(
         : today;
 
   const draftObj: Record<string, unknown> = {
-    title:
-      partial.title ?? (extracted.title as string) ?? "Incidente reportado",
-    description:
-      partial.description ?? (extracted.description as string) ?? null,
+    title: resolveField(partial.title, extracted.title, "Incidente reportado"),
+    description: resolveField(partial.description, extracted.description, null),
     incident_date: incidentDate,
-    incident_time:
-      partial.incident_time ?? (extracted.incident_time as string) ?? null,
-    detection_date:
-      partial.detection_date ?? (extracted.detection_date as string) ?? today,
-    detection_time:
-      partial.detection_time ?? (extracted.detection_time as string) ?? null,
+    incident_time: resolveField(
+      partial.incident_time,
+      extracted.incident_time,
+      null,
+    ),
+    detection_date: resolveField(
+      partial.detection_date,
+      extracted.detection_date,
+      today,
+    ),
+    detection_time: resolveField(
+      partial.detection_time,
+      extracted.detection_time,
+      null,
+    ),
     incident_type: incidentType,
     involves_personal_data:
-      partial.involves_personal_data ??
-      (typeof extracted.involves_personal_data === "boolean"
-        ? extracted.involves_personal_data
-        : false),
+      partial.involves_personal_data !== undefined &&
+      partial.involves_personal_data !== null
+        ? partial.involves_personal_data
+        : typeof extracted.involves_personal_data === "boolean"
+          ? extracted.involves_personal_data
+          : false,
     affected_data_types: affectedDataTypes,
     num_affected_subjects:
-      partial.num_affected_subjects ??
-      (typeof extracted.num_affected_subjects === "number"
-        ? extracted.num_affected_subjects
-        : null),
-    affected_treatment:
-      partial.affected_treatment ??
-      (extracted.affected_treatment as string) ??
+      partial.num_affected_subjects !== undefined &&
+      partial.num_affected_subjects !== null
+        ? partial.num_affected_subjects
+        : typeof extracted.num_affected_subjects === "number"
+          ? extracted.num_affected_subjects
+          : null,
+    affected_treatment: resolveField(
+      partial.affected_treatment,
+      extracted.affected_treatment,
       null,
-    compromised_system:
-      partial.compromised_system ??
-      (extracted.compromised_system as string) ??
+    ),
+    compromised_system: resolveField(
+      partial.compromised_system,
+      extracted.compromised_system,
       null,
-    affected_url:
-      partial.affected_url ?? (extracted.affected_url as string) ?? null,
+    ),
+    affected_url: resolveField(
+      partial.affected_url,
+      extracted.affected_url,
+      null,
+    ),
     security_measures_adopted: securityMeasures,
     affected_cid: affectedCid,
-    rep_document_number:
-      partial.rep_document_number ??
-      (extracted.rep_document_number as string) ??
+    rep_document_number: resolveField(
+      partial.rep_document_number,
+      extracted.rep_document_number,
       null,
-    rep_document_expiry:
-      partial.rep_document_expiry ??
-      (extracted.rep_document_expiry as string) ??
+    ),
+    rep_document_expiry: resolveField(
+      partial.rep_document_expiry,
+      extracted.rep_document_expiry,
       null,
-    rep_first_name:
-      partial.rep_first_name ?? (extracted.rep_first_name as string) ?? null,
-    rep_last_name_p:
-      partial.rep_last_name_p ?? (extracted.rep_last_name_p as string) ?? null,
-    rep_last_name_m:
-      partial.rep_last_name_m ?? (extracted.rep_last_name_m as string) ?? null,
-    rep_position:
-      partial.rep_position ?? (extracted.rep_position as string) ?? null,
-    rep_phone: partial.rep_phone ?? (extracted.rep_phone as string) ?? null,
-    rep_email: partial.rep_email ?? (extracted.rep_email as string) ?? null,
-    entity_type:
-      partial.entity_type ?? (extracted.entity_type as string) ?? "U",
-    entity_ruc: partial.entity_ruc ?? (extracted.entity_ruc as string) ?? null,
-    entity_name:
-      partial.entity_name ??
-      (extracted.entity_name as string) ??
+    ),
+    rep_first_name: resolveField(
+      partial.rep_first_name,
+      extracted.rep_first_name,
+      null,
+    ),
+    rep_last_name_p: resolveField(
+      partial.rep_last_name_p,
+      extracted.rep_last_name_p,
+      null,
+    ),
+    rep_last_name_m: resolveField(
+      partial.rep_last_name_m,
+      extracted.rep_last_name_m,
+      null,
+    ),
+    rep_position: resolveField(
+      partial.rep_position,
+      extracted.rep_position,
+      null,
+    ),
+    rep_phone: resolveField(partial.rep_phone, extracted.rep_phone, null),
+    rep_email: resolveField(partial.rep_email, extracted.rep_email, null),
+    entity_type: resolveField(partial.entity_type, extracted.entity_type, "U"),
+    entity_ruc: resolveField(partial.entity_ruc, extracted.entity_ruc, null),
+    entity_name: resolveField(
+      partial.entity_name,
+      extracted.entity_name,
       "Universidad Nacional de San Agustín",
-    entity_phone:
-      partial.entity_phone ?? (extracted.entity_phone as string) ?? null,
-    entity_extension:
-      partial.entity_extension ??
-      (extracted.entity_extension as string) ??
+    ),
+    entity_phone: resolveField(
+      partial.entity_phone,
+      extracted.entity_phone,
       null,
-    entity_department:
-      partial.entity_department ??
-      (extracted.entity_department as string) ??
+    ),
+    entity_extension: resolveField(
+      partial.entity_extension,
+      extracted.entity_extension,
+      null,
+    ),
+    entity_department: resolveField(
+      partial.entity_department,
+      extracted.entity_department,
       "Arequipa",
-    entity_province:
-      partial.entity_province ??
-      (extracted.entity_province as string) ??
+    ),
+    entity_province: resolveField(
+      partial.entity_province,
+      extracted.entity_province,
       "Arequipa",
-    entity_district:
-      partial.entity_district ??
-      (extracted.entity_district as string) ??
+    ),
+    entity_district: resolveField(
+      partial.entity_district,
+      extracted.entity_district,
       "Arequipa",
-    reported_by: partial.reported_by ?? username,
-    assigned_to:
-      partial.assigned_to ?? (extracted.assigned_to as string) ?? null,
-    status: (partial.status ?? (extracted.status as string) ?? "O") as
-      | "O"
-      | "P"
-      | "C",
-    severity: (partial.severity ?? (extracted.severity as string) ?? null) as
+    ),
+    reported_by:
+      partial.reported_by !== undefined && partial.reported_by !== null
+        ? partial.reported_by
+        : username,
+    assigned_to: resolveField(partial.assigned_to, extracted.assigned_to, null),
+    status: resolveField(
+      partial.status,
+      extracted.status,
+      CONSTANTS.INCIDENT_STATUS_OPEN,
+    ) as "O" | "P" | "C",
+    severity: resolveField(partial.severity, extracted.severity, null) as
       | "L"
       | "M"
       | "H"
       | "C"
       | null,
-    impact: (partial.impact ?? (extracted.impact as string) ?? null) as
+    impact: resolveField(partial.impact, extracted.impact, null) as
       | "L"
       | "M"
       | "H"
       | "V"
       | null,
-    evidence_refs:
-      partial.evidence_refs ?? (extracted.evidence_refs as string) ?? null,
-    measure_updated_registry: (partial.measure_updated_registry ??
-      (extracted.measure_updated_registry as string) ??
-      null) as "Y" | "N" | "U" | null,
-    measure_new_security: (partial.measure_new_security ??
-      (extracted.measure_new_security as string) ??
-      null) as "Y" | "N" | "U" | null,
-    measure_improved_policies: (partial.measure_improved_policies ??
-      (extracted.measure_improved_policies as string) ??
-      null) as "Y" | "N" | "U" | null,
-    measure_considered_resolved: (partial.measure_considered_resolved ??
-      (extracted.measure_considered_resolved as string) ??
-      null) as "Y" | "N" | "U" | null,
-    measure_reported_authorities: (partial.measure_reported_authorities ??
-      (extracted.measure_reported_authorities as string) ??
-      null) as "Y" | "N" | "U" | null,
-    resolved_date:
-      partial.resolved_date ?? (extracted.resolved_date as string) ?? null,
+    evidence_refs: resolveField(
+      partial.evidence_refs,
+      extracted.evidence_refs,
+      null,
+    ),
+    measure_updated_registry: resolveField(
+      partial.measure_updated_registry,
+      extracted.measure_updated_registry,
+      null,
+    ) as "Y" | "N" | "U" | null,
+    measure_new_security: resolveField(
+      partial.measure_new_security,
+      extracted.measure_new_security,
+      null,
+    ) as "Y" | "N" | "U" | null,
+    measure_improved_policies: resolveField(
+      partial.measure_improved_policies,
+      extracted.measure_improved_policies,
+      null,
+    ) as "Y" | "N" | "U" | null,
+    measure_considered_resolved: resolveField(
+      partial.measure_considered_resolved,
+      extracted.measure_considered_resolved,
+      null,
+    ) as "Y" | "N" | "U" | null,
+    measure_reported_authorities: resolveField(
+      partial.measure_reported_authorities,
+      extracted.measure_reported_authorities,
+      null,
+    ) as "Y" | "N" | "U" | null,
+    resolved_date: resolveField(
+      partial.resolved_date,
+      extracted.resolved_date,
+      null,
+    ),
     actions: Array.isArray(partial.actions)
       ? partial.actions
       : Array.isArray(extracted.actions)
         ? extracted.actions
         : [],
-    dpo_contact_name:
-      partial.dpo_contact_name ??
-      (extracted.dpo_contact_name as string) ??
+    dpo_contact_name: resolveField(
+      partial.dpo_contact_name,
+      extracted.dpo_contact_name,
       null,
-    dpo_contact_email:
-      partial.dpo_contact_email ??
-      (extracted.dpo_contact_email as string) ??
+    ),
+    dpo_contact_email: resolveField(
+      partial.dpo_contact_email,
+      extracted.dpo_contact_email,
       null,
-    dpo_contact_phone:
-      partial.dpo_contact_phone ??
-      (extracted.dpo_contact_phone as string) ??
+    ),
+    dpo_contact_phone: resolveField(
+      partial.dpo_contact_phone,
+      extracted.dpo_contact_phone,
       null,
+    ),
   };
 
   for (const [key, _val] of Object.entries(draftObj)) {
@@ -1049,6 +1137,14 @@ export async function explainField(
     ragResult.passages,
     ragResult.citations,
   );
+  for (const c of chatCitations) {
+    if (c.chunk_sha256.length !== CONSTANTS.SHA256_HEX_LENGTH) {
+      throw new CitationFabricatedError(
+        c.citation,
+        `Verified RAG retrieval chunk has invalid hash for field: ${field}`,
+      );
+    }
+  }
 
   const explainPrompt = `Explain the regulatory significance (GDPR Art 33/34, ISO 27701) and instructions for the incident reporting field "${field}". Ground your explanation in the citations.`;
   const response = await deps.modelClient.chat_json({
@@ -1056,7 +1152,7 @@ export async function explainField(
     system: `You are an expert incident privacy officer. Answer in concise Spanish explaining the field. Prompt SHA: GUIDED_EXPLAIN_v1.0. Citations: ${ragResult.citations.join("; ")}`,
     messages: [{ role: "user", content: explainPrompt }],
     max_tokens: 1024,
-    temperature: 0.0,
+    temperature: CONSTANTS.TEMP_CLASSIFIER,
   });
 
   const reply =

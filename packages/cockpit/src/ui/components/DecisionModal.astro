@@ -204,6 +204,7 @@ import { CheckCircle2, ShieldAlert, X } from "lucide-astro";
 
 <script>
   import { approveIncident, attestExemption, requestRevision } from "@pims/cockpit/ui/lib/api.ts";
+  import { CONSTANTS } from "@pims/types/constants.ts";
 
   const modal = document.getElementById("cockpit-decision-modal") as HTMLDialogElement | null;
   const modalAlert = document.getElementById("modal-alert");
@@ -212,10 +213,28 @@ import { CheckCircle2, ShieldAlert, X } from "lucide-astro";
   const formExemption = document.getElementById("form-exemption") as HTMLFormElement | null;
   const modalTitle = document.getElementById("modal-title");
 
-  let currentIncidentId = 0;
+  let currentIncidentId: number | null = null;
 
-  function showAlert(msg: string, isError = false) {
-    if (!modalAlert) return;
+  function escapeHtml(str: string): string {
+    return str
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
+  }
+
+  function getErrorMessage(err: unknown, defaultMessage: string): string {
+    if (err instanceof Error && err.message.trim().length > 0) {
+      return err.message.trim();
+    }
+    return defaultMessage;
+  }
+
+  function showAlert(msg: string, isError = false): void {
+    if (!modalAlert) {
+      throw new Error("Element #modal-alert not found in DOM");
+    }
     modalAlert.classList.remove("hidden", "bg-emerald-950/70", "text-emerald-300", "bg-rose-950/70", "text-rose-300");
     if (isError) {
       modalAlert.classList.add("bg-rose-950/70", "text-rose-300", "border", "border-rose-800/80");
@@ -225,25 +244,58 @@ import { CheckCircle2, ShieldAlert, X } from "lucide-astro";
     modalAlert.textContent = msg;
   }
 
-  function hideAlert() {
-    if (modalAlert) modalAlert.classList.add("hidden");
+  function hideAlert(): void {
+    if (modalAlert) {
+      modalAlert.classList.add("hidden");
+    } else {
+      throw new Error("Element #modal-alert not found in DOM");
+    }
   }
 
   // Open modal handlers via CustomEvents
-  window.addEventListener("cockpit:open-decision-modal", ((e: CustomEvent) => {
+  window.addEventListener(CONSTANTS.EVENT_COCKPIT_OPEN_DECISION_MODAL, ((e: CustomEvent) => {
+    if (!modal) {
+      throw new Error("Element #cockpit-decision-modal not found in DOM");
+    }
+    if (!e.detail || typeof e.detail !== "object") {
+      throw new Error("Payload del evento cockpit:open-decision-modal es inválido");
+    }
+
     const { action, incidentId, incidentCode } = e.detail;
+    if (typeof incidentId !== "number" || incidentId <= 0) {
+      throw new Error(`ID de incidente inválido en modal de decisión: ${incidentId}`);
+    }
     currentIncidentId = incidentId;
     hideAlert();
-    if (!modal) return;
 
-    if (formApprove) formApprove.classList.add("hidden");
-    if (formRevision) formRevision.classList.add("hidden");
-    if (formExemption) formExemption.classList.add("hidden");
+    if (formApprove) {
+      formApprove.classList.add("hidden");
+    } else {
+      throw new Error("Element #form-approve-container not found in DOM");
+    }
+    if (formRevision) {
+      formRevision.classList.add("hidden");
+    } else {
+      throw new Error("Element #form-revision not found in DOM");
+    }
+    if (formExemption) {
+      formExemption.classList.add("hidden");
+    } else {
+      throw new Error("Element #form-exemption not found in DOM");
+    }
 
     if (action === "approve") {
-      if (modalTitle) modalTitle.textContent = "Aprobar Notificación Regulatoria";
+      if (modalTitle) {
+        modalTitle.textContent = "Aprobar Notificación Regulatoria";
+      } else {
+        throw new Error("Element #modal-title not found in DOM");
+      }
       const codeSpan = document.getElementById("approve-incident-code");
-      if (codeSpan) codeSpan.textContent = incidentCode;
+      if (codeSpan) {
+        codeSpan.textContent = typeof incidentCode === "string" ? incidentCode : String(incidentId);
+      } else {
+        throw new Error("Element #approve-incident-code not found in DOM");
+      }
       const previewEl = document.getElementById("approve-proposal-preview");
       if (previewEl) {
         const prop = e.detail.proposal;
@@ -253,68 +305,93 @@ import { CheckCircle2, ShieldAlert, X } from "lucide-astro";
             contentHtml += `
               <div class="space-y-1">
                 <span class="font-semibold text-slate-200">Consecuencias Probables:</span>
-                <p class="text-slate-400">${prop.item_c_consequences}</p>
+                <p class="text-slate-400">${escapeHtml(String(prop.item_c_consequences))}</p>
               </div>
             `;
+          } else {
+            contentHtml += `<div class="space-y-1"><span class="font-semibold text-slate-400">Consecuencias:</span> <span class="text-slate-500 italic">No especificadas</span></div>`;
           }
+
           if (Array.isArray(prop.item_d_measures_taken) && prop.item_d_measures_taken.length > 0) {
             contentHtml += `
               <div class="space-y-1">
                 <span class="font-semibold text-slate-200">Medidas Adoptadas:</span>
                 <ul class="list-disc pl-4 text-slate-400 space-y-0.5">
-                  ${prop.item_d_measures_taken.map((m: any) => `<li>${m}</li>`).join("")}
+                  ${prop.item_d_measures_taken.map((m: any) => `<li>${escapeHtml(String(m))}</li>`).join("")}
                 </ul>
               </div>
             `;
+          } else {
+            contentHtml += `<div class="space-y-1"><span class="font-semibold text-slate-400">Medidas Adoptadas:</span> <span class="text-slate-500 italic">Ninguna registrada</span></div>`;
           }
+
           if (Array.isArray(prop.item_d_measures_proposed) && prop.item_d_measures_proposed.length > 0) {
             contentHtml += `
               <div class="space-y-1">
                 <span class="font-semibold text-slate-200">Medidas Propuestas:</span>
                 <ul class="list-disc pl-4 text-slate-400 space-y-0.5">
-                  ${prop.item_d_measures_proposed.map((m: any) => `<li>${m}</li>`).join("")}
+                  ${prop.item_d_measures_proposed.map((m: any) => `<li>${escapeHtml(String(m))}</li>`).join("")}
                 </ul>
               </div>
             `;
+          } else {
+            contentHtml += `<div class="space-y-1"><span class="font-semibold text-slate-400">Medidas Propuestas:</span> <span class="text-slate-500 italic">Ninguna registrada</span></div>`;
           }
+
           if (prop.body_plain) {
             contentHtml += `
               <div class="space-y-1">
                 <span class="font-semibold text-slate-200">Texto de Comunicación:</span>
-                <p class="text-slate-400">${prop.body_plain}</p>
+                <p class="text-slate-400">${escapeHtml(String(prop.body_plain))}</p>
               </div>
             `;
+          } else {
+            contentHtml += `<div class="space-y-1"><span class="font-semibold text-slate-400">Texto de Comunicación:</span> <span class="text-slate-500 italic">Sin texto de comunicación</span></div>`;
           }
+
           if (Array.isArray(prop.citations) && prop.citations.length > 0) {
             contentHtml += `
               <div class="space-y-1 pt-1 border-t border-slate-800">
                 <span class="font-semibold text-slate-300">Citas Normativas:</span>
                 <div class="flex flex-wrap gap-1 mt-1">
-                  ${prop.citations.map((c: any) => `<span class="px-1.5 py-0.5 rounded bg-blue-950 text-blue-300 border border-blue-900 text-[10px] font-mono">${c}</span>`).join("")}
+                  ${prop.citations.map((c: any) => `<span class="px-1.5 py-0.5 rounded bg-blue-950 text-blue-300 border border-blue-900 text-[10px] font-mono">${escapeHtml(String(c))}</span>`).join("")}
                 </div>
               </div>
             `;
+          } else {
+            contentHtml += `<div class="space-y-1 pt-1 border-t border-slate-800"><span class="text-slate-500 italic">Sin citas normativas directas</span></div>`;
           }
-          previewEl.innerHTML = contentHtml || "<p class='text-slate-500 italic'>Sin contenido adicional en el borrador.</p>";
+
+          previewEl.innerHTML = contentHtml.trim().length > 0
+            ? contentHtml
+            : "<p class='text-slate-500 italic'>Sin contenido adicional en el borrador.</p>";
           previewEl.classList.remove("hidden");
         } else {
           previewEl.classList.add("hidden");
           previewEl.innerHTML = "";
         }
+      } else {
+        throw new Error("Element #approve-proposal-preview not found in DOM");
       }
-      if (formApprove) formApprove.classList.remove("hidden");
+      formApprove.classList.remove("hidden");
     } else if (action === "revision") {
-      if (modalTitle) modalTitle.textContent = "Solicitar Revisión de Notificación";
-      if (formRevision) {
-        formRevision.classList.remove("hidden");
-        formRevision.reset();
+      if (modalTitle) {
+        modalTitle.textContent = "Solicitar Revisión de Notificación";
+      } else {
+        throw new Error("Element #modal-title not found in DOM");
       }
+      formRevision.classList.remove("hidden");
+      formRevision.reset();
     } else if (action === "exemption") {
-      if (modalTitle) modalTitle.textContent = "Atestiguar Exención Art. 34(3)(a)";
-      if (formExemption) {
-        formExemption.classList.remove("hidden");
-        formExemption.reset();
+      if (modalTitle) {
+        modalTitle.textContent = "Atestiguar Exención Art. 34(3)(a)";
+      } else {
+        throw new Error("Element #modal-title not found in DOM");
       }
+      formExemption.classList.remove("hidden");
+      formExemption.reset();
+    } else {
+      throw new Error(`Acción desconocida en modal de decisión: ${action}`);
     }
 
     modal.showModal();
@@ -323,7 +400,11 @@ import { CheckCircle2, ShieldAlert, X } from "lucide-astro";
   // Close modal
   document.querySelectorAll(".btn-cancel, #btn-close-modal").forEach((btn) => {
     btn.addEventListener("click", () => {
-      if (modal) modal.close();
+      if (modal) {
+        modal.close();
+      } else {
+        throw new Error("Element #cockpit-decision-modal not found in DOM");
+      }
     });
   });
 
@@ -331,56 +412,101 @@ import { CheckCircle2, ShieldAlert, X } from "lucide-astro";
   const btnConfirmApprove = document.getElementById("btn-confirm-approve");
   if (btnConfirmApprove) {
     btnConfirmApprove.addEventListener("click", async () => {
+      if (currentIncidentId === null || currentIncidentId <= 0) {
+        throw new Error("No se ha seleccionado un incidente para aprobar");
+      }
       try {
         btnConfirmApprove.setAttribute("disabled", "true");
         btnConfirmApprove.textContent = "Procesando...";
-        const result = await approveIncident(currentIncidentId);
+        await approveIncident(currentIncidentId);
         showAlert("¡Notificación aprobada exitosamente! Se selló el paquete.");
         setTimeout(() => {
-          if (modal) modal.close();
+          if (modal) {
+            modal.close();
+          }
           window.location.reload();
-        }, 1200);
-      } catch (err: any) {
-        showAlert(err.message || "Error al aprobar", true);
+        }, CONSTANTS.MODAL_FEEDBACK_DELAY_MS);
+      } catch (err: unknown) {
+        showAlert(getErrorMessage(err, "Error al aprobar"), true);
       } finally {
         btnConfirmApprove.removeAttribute("disabled");
         btnConfirmApprove.textContent = "Confirmar y Notificar";
       }
     });
+  } else {
+    throw new Error("Element #btn-confirm-approve not found in DOM");
   }
 
   // Handle Revision Submit
   if (formRevision) {
     formRevision.addEventListener("submit", async (e) => {
       e.preventDefault();
-      const packType = (document.getElementById("revision-pack-type") as HTMLSelectElement).value as any;
-      const reason = (document.getElementById("revision-reason") as HTMLTextAreaElement).value.trim();
+      if (currentIncidentId === null || currentIncidentId <= 0) {
+        throw new Error("No se ha seleccionado un incidente para solicitar revisión");
+      }
+      const packTypeEl = document.getElementById("revision-pack-type") as HTMLSelectElement | null;
+      const reasonEl = document.getElementById("revision-reason") as HTMLTextAreaElement | null;
+      if (!packTypeEl || !reasonEl) {
+        throw new Error("Campos del formulario de revisión no encontrados en el DOM");
+      }
+      const packType = packTypeEl.value as any;
+      const reason = reasonEl.value.trim();
+      if (reason.length === 0) {
+        showAlert("Debe ingresar el motivo de la revisión requerida", true);
+        return;
+      }
       try {
         await requestRevision(currentIncidentId, { pack_type: packType, reason });
         showAlert("Revisión solicitada exitosamente.");
         setTimeout(() => {
-          if (modal) modal.close();
+          if (modal) {
+            modal.close();
+          }
           window.location.reload();
-        }, 1200);
-      } catch (err: any) {
-        showAlert(err.message || "Error al solicitar revisión", true);
+        }, CONSTANTS.MODAL_FEEDBACK_DELAY_MS);
+      } catch (err: unknown) {
+        showAlert(getErrorMessage(err, "Error al solicitar revisión"), true);
       }
     });
+  } else {
+    throw new Error("Element #form-revision not found in DOM");
   }
 
   // Handle Exemption Submit
   if (formExemption) {
     formExemption.addEventListener("submit", async (e) => {
       e.preventDefault();
-      const scope = (document.getElementById("exemption-scope") as HTMLSelectElement).value as any;
-      const algorithm = (document.getElementById("exemption-algorithm") as HTMLInputElement).value.trim();
-      const kms = (document.getElementById("exemption-kms") as HTMLInputElement).value.trim();
-      const sha256 = (document.getElementById("exemption-sha256") as HTMLInputElement).value.trim();
-      const evidence = (document.getElementById("exemption-evidence") as HTMLInputElement).value
-        .split(",")
-        .map((s) => s.trim())
-        .filter(Boolean);
-      const applies = (document.getElementById("exemption-applies") as HTMLInputElement).checked;
+      if (currentIncidentId === null || currentIncidentId <= 0) {
+        throw new Error("No se ha seleccionado un incidente para atestiguar exención");
+      }
+      const scopeEl = document.getElementById("exemption-scope") as HTMLSelectElement | null;
+      const algorithmEl = document.getElementById("exemption-algorithm") as HTMLInputElement | null;
+      const kmsEl = document.getElementById("exemption-kms") as HTMLInputElement | null;
+      const sha256El = document.getElementById("exemption-sha256") as HTMLInputElement | null;
+      const evidenceEl = document.getElementById("exemption-evidence") as HTMLInputElement | null;
+      const appliesEl = document.getElementById("exemption-applies") as HTMLInputElement | null;
+
+      if (!scopeEl || !algorithmEl || !kmsEl || !sha256El || !evidenceEl || !appliesEl) {
+        throw new Error("Campos del formulario de exención no encontrados en el DOM");
+      }
+
+      const scope = scopeEl.value as any;
+      const algorithm = algorithmEl.value.trim();
+      const kms = kmsEl.value.trim();
+      const sha256 = sha256El.value.trim();
+      const rawEvidence = evidenceEl.value.split(",");
+      const evidence: string[] = [];
+      for (const item of rawEvidence) {
+        const trimmed = item.trim();
+        if (trimmed.length > 0) {
+          evidence.push(trimmed);
+        }
+      }
+      if (evidence.length === 0) {
+        showAlert("Debe incluir al menos una referencia de evidencia válida", true);
+        return;
+      }
+      const applies = appliesEl.checked;
 
       try {
         await attestExemption(currentIncidentId, {
@@ -394,12 +520,16 @@ import { CheckCircle2, ShieldAlert, X } from "lucide-astro";
         });
         showAlert("Atestación de exención registrada exitosamente.");
         setTimeout(() => {
-          if (modal) modal.close();
+          if (modal) {
+            modal.close();
+          }
           window.location.reload();
-        }, 1200);
-      } catch (err: any) {
-        showAlert(err.message || "Error al atestiguar exención", true);
+        }, CONSTANTS.MODAL_FEEDBACK_DELAY_MS);
+      } catch (err: unknown) {
+        showAlert(getErrorMessage(err, "Error al atestiguar exención"), true);
       }
     });
+  } else {
+    throw new Error("Element #form-exemption not found in DOM");
   }
 </script>

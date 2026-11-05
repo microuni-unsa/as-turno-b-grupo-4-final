@@ -1,10 +1,11 @@
 ---
 import AppLayout from "@pims/cockpit/ui/layouts/AppLayout.astro";
 import DecisionModal from "@pims/cockpit/ui/components/DecisionModal.astro";
+import { CONSTANTS } from "@pims/types/constants.ts";
 import { AlertCircle, AlertTriangle, ArrowRight, CheckCircle2, Clock, Eye, Filter, Plus, RefreshCw, Search, ShieldAlert, X } from "lucide-astro";
 ---
 
-<AppLayout title="Incidentes | Glass-Box Cockpit" breadcrumb="Incidentes">
+<AppLayout title={CONSTANTS.BRAND_TITLE_INCIDENTS} breadcrumb="Incidentes">
   <div class="space-y-6">
     <!-- Header title -->
     <div class="flex items-center justify-between">
@@ -19,8 +20,8 @@ import { AlertCircle, AlertTriangle, ArrowRight, CheckCircle2, Clock, Eye, Filte
       <div class="flex items-center space-x-2">
         <a
           id="btn-new-incident"
-          href="/new"
-          data-permission="change_incident"
+          href={CONSTANTS.COCKPIT_ROUTE_NEW}
+          data-permission={CONSTANTS.PERMISSION_CHANGE_INCIDENT}
           class="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium transition-colors flex items-center space-x-1.5 shadow-sm"
         >
           <Plus class="w-3.5 h-3.5" />
@@ -241,12 +242,14 @@ import { AlertCircle, AlertTriangle, ArrowRight, CheckCircle2, Clock, Eye, Filte
   import type { CockpitIncidentSummary, StreamSnapshot } from "@pims/types/cockpit.ts";
   import {
     formatDateTime,
+    formatDisplayString,
     getImpactLabel,
     getSeverityBadgeClasses,
     getSeverityLabel,
     getStatusBadgeClasses,
     getStatusLabel,
   } from "@pims/cockpit/ui/lib/utils.ts";
+  import { CONSTANTS } from "@pims/types/constants.ts";
 
   let allIncidents: CockpitIncidentSummary[] = [];
   let selectedIncident: CockpitIncidentSummary | null = null;
@@ -257,15 +260,23 @@ import { AlertCircle, AlertTriangle, ArrowRight, CheckCircle2, Clock, Eye, Filte
 
   function renderTable() {
     const tbody = getEl<HTMLTableSectionElement>("incidents-tbody");
-    if (!tbody) return;
+    if (!tbody) {
+      throw new Error("Missing #incidents-tbody in incidents table DOM");
+    }
     const searchInput = getEl<HTMLInputElement>("search-input");
     const filterStatus = getEl<HTMLSelectElement>("filter-status");
     const filterSeverity = getEl<HTMLSelectElement>("filter-severity");
     const footerCount = getEl("footer-count");
 
-    const query = (searchInput?.value || "").toLowerCase().trim();
-    const statusVal = filterStatus?.value || "ALL";
-    const severityVal = filterSeverity?.value || "ALL";
+    const query = searchInput !== null && searchInput.value !== undefined
+      ? searchInput.value.toLowerCase().trim()
+      : "";
+    const statusVal = filterStatus !== null && filterStatus.value !== undefined
+      ? filterStatus.value
+      : "ALL";
+    const severityVal = filterSeverity !== null && filterSeverity.value !== undefined
+      ? filterSeverity.value
+      : "ALL";
 
     const filtered = allIncidents.filter((inc) => {
       if (statusVal !== "ALL" && inc.status !== statusVal) return false;
@@ -299,8 +310,8 @@ import { AlertCircle, AlertTriangle, ArrowRight, CheckCircle2, Clock, Eye, Filte
         <tr class="hover:bg-slate-800/40 transition-colors cursor-pointer" data-id="${inc.id}">
           <td class="py-3 px-4 font-mono font-semibold text-blue-400">${inc.incident_code}</td>
           <td class="py-3 px-4 text-slate-400 tabular-nums">${formatDateTime(inc.detection_date)}</td>
-          <td class="py-3 px-4 text-white font-medium max-w-xs truncate">${inc.title}</td>
-          <td class="py-3 px-4 text-slate-300 capitalize">${inc.incident_type}</td>
+          <td class="py-3 px-4 text-white font-medium max-w-xs truncate">${formatDisplayString(inc.title)}</td>
+          <td class="py-3 px-4 text-slate-300 capitalize">${formatDisplayString(inc.incident_type)}</td>
           <td class="py-3 px-4">
             <span class="inline-block px-2 py-0.5 rounded text-[11px] font-semibold border ${getSeverityBadgeClasses(inc.severity)}">
               ${getSeverityLabel(inc.severity)}
@@ -331,7 +342,11 @@ import { AlertCircle, AlertTriangle, ArrowRight, CheckCircle2, Clock, Eye, Filte
       row.addEventListener("click", () => {
         const id = Number(row.getAttribute("data-id"));
         const found = allIncidents.find((x) => x.id === id);
-        if (found) openDrawer(found);
+        if (found) {
+          openDrawer(found);
+        } else {
+          throw new Error(`Incident with id ${id} not found in current table cache`);
+        }
       });
     });
   }
@@ -343,7 +358,9 @@ import { AlertCircle, AlertTriangle, ArrowRight, CheckCircle2, Clock, Eye, Filte
     const statClosed = getEl("stat-closed");
     const statCritical = getEl("stat-critical");
 
-    if (!statTotal) return;
+    if (!statTotal) {
+      throw new Error("Missing #stat-total element in incidents DOM");
+    }
     const total = allIncidents.length;
     const open = allIncidents.filter((x) => x.status === "O").length;
     const inProgress = allIncidents.filter((x) => x.status === "P").length;
@@ -370,16 +387,18 @@ import { AlertCircle, AlertTriangle, ArrowRight, CheckCircle2, Clock, Eye, Filte
     const drawerType = getEl("drawer-type");
     const drawerDate = getEl("drawer-date");
 
-    if (!drawer) return;
+    if (!drawer) {
+      throw new Error("Missing #detail-drawer element in incidents DOM");
+    }
     if (drawerCode) drawerCode.textContent = inc.incident_code;
-    if (drawerTitle) drawerTitle.textContent = inc.title;
+    if (drawerTitle) drawerTitle.textContent = formatDisplayString(inc.title);
     if (drawerStatus) {
       drawerStatus.textContent = getStatusLabel(inc.status);
       drawerStatus.className = `px-2 py-0.5 rounded text-[11px] font-semibold border ${getStatusBadgeClasses(inc.status)}`;
     }
     if (drawerSeverity) drawerSeverity.textContent = getSeverityLabel(inc.severity);
     if (drawerImpact) drawerImpact.textContent = getImpactLabel(inc.impact);
-    if (drawerType) drawerType.textContent = inc.incident_type;
+    if (drawerType) drawerType.textContent = formatDisplayString(inc.incident_type);
     if (drawerDate) drawerDate.textContent = formatDateTime(inc.detection_date);
 
     drawer.classList.remove("translate-x-full");
@@ -393,7 +412,7 @@ import { AlertCircle, AlertTriangle, ArrowRight, CheckCircle2, Clock, Eye, Filte
 
   async function initIncidentsPage() {
     const session = getSession();
-    if (session && !hasPermission(session, "change_incident")) {
+    if (session && !hasPermission(session, CONSTANTS.PERMISSION_CHANGE_INCIDENT)) {
       const btnNew = getEl("btn-new-incident");
       if (btnNew) btnNew.style.display = "none";
     }
@@ -405,7 +424,7 @@ import { AlertCircle, AlertTriangle, ArrowRight, CheckCircle2, Clock, Eye, Filte
       renderTable();
     } else {
       try {
-        const response = await authenticatedFetch("/api/incidents");
+        const response = await authenticatedFetch(CONSTANTS.COCKPIT_API_INCIDENTS);
         if (response.ok) {
           const data = (await response.json()) as { incidents: CockpitIncidentSummary[] };
           if (allIncidents.length === 0 && Array.isArray(data.incidents)) {
@@ -425,7 +444,7 @@ import { AlertCircle, AlertTriangle, ArrowRight, CheckCircle2, Clock, Eye, Filte
     const complianceBtn = getEl("drawer-btn-compliance");
     if (complianceBtn) {
       complianceBtn.onclick = () => {
-        window.location.href = "/compliance";
+        window.location.href = CONSTANTS.COCKPIT_ROUTE_COMPLIANCE;
       };
     }
 
@@ -440,7 +459,7 @@ import { AlertCircle, AlertTriangle, ArrowRight, CheckCircle2, Clock, Eye, Filte
     if (btnRefresh) {
       btnRefresh.onclick = async () => {
         try {
-          const response = await authenticatedFetch("/api/incidents");
+          const response = await authenticatedFetch(CONSTANTS.COCKPIT_API_INCIDENTS);
           if (response.ok) {
             const data = (await response.json()) as { incidents: CockpitIncidentSummary[] };
             allIncidents = data.incidents;
@@ -459,20 +478,20 @@ import { AlertCircle, AlertTriangle, ArrowRight, CheckCircle2, Clock, Eye, Filte
     }
   }
 
-  document.addEventListener("astro:page-load", () => {
+  document.addEventListener(CONSTANTS.EVENT_ASTRO_PAGE_LOAD, () => {
     void initIncidentsPage();
   });
   void initIncidentsPage();
 
   // Handle SSE Snapshot
-  window.addEventListener("cockpit:snapshot", ((e: CustomEvent<StreamSnapshot>) => {
+  window.addEventListener(CONSTANTS.EVENT_COCKPIT_SNAPSHOT, ((e: CustomEvent<StreamSnapshot>) => {
     allIncidents = e.detail.incidents;
     updateMetrics();
     renderTable();
   }) as EventListener);
 
   // Handle SSE Lifecycle Changes
-  window.addEventListener("cockpit:agent-event", ((e: CustomEvent) => {
+  window.addEventListener(CONSTANTS.EVENT_COCKPIT_AGENT_EVENT, ((e: CustomEvent) => {
     const event = e.detail;
     if (event.type === "lifecycle:status_change") {
       const idx = allIncidents.findIndex((x) => x.incident_code === event.incident_code);
@@ -483,7 +502,11 @@ import { AlertCircle, AlertTriangle, ArrowRight, CheckCircle2, Clock, Eye, Filte
         };
         updateMetrics();
         renderTable();
+      } else {
+        // Event for incident not currently in table
       }
+    } else {
+      // Non-status-change event handled by other subscribers
     }
   }) as EventListener);
 </script>

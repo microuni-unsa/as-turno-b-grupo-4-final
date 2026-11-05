@@ -25,6 +25,7 @@ import type {
   ChatTrace,
   ChatTraceSpan,
   CockpitSession,
+  GuidedReporting,
 } from "@pims/types/cockpit.ts";
 import { CONSTANTS } from "@pims/types/constants.ts";
 import {
@@ -54,13 +55,61 @@ export function resolvePersona(
   if (requested === undefined) {
     return session.default_persona;
   }
-  if (requested === session.default_persona) {
-    return requested;
+  switch (requested) {
+    case "auditor":
+    case "executive":
+    case "dpo": {
+      if (requested === session.default_persona) {
+        return requested;
+      }
+      if (!session.can_switch_persona) {
+        throw new CockpitPermissionDeniedError("persona_switch");
+      }
+      return requested;
+    }
+    default: {
+      const _exhaustive: never = requested;
+      throw new CockpitChatInvalidError(`Unsupported persona: ${_exhaustive}`);
+    }
   }
-  if (!session.can_switch_persona) {
-    throw new CockpitPermissionDeniedError("persona_switch");
+}
+
+export function getPersonaPrompt(persona: ChatPersona): string {
+  switch (persona) {
+    case "auditor":
+      return PERSONA_PROMPTS.auditor;
+    case "executive":
+      return PERSONA_PROMPTS.executive;
+    case "dpo":
+      return PERSONA_PROMPTS.dpo;
+    default: {
+      const _exhaustive: never = persona;
+      throw new CockpitChatInvalidError(`Unsupported persona: ${_exhaustive}`);
+    }
   }
-  return requested;
+}
+
+export type ChatMessageIntent =
+  | "form_mutation"
+  | "incident_query"
+  | "general_query";
+
+export function detectMessageIntent(
+  message: string,
+  formContext?: Partial<GuidedReporting>,
+  incidentCode?: string | null,
+): ChatMessageIntent {
+  if (detectFormIntent(message, formContext)) {
+    return "form_mutation";
+  }
+  if (
+    incidentCode !== null &&
+    incidentCode !== undefined &&
+    incidentCode !== ""
+  ) {
+    return "incident_query";
+  }
+  return "general_query";
 }
 
 function extractIncidentCode(message: string): string | null {
@@ -357,37 +406,55 @@ export async function handleChat(
   let formMutation: ChatFormMutation | undefined;
   const presidioClient = deps.presidioClient;
   const ragService = deps.ragService;
-  if (
-    detectFormIntent(request.message, request.form_context) &&
-    presidioClient !== undefined &&
-    ragService !== undefined
-  ) {
-    const mutation = await instrumentSpan(
-      "form_mutation",
-      "tool",
-      { message: request.message },
-      () =>
-        analyzeFormMutation(
-          {
-            config: deps.config,
-            modelClient: deps.modelClient,
-            presidioClient,
-            ragService,
-            now: deps.clock,
-          },
-          request.message,
-          request.form_context,
-          session.username,
-        ),
-      (res) => ({
-        action: res?.action,
-        summary: res?.summary,
-        missing_count: res?.missing_mandatory_fields?.length ?? 0,
-      }),
-    );
-    toolCalls.push("form_mutation");
-    if (mutation !== undefined) {
-      formMutation = mutation;
+  const intent = detectMessageIntent(
+    request.message,
+    request.form_context,
+    code,
+  );
+  switch (intent) {
+    case "form_mutation": {
+      if (presidioClient !== undefined && ragService !== undefined) {
+        const mutation = await instrumentSpan(
+          "form_mutation",
+          "tool",
+          { message: request.message },
+          () =>
+            analyzeFormMutation(
+              {
+                config: deps.config,
+                modelClient: deps.modelClient,
+                presidioClient,
+                ragService,
+                now: deps.clock,
+              },
+              request.message,
+              request.form_context,
+              session.username,
+            ),
+          (res) => ({
+            action: res?.action,
+            summary: res?.summary,
+            missing_count: res?.missing_mandatory_fields?.length ?? 0,
+          }),
+        );
+        toolCalls.push("form_mutation");
+        if (mutation !== undefined) {
+          formMutation = mutation;
+        }
+      }
+      break;
+    }
+    case "incident_query": {
+      break;
+    }
+    case "general_query": {
+      break;
+    }
+    default: {
+      const _exhaustive: never = intent;
+      throw new CockpitChatInvalidError(
+        `Unhandled message intent: ${_exhaustive}`,
+      );
     }
   }
 
@@ -412,13 +479,17 @@ export async function handleChat(
   const response = await instrumentSpan(
     "model_reasoning",
     "model",
-    { route: CONSTANTS.MODEL_ROUTE_REASONING, persona, max_tokens: 4096 },
+    {
+      route: CONSTANTS.MODEL_ROUTE_REASONING,
+      persona,
+      max_tokens: CONSTANTS.MAX_CHAT_MAX_TOKENS,
+    },
     () =>
       deps.modelClient.chat_json({
         route: CONSTANTS.MODEL_ROUTE_REASONING,
-        system: `${PERSONA_PROMPTS[persona]} ${RESPONSE_CONTRACT}`,
+        system: `${getPersonaPrompt(persona)} ${RESPONSE_CONTRACT}`,
         messages: [{ role: "user", content: serializedContext }],
-        max_tokens: 4096,
+        max_tokens: CONSTANTS.MAX_CHAT_MAX_TOKENS,
         temperature: deps.config.TEMP_REASONING,
       }),
     (res) => ({
@@ -440,20 +511,17 @@ export async function handleChat(
   );
   const resolved: ChatCitation[] = [];
   for (const citationId of citationsUsed) {
-    let citation = citationById.get(citationId);
-    if (citation === undefined) {
-      const lower = citationId.toLowerCase();
-      for (const [key, val] of citationById.entries()) {
-        if (key.toLowerCase() === lower) {
-          citation = val;
-          break;
-        }
-      }
-    }
+    const citation = citationById.get(citationId);
     if (citation === undefined) {
       throw new CitationFabricatedError(
         citationId,
-        `Chat reply cited '${citationId}' which is absent from the supplied retrieval context`,
+        `Chat reply cited '${citationId}' which is absent from verified RAG retrieval chunks`,
+      );
+    }
+    if (citation.chunk_sha256.length !== CONSTANTS.SHA256_HEX_LENGTH) {
+      throw new CitationFabricatedError(
+        citationId,
+        `Chat reply cited '${citationId}' with invalid chunk hash`,
       );
     }
     if (!resolved.some((r) => r.chunk_sha256 === citation.chunk_sha256)) {
@@ -486,7 +554,27 @@ export async function handleChat(
     reasoning = response.content.reasoning.trim();
   } else {
     const steps: string[] = [];
-    steps.push(`Análisis regulatorio ejecutado con perfil '${persona}'.`);
+    switch (persona) {
+      case "auditor":
+        steps.push(
+          `Análisis regulatorio y normativo ejecutado con perfil auditor (${persona}).`,
+        );
+        break;
+      case "executive":
+        steps.push(
+          `Resumen de impacto operativo y riesgo de negocio ejecutado con perfil ejecutivo (${persona}).`,
+        );
+        break;
+      case "dpo":
+        steps.push(
+          `Evaluación de derechos del interesado y plazos GDPR ejecutada con perfil DPO (${persona}).`,
+        );
+        break;
+      default: {
+        const _exhaustive: never = persona;
+        throw new CockpitChatInvalidError(`Unknown persona: ${_exhaustive}`);
+      }
+    }
     if (code !== null) {
       steps.push(`Contexto focalizado en incidente '${code}'.`);
     }
@@ -522,7 +610,7 @@ export async function handleChat(
     (serializedContext.length + reply.length) / 4,
   );
   const costEstimateUsd = Number(
-    ((tokensEstimate / 1000) * 0.00015).toFixed(5),
+    ((tokensEstimate / CONSTANTS.MS_PER_SECOND) * 0.00015).toFixed(5),
   );
 
   const aggregates: ChatToolAggregate[] = Array.from(toolStats.entries()).map(

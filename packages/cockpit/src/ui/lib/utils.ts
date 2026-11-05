@@ -100,6 +100,30 @@ export function getSeverityBadgeClasses(
   }
 }
 
+export function formatDisplayString(
+  val: string | null | undefined,
+  placeholder: string = "—",
+): string {
+  if (val === null || val === undefined || val.trim() === "") {
+    return placeholder;
+  }
+  return val.trim();
+}
+
+export function formatNullableText(val: string | null | undefined): string {
+  if (val === null || val === undefined || val.trim() === "") {
+    return "No disponible";
+  }
+  return val.trim();
+}
+
+export function formatSafeAttribute(val: string | null | undefined): string {
+  if (val === null || val === undefined) {
+    return "";
+  }
+  return val.trim();
+}
+
 export function getImpactLabel(
   impact: (typeof INCIDENT_IMPACTS)[number] | string | null | undefined,
 ): string {

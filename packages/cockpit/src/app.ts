@@ -34,6 +34,7 @@ import {
   RevisionRequestSchema,
   type StreamSnapshot,
 } from "@pims/types/cockpit.ts";
+import { CONSTANTS } from "@pims/types/constants.ts";
 import {
   CitationFabricatedError,
   CloseChecklistFailedError,
@@ -67,8 +68,8 @@ import { cors } from "hono/cors";
 import { streamSSE } from "hono/streaming";
 import { ZodError } from "zod";
 
-const READINESS_CACHE_TTL_MS = 10_000;
-const SSE_HEARTBEAT_MS = 5000;
+const READINESS_CACHE_TTL_MS = 10 * CONSTANTS.MS_PER_SECOND;
+const SSE_HEARTBEAT_MS = 5 * CONSTANTS.MS_PER_SECOND;
 
 export interface CockpitAppDeps {
   config: AgentConfig;
@@ -156,6 +157,22 @@ function errorCode(error: unknown): string {
   if (error instanceof ZodError) {
     return "COCKPIT_REQUEST_INVALID";
   }
+  if (
+    error instanceof PimsAuthFailedError ||
+    error instanceof CockpitSessionInvalidError
+  ) {
+    return error.code;
+  }
+  if (
+    error instanceof CockpitPermissionDeniedError ||
+    error instanceof PimsPermissionDeniedError ||
+    error instanceof RoleToolDeniedError
+  ) {
+    return error.code;
+  }
+  if (error instanceof PimsNotFoundError) {
+    return error.code;
+  }
   if (error instanceof PimsBaseError) {
     return error.code;
   }
@@ -168,6 +185,22 @@ function errorMessage(error: unknown): string {
       .map((i) => `${i.path.join(".") || "root"}: ${i.message}`)
       .join(", ");
     return `Request body failed validation: ${details}`;
+  }
+  if (
+    error instanceof PimsAuthFailedError ||
+    error instanceof CockpitSessionInvalidError
+  ) {
+    return error.message;
+  }
+  if (
+    error instanceof CockpitPermissionDeniedError ||
+    error instanceof PimsPermissionDeniedError ||
+    error instanceof RoleToolDeniedError
+  ) {
+    return error.message;
+  }
+  if (error instanceof PimsNotFoundError) {
+    return error.message;
   }
   if (error instanceof PimsBaseError) {
     return error.message;
@@ -184,8 +217,14 @@ function parseIncidentId(raw: string): number {
 }
 
 export function createCockpitApp(deps: CockpitAppDeps): Hono<CockpitEnv> {
-  const clock = deps.clock ?? (() => new Date());
-  const hub = deps.hub ?? new CockpitEventHub(deps.events);
+  const clock =
+    deps.clock !== undefined && deps.clock !== null
+      ? deps.clock
+      : () => new Date();
+  const hub =
+    deps.hub !== undefined && deps.hub !== null
+      ? deps.hub
+      : new CockpitEventHub(deps.events);
   const app = new Hono<CockpitEnv>();
   let readiness: ReadinessCache | null = null;
 
@@ -200,7 +239,15 @@ export function createCockpitApp(deps: CockpitAppDeps): Hono<CockpitEnv> {
   );
 
   app.post("/api/login", async (c) => {
-    const body = await c.req.json().catch(() => ({}));
+    let body: unknown;
+    try {
+      body = await c.req.json();
+    } catch {
+      return c.json(
+        { error: "BAD_REQUEST", message: "Invalid JSON body" },
+        400,
+      );
+    }
     const request = CockpitLoginRequestSchema.parse(body);
     const session = await loginWithPims(
       request.username,
@@ -217,14 +264,21 @@ export function createCockpitApp(deps: CockpitAppDeps): Hono<CockpitEnv> {
       return;
     }
     const header = c.req.header("Authorization");
-    if (header === undefined || !header.startsWith("Bearer ")) {
-      throw new CockpitSessionInvalidError("Missing bearer token");
+    if (header === undefined || header === null) {
+      throw new CockpitSessionInvalidError("Missing authorization header");
+    }
+    if (!header.startsWith("Bearer ")) {
+      throw new CockpitSessionInvalidError("Invalid bearer token format");
     }
     const token = header.slice("Bearer ".length).trim();
     if (token === "") {
       throw new CockpitSessionInvalidError("Empty bearer token");
     }
-    c.set("session", deps.sessions.get(token));
+    const session = deps.sessions.get(token);
+    if (session === undefined || session === null) {
+      throw new CockpitSessionInvalidError("Session not found or expired");
+    }
+    c.set("session", session);
     await next();
   });
 
@@ -233,7 +287,7 @@ export function createCockpitApp(deps: CockpitAppDeps): Hono<CockpitEnv> {
     const expiresAtMs = new Date(session.expires_at_utc).getTime();
     const remainingSeconds = Math.max(
       0,
-      Math.floor((expiresAtMs - clock().getTime()) / 1000),
+      Math.floor((expiresAtMs - clock().getTime()) / CONSTANTS.MS_PER_SECOND),
     );
     return c.json({
       user_id: session.user_id,
@@ -258,7 +312,15 @@ export function createCockpitApp(deps: CockpitAppDeps): Hono<CockpitEnv> {
   app.post("/api/incidents/draft", async (c) => {
     const session = c.get("session");
     requirePermission(session, "change_incident");
-    const body = await c.req.json().catch(() => ({}));
+    let body: unknown;
+    try {
+      body = await c.req.json();
+    } catch {
+      return c.json(
+        { error: "BAD_REQUEST", message: "Invalid JSON body" },
+        400,
+      );
+    }
     const request = GuidedDraftRequestSchema.parse(body);
     const result = await draftGuidedIncident(
       request,
@@ -277,7 +339,15 @@ export function createCockpitApp(deps: CockpitAppDeps): Hono<CockpitEnv> {
   app.post("/api/incidents/explain", async (c) => {
     const session = c.get("session");
     requirePermission(session, "view_incident");
-    const body = await c.req.json().catch(() => ({}));
+    let body: unknown;
+    try {
+      body = await c.req.json();
+    } catch {
+      return c.json(
+        { error: "BAD_REQUEST", message: "Invalid JSON body" },
+        400,
+      );
+    }
     const request = GuidedExplainRequestSchema.parse(body);
     const result = await explainField(request, {
       config: deps.config,
@@ -292,75 +362,241 @@ export function createCockpitApp(deps: CockpitAppDeps): Hono<CockpitEnv> {
   app.post("/api/incidents", async (c) => {
     const session = c.get("session");
     requirePermission(session, "change_incident");
-    const body = await c.req.json().catch(() => ({}));
+    let body: unknown;
+    try {
+      body = await c.req.json();
+    } catch {
+      return c.json(
+        { error: "BAD_REQUEST", message: "Invalid JSON body" },
+        400,
+      );
+    }
     const request = GuidedSubmitRequestSchema.parse(body);
+
+    const hasReporter =
+      (request.rep_document_number !== null &&
+        request.rep_document_number !== undefined &&
+        request.rep_document_number !== "") ||
+      (request.rep_first_name !== null &&
+        request.rep_first_name !== undefined &&
+        request.rep_first_name !== "");
+
+    const hasEntity =
+      (request.entity_ruc !== null &&
+        request.entity_ruc !== undefined &&
+        request.entity_ruc !== "") ||
+      (request.entity_name !== null &&
+        request.entity_name !== undefined &&
+        request.entity_name !== "");
+
+    const hasDpo =
+      (request.dpo_contact_email !== null &&
+        request.dpo_contact_email !== undefined &&
+        request.dpo_contact_email !== "") ||
+      (request.dpo_contact_name !== null &&
+        request.dpo_contact_name !== undefined &&
+        request.dpo_contact_name !== "");
 
     const intakePayload: IntakePayload = {
       channel: "cockpit_guided",
       title: request.title,
-      description: request.description ?? undefined,
+      description:
+        request.description !== null && request.description !== undefined
+          ? request.description
+          : undefined,
       involves_personal_data: request.involves_personal_data,
       incident_date: request.incident_date,
-      incident_time: request.incident_time ?? undefined,
-      detection_date: request.detection_date ?? undefined,
-      detection_time: request.detection_time ?? undefined,
+      incident_time:
+        request.incident_time !== null && request.incident_time !== undefined
+          ? request.incident_time
+          : undefined,
+      detection_date:
+        request.detection_date !== null && request.detection_date !== undefined
+          ? request.detection_date
+          : undefined,
+      detection_time:
+        request.detection_time !== null && request.detection_time !== undefined
+          ? request.detection_time
+          : undefined,
       incident_type: request.incident_type,
       affected_data_types: request.affected_data_types,
       security_measures_adopted: request.security_measures_adopted,
       affected_cid: request.affected_cid,
-      num_affected_subjects: request.num_affected_subjects ?? undefined,
-      compromised_system: request.compromised_system ?? undefined,
-      affected_url: request.affected_url ?? undefined,
-      status: request.status ?? undefined,
-      severity: request.severity ?? undefined,
-      impact: request.impact ?? undefined,
-      reported_by: request.reported_by ?? undefined,
-      assigned_to: request.assigned_to ?? undefined,
-      affected_treatment: request.affected_treatment ?? undefined,
-      evidence_refs: request.evidence_refs ?? undefined,
-      measure_updated_registry: request.measure_updated_registry ?? undefined,
-      measure_new_security: request.measure_new_security ?? undefined,
-      measure_improved_policies: request.measure_improved_policies ?? undefined,
+      num_affected_subjects:
+        request.num_affected_subjects !== null &&
+        request.num_affected_subjects !== undefined
+          ? request.num_affected_subjects
+          : undefined,
+      compromised_system:
+        request.compromised_system !== null &&
+        request.compromised_system !== undefined
+          ? request.compromised_system
+          : undefined,
+      affected_url:
+        request.affected_url !== null && request.affected_url !== undefined
+          ? request.affected_url
+          : undefined,
+      status:
+        request.status !== null && request.status !== undefined
+          ? request.status
+          : undefined,
+      severity:
+        request.severity !== null && request.severity !== undefined
+          ? request.severity
+          : undefined,
+      impact:
+        request.impact !== null && request.impact !== undefined
+          ? request.impact
+          : undefined,
+      reported_by:
+        request.reported_by !== null && request.reported_by !== undefined
+          ? request.reported_by
+          : undefined,
+      assigned_to:
+        request.assigned_to !== null && request.assigned_to !== undefined
+          ? request.assigned_to
+          : undefined,
+      affected_treatment:
+        request.affected_treatment !== null &&
+        request.affected_treatment !== undefined
+          ? request.affected_treatment
+          : undefined,
+      evidence_refs:
+        request.evidence_refs !== null && request.evidence_refs !== undefined
+          ? request.evidence_refs
+          : undefined,
+      measure_updated_registry:
+        request.measure_updated_registry !== null &&
+        request.measure_updated_registry !== undefined
+          ? request.measure_updated_registry
+          : undefined,
+      measure_new_security:
+        request.measure_new_security !== null &&
+        request.measure_new_security !== undefined
+          ? request.measure_new_security
+          : undefined,
+      measure_improved_policies:
+        request.measure_improved_policies !== null &&
+        request.measure_improved_policies !== undefined
+          ? request.measure_improved_policies
+          : undefined,
       measure_considered_resolved:
-        request.measure_considered_resolved ?? undefined,
+        request.measure_considered_resolved !== null &&
+        request.measure_considered_resolved !== undefined
+          ? request.measure_considered_resolved
+          : undefined,
       measure_reported_authorities:
-        request.measure_reported_authorities ?? undefined,
-      resolved_date: request.resolved_date ?? undefined,
+        request.measure_reported_authorities !== null &&
+        request.measure_reported_authorities !== undefined
+          ? request.measure_reported_authorities
+          : undefined,
+      resolved_date:
+        request.resolved_date !== null && request.resolved_date !== undefined
+          ? request.resolved_date
+          : undefined,
       actions: request.actions.length > 0 ? request.actions : undefined,
-      reporter:
-        request.rep_document_number || request.rep_first_name
-          ? {
-              document_number: request.rep_document_number ?? undefined,
-              document_expiry: request.rep_document_expiry ?? undefined,
-              first_name: request.rep_first_name ?? undefined,
-              last_name_p: request.rep_last_name_p ?? undefined,
-              last_name_m: request.rep_last_name_m ?? undefined,
-              position: request.rep_position ?? undefined,
-              phone: request.rep_phone ?? undefined,
-              email: request.rep_email ?? undefined,
-            }
-          : undefined,
-      entity:
-        request.entity_ruc || request.entity_name
-          ? {
-              type: request.entity_type as "R" | "U" | undefined,
-              ruc: request.entity_ruc ?? undefined,
-              name: request.entity_name ?? undefined,
-              phone: request.entity_phone ?? undefined,
-              extension: request.entity_extension ?? undefined,
-              department: request.entity_department ?? undefined,
-              province: request.entity_province ?? undefined,
-              district: request.entity_district ?? undefined,
-            }
-          : undefined,
-      dpo:
-        request.dpo_contact_email || request.dpo_contact_name
-          ? {
-              name: request.dpo_contact_name ?? undefined,
-              email: request.dpo_contact_email ?? undefined,
-              phone: request.dpo_contact_phone ?? undefined,
-            }
-          : undefined,
+      reporter: hasReporter
+        ? {
+            document_number:
+              request.rep_document_number !== null &&
+              request.rep_document_number !== undefined
+                ? request.rep_document_number
+                : undefined,
+            document_expiry:
+              request.rep_document_expiry !== null &&
+              request.rep_document_expiry !== undefined
+                ? request.rep_document_expiry
+                : undefined,
+            first_name:
+              request.rep_first_name !== null &&
+              request.rep_first_name !== undefined
+                ? request.rep_first_name
+                : undefined,
+            last_name_p:
+              request.rep_last_name_p !== null &&
+              request.rep_last_name_p !== undefined
+                ? request.rep_last_name_p
+                : undefined,
+            last_name_m:
+              request.rep_last_name_m !== null &&
+              request.rep_last_name_m !== undefined
+                ? request.rep_last_name_m
+                : undefined,
+            position:
+              request.rep_position !== null &&
+              request.rep_position !== undefined
+                ? request.rep_position
+                : undefined,
+            phone:
+              request.rep_phone !== null && request.rep_phone !== undefined
+                ? request.rep_phone
+                : undefined,
+            email:
+              request.rep_email !== null && request.rep_email !== undefined
+                ? request.rep_email
+                : undefined,
+          }
+        : undefined,
+      entity: hasEntity
+        ? {
+            type:
+              request.entity_type !== null && request.entity_type !== undefined
+                ? (request.entity_type as "R" | "U")
+                : undefined,
+            ruc:
+              request.entity_ruc !== null && request.entity_ruc !== undefined
+                ? request.entity_ruc
+                : undefined,
+            name:
+              request.entity_name !== null && request.entity_name !== undefined
+                ? request.entity_name
+                : undefined,
+            phone:
+              request.entity_phone !== null &&
+              request.entity_phone !== undefined
+                ? request.entity_phone
+                : undefined,
+            extension:
+              request.entity_extension !== null &&
+              request.entity_extension !== undefined
+                ? request.entity_extension
+                : undefined,
+            department:
+              request.entity_department !== null &&
+              request.entity_department !== undefined
+                ? request.entity_department
+                : undefined,
+            province:
+              request.entity_province !== null &&
+              request.entity_province !== undefined
+                ? request.entity_province
+                : undefined,
+            district:
+              request.entity_district !== null &&
+              request.entity_district !== undefined
+                ? request.entity_district
+                : undefined,
+          }
+        : undefined,
+      dpo: hasDpo
+        ? {
+            name:
+              request.dpo_contact_name !== null &&
+              request.dpo_contact_name !== undefined
+                ? request.dpo_contact_name
+                : undefined,
+            email:
+              request.dpo_contact_email !== null &&
+              request.dpo_contact_email !== undefined
+                ? request.dpo_contact_email
+                : undefined,
+            phone:
+              request.dpo_contact_phone !== null &&
+              request.dpo_contact_phone !== undefined
+                ? request.dpo_contact_phone
+                : undefined,
+          }
+        : undefined,
     };
 
     const intakeResult = await deps.agent.orchestrator.intake(intakePayload);
@@ -382,7 +618,7 @@ export function createCockpitApp(deps: CockpitAppDeps): Hono<CockpitEnv> {
     const [timers, pendingDecisions, recentRag] = await Promise.all([
       getRegulatoryTimers(deps.store, clock),
       checkPendingDecisions(deps.adapter, deps.store, session),
-      deps.store.listRecentRagRetrievals(15).catch(() => []),
+      deps.store.listRecentRagRetrievals(15),
     ]);
     return c.json({
       timers,
@@ -399,7 +635,7 @@ export function createCockpitApp(deps: CockpitAppDeps): Hono<CockpitEnv> {
     const [authorityPack, subjectPack, rootCause] = await Promise.all([
       deps.store.getDraftPack(incident.incident_code, "authority"),
       deps.store.getDraftPack(incident.incident_code, "subject"),
-      deps.store.getRootCause(incident.incident_code).catch(() => null),
+      deps.store.getRootCause(incident.incident_code),
     ]);
     return c.json({
       incident_id: incident.id,
@@ -500,7 +736,7 @@ export function createCockpitApp(deps: CockpitAppDeps): Hono<CockpitEnv> {
     requirePermission(session, "change_incident");
     const incidentId = parseIncidentId(c.req.param("id"));
     const result = await deps.agent.orchestrator.approveAndNotify(incidentId, {
-      vetoWindowMin: 0,
+      vetoWindowMin: CONSTANTS.HUMAN_VETO_WINDOW_MIN,
     });
     return c.json({
       parked: result.parked,
@@ -514,7 +750,15 @@ export function createCockpitApp(deps: CockpitAppDeps): Hono<CockpitEnv> {
     const session = c.get("session");
     requirePermission(session, "change_incident");
     const incidentId = parseIncidentId(c.req.param("id"));
-    const body = await c.req.json().catch(() => ({}));
+    let body: unknown;
+    try {
+      body = await c.req.json();
+    } catch {
+      return c.json(
+        { error: "BAD_REQUEST", message: "Invalid JSON body" },
+        400,
+      );
+    }
     const request = RevisionRequestSchema.parse(body);
     const incident = await deps.adapter.getIncident(incidentId);
     const latest = await deps.store.getDraftPack(
@@ -542,7 +786,15 @@ export function createCockpitApp(deps: CockpitAppDeps): Hono<CockpitEnv> {
     const session = c.get("session");
     requirePermission(session, "change_incident");
     const incidentId = parseIncidentId(c.req.param("id"));
-    const body = await c.req.json().catch(() => ({}));
+    let body: unknown;
+    try {
+      body = await c.req.json();
+    } catch {
+      return c.json(
+        { error: "BAD_REQUEST", message: "Invalid JSON body" },
+        400,
+      );
+    }
     const request = ExemptionAttestationRequestSchema.parse(body);
     const incident = await deps.adapter.getIncident(incidentId);
     if (!incident.involves_personal_data || incident.status === "C") {
@@ -606,7 +858,15 @@ export function createCockpitApp(deps: CockpitAppDeps): Hono<CockpitEnv> {
   app.post("/api/chat", async (c) => {
     const session = c.get("session");
     requirePermission(session, "view_incident");
-    const body = await c.req.json().catch(() => ({}));
+    let body: unknown;
+    try {
+      body = await c.req.json();
+    } catch {
+      return c.json(
+        { error: "BAD_REQUEST", message: "Invalid JSON body" },
+        400,
+      );
+    }
     const request: ChatRequest = ChatRequestSchema.parse(body);
     const result = await handleChat(
       {
@@ -676,7 +936,13 @@ export function createCockpitApp(deps: CockpitAppDeps): Hono<CockpitEnv> {
   });
 
   app.notFound((c) =>
-    c.json({ error: "NOT_FOUND", message: "Route not found" }, 404),
+    c.json(
+      {
+        error: "NOT_FOUND",
+        message: `Route not found: ${c.req.method} ${c.req.path}`,
+      },
+      404,
+    ),
   );
 
   app.onError((error, c) => {

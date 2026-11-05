@@ -1,8 +1,9 @@
 ---
 import BaseLayout from "@pims/cockpit/ui/layouts/BaseLayout.astro";
+import { CONSTANTS } from "@pims/types/constants.ts";
 ---
 
-<BaseLayout title="Redireccionando... | Glass-Box Cockpit">
+<BaseLayout title={CONSTANTS.BRAND_TITLE_REDIRECTING}>
   <div class="flex items-center justify-center min-h-screen bg-slate-950 text-slate-400 text-sm">
     <div class="space-y-2 text-center">
       <div class="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto"></div>
@@ -13,11 +14,12 @@ import BaseLayout from "@pims/cockpit/ui/layouts/BaseLayout.astro";
 
 <script>
   import { getSession } from "@pims/cockpit/ui/lib/session.ts";
+  import { CONSTANTS } from "@pims/types/constants.ts";
 
   const session = getSession();
-  if (session) {
-    window.location.href = "/incidents";
+  if (session !== null && session !== undefined) {
+    window.location.href = CONSTANTS.COCKPIT_ROUTE_INCIDENTS;
   } else {
-    window.location.href = "/login";
+    window.location.href = CONSTANTS.COCKPIT_ROUTE_LOGIN;
   }
 </script>

@@ -1,11 +1,16 @@
 ---
 import { ClientRouter } from "astro:transitions";
+import { CONSTANTS } from "@pims/types/constants.ts";
 
 interface Props {
   title?: string;
 }
 
-const { title = "Glass-Box Cockpit | UNSA GESTITEL" } = Astro.props;
+const { title: propTitle } = Astro.props;
+const title =
+  propTitle !== undefined && propTitle.trim().length > 0
+    ? propTitle
+    : CONSTANTS.BRAND_TITLE_DEFAULT;
 ---
 
 <!doctype html>

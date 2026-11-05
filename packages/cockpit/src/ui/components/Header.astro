@@ -50,12 +50,22 @@ const { breadcrumb } = Astro.props;
 <script>
   import { sseClient } from "@pims/cockpit/ui/lib/sse-client.ts";
   import { formatRemainingTime } from "@pims/cockpit/ui/lib/utils.ts";
+  import { CONSTANTS } from "@pims/types/constants.ts";
 
   function updateStatus(status: string) {
     const statusBadge = document.getElementById("sse-status-badge");
     const pulseDot = document.getElementById("sse-pulse-dot");
     const statusText = document.getElementById("sse-status-text");
-    if (!statusBadge || !pulseDot || !statusText) return;
+    if (!statusBadge) {
+      throw new Error("Element #sse-status-badge not found in DOM");
+    }
+    if (!pulseDot) {
+      throw new Error("Element #sse-pulse-dot not found in DOM");
+    }
+    if (!statusText) {
+      throw new Error("Element #sse-status-text not found in DOM");
+    }
+
     if (status === "connected") {
       pulseDot.className = "w-2 h-2 rounded-full bg-emerald-400 animate-pulse";
       statusBadge.className = "flex items-center space-x-2 px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-950/60 text-emerald-300 border border-emerald-800/70";
@@ -71,25 +81,44 @@ const { breadcrumb } = Astro.props;
     }
   }
 
-  window.addEventListener("cockpit:connection-status", ((e: CustomEvent) => {
-    updateStatus(e.detail.status);
+  window.addEventListener(CONSTANTS.EVENT_COCKPIT_CONNECTION_STATUS, ((e: CustomEvent) => {
+    if (!e.detail || typeof e.detail !== "object" || typeof e.detail.status !== "string") {
+      updateStatus("disconnected");
+    } else {
+      updateStatus(e.detail.status);
+    }
   }) as EventListener);
 
   // Listen to timer ticks
-  window.addEventListener("cockpit:agent-event", ((e: CustomEvent) => {
+  window.addEventListener(CONSTANTS.EVENT_COCKPIT_AGENT_EVENT, ((e: CustomEvent) => {
+    if (!e.detail || typeof e.detail !== "object") {
+      return;
+    }
     const event = e.detail;
     const urgentTimer = document.getElementById("header-urgent-timer");
     const urgentLabel = document.getElementById("header-urgent-label");
-    if (event.type === "scheduler:timer_tick" && urgentTimer && urgentLabel) {
-      if (
-        (event.timer_kind === "T_AUTHORITY_72H" ||
-          event.timer_kind === "T72_AUTHORITY") &&
-        event.remaining_ms < 12 * 3600 * 1000
-      ) {
-        urgentTimer.classList.remove("hidden");
-        urgentTimer.classList.add("flex");
-        urgentLabel.textContent = `Art. 33: ${formatRemainingTime(event.remaining_ms)}`;
+
+    if (urgentTimer && urgentLabel) {
+      if (event.type === CONSTANTS.EVENT_SCHEDULER_TIMER_TICK) {
+        const isAuthorityTimer =
+          event.timer_kind === "T_AUTHORITY_72H" || event.timer_kind === "T72_AUTHORITY";
+        const isUrgent =
+          event.remaining_ms <
+          CONSTANTS.URGENT_TIMER_HOURS_THRESHOLD * CONSTANTS.MS_PER_HOUR;
+
+        if (isAuthorityTimer && isUrgent) {
+          urgentTimer.classList.remove("hidden");
+          urgentTimer.classList.add("flex");
+          urgentLabel.textContent = `Art. 33: ${formatRemainingTime(event.remaining_ms)}`;
+        } else {
+          urgentTimer.classList.remove("flex");
+          urgentTimer.classList.add("hidden");
+        }
+      } else {
+        // Non-timer agent event: retain urgentTimer current state
       }
+    } else {
+      throw new Error("Urgent timer elements missing in DOM header");
     }
   }) as EventListener);
 
@@ -98,14 +127,24 @@ const { breadcrumb } = Astro.props;
     const path = window.location.pathname;
     const breadcrumbLabel = document.getElementById("header-breadcrumb-label");
     if (breadcrumbLabel) {
-      if (path === "/new") breadcrumbLabel.textContent = "Nuevo Incidente";
-      else if (path.startsWith("/incidents")) breadcrumbLabel.textContent = "Incidentes";
-      else if (path.startsWith("/compliance")) breadcrumbLabel.textContent = "Cumplimiento DPO";
-      else if (path.startsWith("/security-log")) breadcrumbLabel.textContent = "Bitácora de Seguridad";
-      else if (path.startsWith("/chat")) breadcrumbLabel.textContent = "Asistente IA";
+      if (path === CONSTANTS.COCKPIT_ROUTE_NEW) {
+        breadcrumbLabel.textContent = "Nuevo Incidente";
+      } else if (path.startsWith(CONSTANTS.COCKPIT_ROUTE_INCIDENTS)) {
+        breadcrumbLabel.textContent = "Incidentes";
+      } else if (path.startsWith(CONSTANTS.COCKPIT_ROUTE_COMPLIANCE)) {
+        breadcrumbLabel.textContent = "Cumplimiento DPO";
+      } else if (path.startsWith(CONSTANTS.COCKPIT_ROUTE_SECURITY_LOG)) {
+        breadcrumbLabel.textContent = "Bitácora de Seguridad";
+      } else if (path.startsWith(CONSTANTS.COCKPIT_ROUTE_CHAT)) {
+        breadcrumbLabel.textContent = "Asistente IA";
+      } else {
+        breadcrumbLabel.textContent = "Gestión Integrada";
+      }
+    } else {
+      throw new Error("Element #header-breadcrumb-label not found in DOM");
     }
   }
 
-  document.addEventListener("astro:page-load", syncHeaderOnPageLoad);
+  document.addEventListener(CONSTANTS.EVENT_ASTRO_PAGE_LOAD, syncHeaderOnPageLoad);
   syncHeaderOnPageLoad();
 </script>

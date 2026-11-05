@@ -37,22 +37,45 @@ import { LogIn, ShieldAlert } from "lucide-astro";
 </div>
 
 <script>
+  import { CONSTANTS } from "@pims/types/constants.ts";
+
   const modal = document.getElementById("session-expired-modal");
   const btnLogin = document.getElementById("btn-re-login");
 
-  function showExpiredModal(reason?: string) {
-    if (!modal) return;
+  function showExpiredModal(reason?: string): void {
+    if (!modal) {
+      throw new Error("Element #session-expired-modal not found in DOM");
+    }
+    const messageEl = document.getElementById("session-expired-message");
+    if (messageEl) {
+      if (typeof reason === "string" && reason.trim().length > 0) {
+        messageEl.textContent = reason.trim();
+      } else {
+        messageEl.textContent =
+          "Su sesión de acceso con PIMS ha expirado o se ha revocado en el servidor. Debe identificarse nuevamente para continuar operando en el Cockpit.";
+      }
+    } else {
+      throw new Error("Element #session-expired-message not found in DOM");
+    }
     modal.classList.remove("hidden");
     modal.classList.add("flex");
   }
 
-  window.addEventListener("cockpit:session-expired", ((e: CustomEvent) => {
-    showExpiredModal(e.detail?.reason);
+  window.addEventListener(CONSTANTS.EVENT_COCKPIT_SESSION_EXPIRED, ((e: CustomEvent) => {
+    if (!e.detail || typeof e.detail !== "object") {
+      showExpiredModal(undefined);
+      return;
+    }
+    const detail = e.detail as { reason?: unknown };
+    const reason = typeof detail.reason === "string" ? detail.reason : undefined;
+    showExpiredModal(reason);
   }) as EventListener);
 
   if (btnLogin) {
     btnLogin.addEventListener("click", () => {
-      window.location.href = "/login?expired=1";
+      window.location.href = CONSTANTS.COCKPIT_ROUTE_LOGIN_EXPIRED;
     });
+  } else {
+    throw new Error("Element #btn-re-login not found in DOM");
   }
 </script>

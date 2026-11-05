@@ -1,0 +1,242 @@
+---
+import AppLayout from "@pims/cockpit/ui/layouts/AppLayout.astro";
+import BaseLayout from "@pims/cockpit/ui/layouts/BaseLayout.astro";
+import { CONSTANTS } from "@pims/types/constants.ts";
+import { AlertTriangle, ArrowLeft, ArrowRight, Clock, ShieldAlert } from "lucide-astro";
+
+export function getStaticPaths() {
+  return [
+    { params: { code: "INC-001" } },
+    { params: { code: "default" } },
+  ];
+}
+
+const { code } = Astro.params;
+
+// R1: Exhaustive route parameter checking. Ensure missing parameters or not-found states
+// render an explicit error page or 404 boundary rather than silently rendering an incomplete shell.
+const isCodeValid = code !== undefined && code.trim().length > 0 && code !== "default";
+const incidentCode = isCodeValid ? code.trim() : null;
+---
+
+{
+  !isCodeValid || incidentCode === null ? (
+    <BaseLayout title="Error 404: Incidente No Encontrado | Glass-Box Cockpit">
+      <div class="flex items-center justify-center min-h-screen bg-slate-950 p-4">
+        <div class="max-w-md w-full bg-slate-900 border border-rose-900/60 rounded-xl p-6 text-center space-y-4 shadow-xl">
+          <div class="w-12 h-12 bg-rose-950/80 border border-rose-800 rounded-full flex items-center justify-center mx-auto text-rose-400">
+            <AlertTriangle class="w-6 h-6" />
+          </div>
+          <h1 class="text-base font-bold text-white">Incidente No Encontrado</h1>
+          <p class="text-xs text-slate-400">
+            El parámetro de ruta no especifica un código de incidente válido o el registro no existe en el catálogo operativo.
+          </p>
+          <a
+            href={CONSTANTS.COCKPIT_ROUTE_INCIDENTS}
+            class="inline-flex items-center space-x-1.5 px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-xs font-semibold text-white transition-colors"
+          >
+            <ArrowLeft class="w-3.5 h-3.5" />
+            <span>Volver a incidentes</span>
+          </a>
+        </div>
+      </div>
+    </BaseLayout>
+  ) : (
+    <AppLayout
+      title={`Incidente ${incidentCode} | Glass-Box Cockpit`}
+      breadcrumb={`Incidentes / ${incidentCode}`}
+    >
+      <div id="incident-detail-root" data-incident-code={incidentCode} class="max-w-5xl mx-auto space-y-6">
+        <!-- Explicit Not Found / Error Boundary container -->
+        <div
+          id="incident-error-boundary"
+          class="hidden p-8 rounded-xl bg-rose-950/40 border border-rose-900/70 text-center space-y-4"
+        >
+          <ShieldAlert class="w-10 h-10 text-rose-400 mx-auto" />
+          <h2 id="incident-error-title" class="text-sm font-bold text-white uppercase tracking-wider">
+            Incidente no encontrado (404)
+          </h2>
+          <p id="incident-error-message" class="text-xs text-rose-200 max-w-md mx-auto">
+            El incidente solicitado no pudo ser localizado en el almacén de datos PIMS o no está disponible en la sesión actual.
+          </p>
+          <div class="pt-2">
+            <a
+              href={CONSTANTS.COCKPIT_ROUTE_INCIDENTS}
+              class="inline-flex items-center space-x-1.5 px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-medium text-slate-200 transition-colors"
+            >
+              <ArrowLeft class="w-3.5 h-3.5" />
+              <span>Volver a la lista de incidentes</span>
+            </a>
+          </div>
+        </div>
+
+        <!-- Detail Content Container -->
+        <div id="incident-content" class="space-y-6">
+          <div class="flex items-center justify-between pb-4 border-b border-slate-800">
+            <div class="flex items-center space-x-3">
+              <a
+                href={CONSTANTS.COCKPIT_ROUTE_INCIDENTS}
+                class="p-2 rounded-lg bg-slate-900 border border-slate-800 text-slate-400 hover:text-white transition-colors"
+                title="Volver"
+              >
+                <ArrowLeft class="w-4 h-4" />
+              </a>
+              <div>
+                <div class="flex items-center space-x-2">
+                  <h1 id="inc-header-code" class="text-xl font-bold font-mono text-white">
+                    {incidentCode}
+                  </h1>
+                  <span id="inc-header-status" class="px-2 py-0.5 rounded text-xs font-semibold border">
+                    Sincronizando...
+                  </span>
+                </div>
+                <p id="inc-header-title" class="text-xs text-slate-400 mt-1">
+                  Cargando información del incidente...
+                </p>
+              </div>
+            </div>
+            <div>
+              <a
+                href={CONSTANTS.COCKPIT_ROUTE_COMPLIANCE}
+                class="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium transition-colors flex items-center space-x-1.5"
+              >
+                <span>Puertas de Cumplimiento</span>
+                <ArrowRight class="w-3.5 h-3.5" />
+              </a>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+            <div class="bg-slate-900 border border-slate-800 rounded-xl p-4 space-y-2">
+              <span class="text-slate-500 font-semibold uppercase tracking-wider">Clasificación Operativa</span>
+              <div class="space-y-1.5">
+                <p><span class="text-slate-400">Tipo de incidente:</span> <span id="inc-type" class="text-slate-200 font-medium">—</span></p>
+                <p><span class="text-slate-400">Severidad:</span> <span id="inc-severity" class="text-slate-200 font-medium">—</span></p>
+                <p><span class="text-slate-400">Impacto:</span> <span id="inc-impact" class="text-slate-200 font-medium">—</span></p>
+              </div>
+            </div>
+
+            <div class="bg-slate-900 border border-slate-800 rounded-xl p-4 space-y-2">
+              <span class="text-slate-500 font-semibold uppercase tracking-wider">Línea Temporal & Operadores</span>
+              <div class="space-y-1.5">
+                <p><span class="text-slate-400">Detección:</span> <span id="inc-detection-date" class="text-slate-200 font-medium">—</span></p>
+                <p><span class="text-slate-400">Reportado por:</span> <span id="inc-reported-by" class="text-slate-200 font-medium">—</span></p>
+                <p><span class="text-slate-400">Asignado a:</span> <span id="inc-assigned-to" class="text-slate-200 font-medium">—</span></p>
+              </div>
+            </div>
+          </div>
+
+          <div class="bg-slate-900 border border-slate-800 rounded-xl p-4 space-y-2">
+            <span class="text-slate-500 font-semibold uppercase tracking-wider">Descripción de los Hechos</span>
+            <p id="inc-description" class="text-xs text-slate-300 leading-relaxed">—</p>
+          </div>
+        </div>
+      </div>
+    </AppLayout>
+  )
+}
+
+<script>
+  import { authenticatedFetch } from "@pims/cockpit/ui/lib/api.ts";
+  import { sseClient } from "@pims/cockpit/ui/lib/sse-client.ts";
+  import {
+    formatDateTime,
+    formatDisplayString,
+    getImpactLabel,
+    getSeverityBadgeClasses,
+    getSeverityLabel,
+    getStatusBadgeClasses,
+    getStatusLabel,
+  } from "@pims/cockpit/ui/lib/utils.ts";
+  import { CONSTANTS } from "@pims/types/constants.ts";
+  import type { CockpitIncidentSummary } from "@pims/types/cockpit.ts";
+
+  async function initIncidentDetailPage() {
+    const root = document.getElementById("incident-detail-root");
+    if (!root) return;
+    const targetCode = root.getAttribute("data-incident-code");
+    if (!targetCode) {
+      showNotFound("Código de incidente no especificado en el componente.");
+      return;
+    }
+
+    const errBoundary = document.getElementById("incident-error-boundary");
+    const content = document.getElementById("incident-content");
+    const headerTitle = document.getElementById("inc-header-title");
+    const headerStatus = document.getElementById("inc-header-status");
+    const incType = document.getElementById("inc-type");
+    const incSeverity = document.getElementById("inc-severity");
+    const incImpact = document.getElementById("inc-impact");
+    const incDetectionDate = document.getElementById("inc-detection-date");
+    const incReportedBy = document.getElementById("inc-reported-by");
+    const incAssignedTo = document.getElementById("inc-assigned-to");
+    const incDescription = document.getElementById("inc-description");
+
+    function showNotFound(msg: string) {
+      if (content) content.classList.add("hidden");
+      if (errBoundary) {
+        errBoundary.classList.remove("hidden");
+        const errMsg = document.getElementById("incident-error-message");
+        if (errMsg) errMsg.textContent = msg;
+      }
+    }
+
+    function renderIncident(inc: CockpitIncidentSummary) {
+      if (errBoundary) errBoundary.classList.add("hidden");
+      if (content) content.classList.remove("hidden");
+
+      if (headerTitle) headerTitle.textContent = formatDisplayString(inc.title);
+      if (headerStatus) {
+        headerStatus.textContent = getStatusLabel(inc.status);
+        headerStatus.className = `px-2 py-0.5 rounded text-xs font-semibold border ${getStatusBadgeClasses(inc.status)}`;
+      }
+      if (incType) incType.textContent = formatDisplayString(inc.incident_type);
+      if (incSeverity) {
+        incSeverity.textContent = getSeverityLabel(inc.severity);
+        incSeverity.className = `font-medium ${getSeverityBadgeClasses(inc.severity)}`;
+      }
+      if (incImpact) incImpact.textContent = getImpactLabel(inc.impact);
+      if (incDetectionDate) incDetectionDate.textContent = formatDateTime(inc.detection_date);
+      if (incReportedBy) incReportedBy.textContent = formatDisplayString(inc.reported_by);
+      if (incAssignedTo) incAssignedTo.textContent = formatDisplayString(inc.assigned_to);
+      if (incDescription) incDescription.textContent = formatDisplayString(inc.description, "Sin descripción registrada.");
+    }
+
+    // Try finding in active snapshot first
+    const snapshot = sseClient.getState().snapshot;
+    if (snapshot && Array.isArray(snapshot.incidents)) {
+      const match = snapshot.incidents.find((x) => x.incident_code === targetCode);
+      if (match) {
+        renderIncident(match);
+        return;
+      }
+    }
+
+    // Fetch from API
+    try {
+      const response = await authenticatedFetch(CONSTANTS.COCKPIT_API_INCIDENTS);
+      if (!response.ok) {
+        showNotFound(`El servidor respondió con estado ${response.status} al consultar el incidente.`);
+        return;
+      }
+      const data = (await response.json()) as { incidents: CockpitIncidentSummary[] };
+      if (!Array.isArray(data.incidents)) {
+        showNotFound("Respuesta de incidentes no contiene un arreglo válido.");
+        return;
+      }
+      const found = data.incidents.find((x) => x.incident_code === targetCode);
+      if (!found) {
+        showNotFound(`El incidente con código "${targetCode}" no existe en el sistema.`);
+        return;
+      }
+      renderIncident(found);
+    } catch (e) {
+      showNotFound("Error de red al consultar los datos del incidente.");
+    }
+  }
+
+  document.addEventListener(CONSTANTS.EVENT_ASTRO_PAGE_LOAD, () => {
+    void initIncidentDetailPage();
+  });
+  void initIncidentDetailPage();
+</script>

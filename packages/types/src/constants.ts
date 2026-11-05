@@ -194,6 +194,58 @@ export const CONSTANTS = {
     "Dashboard",
     "Configuración",
   ] as const,
+
+  // Cockpit Routes & API Endpoints
+  COCKPIT_ROUTE_HOME: "/",
+  COCKPIT_ROUTE_LOGIN: "/login",
+  COCKPIT_ROUTE_LOGIN_EXPIRED: "/login?expired=1",
+  COCKPIT_ROUTE_INCIDENTS: "/incidents",
+  COCKPIT_ROUTE_NEW: "/new",
+  COCKPIT_ROUTE_GUIDED_REPORT: "/guided-report",
+  COCKPIT_ROUTE_COMPLIANCE: "/compliance",
+  COCKPIT_ROUTE_CHAT: "/chat",
+  COCKPIT_ROUTE_SECURITY_LOG: "/security-log",
+  COCKPIT_API_INCIDENTS: "/api/incidents",
+  COCKPIT_API_LOGIN: "/api/login",
+  COCKPIT_API_EXPLAIN: "/api/incidents/explain",
+  COCKPIT_API_STREAM: "/api/stream",
+  COCKPIT_API_CHAT: "/api/chat",
+  COCKPIT_STORAGE_KEY_OPEN: "pims_floating_chat_open",
+
+  // Cockpit Custom Events & Framework Events
+  EVENT_ASTRO_PAGE_LOAD: "astro:page-load",
+  EVENT_COCKPIT_SNAPSHOT: "cockpit:snapshot",
+  EVENT_COCKPIT_AGENT_EVENT: "cockpit:agent-event",
+  EVENT_COCKPIT_SESSION_EXPIRED: "cockpit:session-expired",
+  EVENT_COCKPIT_FORM_UPDATED: "cockpit:form-updated",
+  EVENT_COCKPIT_CONNECTION_STATUS: "cockpit:connection-status",
+  EVENT_COCKPIT_OPEN_DECISION_MODAL: "cockpit:open-decision-modal",
+  EVENT_SCHEDULER_TIMER_TICK: "scheduler:timer_tick",
+
+  // Brand Titles & Locales
+  BRAND_TITLE_DEFAULT: "Glass-Box Cockpit | UNSA GESTITEL",
+  BRAND_TITLE_LOGIN: "Iniciar Sesión | Glass-Box Cockpit UNSA",
+  BRAND_TITLE_REDIRECTING: "Redireccionando... | Glass-Box Cockpit",
+  BRAND_TITLE_INCIDENTS: "Incidentes | Glass-Box Cockpit",
+  BRAND_TITLE_NEW: "Nuevo Incidente Guiado | Glass-Box Cockpit",
+  LOCALE_ES_PE: "es-PE",
+  LOCALE_ES_ES: "es-ES",
+
+  // Permissions
+  PERMISSION_VIEW_INCIDENT: "view_incident",
+  PERMISSION_CHANGE_INCIDENT: "change_incident",
+  PERMISSION_VIEW_SECURITYLOG: "view_securitylog",
+
+  // Cockpit UI Constants
+  DEFAULT_CHAT_TITLE: "Copiloto IA",
+  MODAL_FEEDBACK_DELAY_MS: 1200,
+  COPY_FEEDBACK_DELAY_MS: 1500,
+  SCORE_DECIMAL_PLACES: 4,
+  SHORT_SCORE_DECIMAL_PLACES: 3,
+  SHORT_HASH_LENGTH: 8,
+  MAX_INPUT_AUTORESIZE_PX: 112,
+  URGENT_TIMER_HOURS_THRESHOLD: 12,
+  DEFAULT_CIPHER_ALGORITHM: "AES-256-GCM",
 } as const;
 
 export type Constants = typeof CONSTANTS;

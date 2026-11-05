@@ -51,11 +51,50 @@ interface ISpeechRecognition extends EventTarget {
   onend: ((this: ISpeechRecognition, ev: Event) => void) | null;
 }
 
+export class BrowserSpeechApiUnavailableError extends Error {
+  readonly code = "BROWSER_SPEECH_API_UNAVAILABLE";
+  constructor() {
+    super(
+      "Web Speech API is not supported or available in this browser environment",
+    );
+    this.name = "BrowserSpeechApiUnavailableError";
+  }
+}
+
+export const DEFAULT_SPEECH_LANG = "es-PE";
+
+export function getSpeechRecognitionConstructor(): new () => ISpeechRecognition {
+  if (typeof window === "undefined") {
+    throw new BrowserSpeechApiUnavailableError();
+  }
+  const win = window as unknown as {
+    SpeechRecognition?: new () => ISpeechRecognition;
+    webkitSpeechRecognition?: new () => ISpeechRecognition;
+  };
+  if (typeof win.SpeechRecognition !== "undefined") {
+    return win.SpeechRecognition;
+  } else if (typeof win.webkitSpeechRecognition !== "undefined") {
+    return win.webkitSpeechRecognition;
+  } else {
+    throw new BrowserSpeechApiUnavailableError();
+  }
+}
+
 export function isSpeechSupported(): boolean {
-  return (
-    typeof window !== "undefined" &&
-    ("SpeechRecognition" in window || "webkitSpeechRecognition" in window)
-  );
+  if (typeof window === "undefined") {
+    return false;
+  }
+  const win = window as unknown as {
+    SpeechRecognition?: unknown;
+    webkitSpeechRecognition?: unknown;
+  };
+  if (typeof win.SpeechRecognition !== "undefined") {
+    return true;
+  } else if (typeof win.webkitSpeechRecognition !== "undefined") {
+    return true;
+  } else {
+    return false;
+  }
 }
 
 export class CockpitSpeechRecognizer {
@@ -66,37 +105,34 @@ export class CockpitSpeechRecognizer {
     return this.listening;
   }
 
-  start(options: SpeechRecognitionOptions = {}): boolean {
-    if (!isSpeechSupported()) {
-      options.onError?.("Reconocimiento de voz no soportado en este navegador");
-      return false;
+  start(options: SpeechRecognitionOptions): boolean {
+    if (!options || typeof options !== "object") {
+      throw new Error("SpeechRecognitionOptions must be provided to start()");
+    }
+
+    let SpeechRecognitionCtor: new () => ISpeechRecognition;
+    try {
+      SpeechRecognitionCtor = getSpeechRecognitionConstructor();
+    } catch (err) {
+      if (err instanceof BrowserSpeechApiUnavailableError) {
+        options.onError?.(err.message);
+        return false;
+      }
+      throw err;
     }
 
     // Abort existing session before starting new one
     this.stop();
 
-    const windowWithSpeech = window as unknown as {
-      SpeechRecognition?: new () => ISpeechRecognition;
-      webkitSpeechRecognition?: new () => ISpeechRecognition;
-    };
-
-    const SpeechRecognitionCtor =
-      windowWithSpeech.SpeechRecognition ||
-      windowWithSpeech.webkitSpeechRecognition;
-
-    if (!SpeechRecognitionCtor) {
-      options.onError?.("Reconocimiento de voz no disponible");
-      return false;
-    }
-
     try {
       const recognition = new SpeechRecognitionCtor();
       recognition.continuous = true;
       recognition.interimResults = true;
-      let targetLang = options.lang || "es-PE";
+      const targetLang =
+        options.lang !== undefined && options.lang.trim() !== ""
+          ? options.lang.trim()
+          : DEFAULT_SPEECH_LANG;
       recognition.lang = targetLang;
-
-      let fallbackAttempted = false;
 
       recognition.onstart = () => {
         this.listening = true;
@@ -109,9 +145,13 @@ export class CockpitSpeechRecognizer {
 
         for (let i = event.resultIndex; i < event.results.length; ++i) {
           const res = event.results[i];
-          if (!res) continue;
+          if (!res) {
+            continue;
+          }
           const alt = res[0];
-          if (!alt) continue;
+          if (!alt) {
+            continue;
+          }
           if (res.isFinal) {
             finalTranscript += alt.transcript;
           } else {
@@ -119,33 +159,29 @@ export class CockpitSpeechRecognizer {
           }
         }
 
-        const transcript = finalTranscript || interimTranscript;
-        const isFinal = Boolean(finalTranscript);
-        if (transcript) {
+        const transcript =
+          finalTranscript !== "" ? finalTranscript : interimTranscript;
+        const isFinal = finalTranscript !== "";
+        if (transcript !== "") {
           options.onResult?.(transcript, isFinal);
         }
       };
 
       recognition.onerror = (event: ISpeechRecognitionErrorEvent) => {
-        // Fallback from es-PE to es-ES if language is not supported
         if (
           event.error === "language-not-supported" &&
-          !fallbackAttempted &&
-          targetLang === "es-PE"
+          recognition.lang === "es-PE"
         ) {
-          fallbackAttempted = true;
-          targetLang = "es-ES";
-          recognition.lang = targetLang;
-          try {
-            recognition.start();
-            return;
-          } catch {
-            // Fallthrough to regular error handling
-          }
+          recognition.lang = "es-ES";
+          recognition.start();
+          return;
         }
-
         this.listening = false;
-        options.onError?.(event.error || "speech_recognition_error");
+        const errorMessage =
+          typeof event.error === "string" && event.error.trim() !== ""
+            ? event.error
+            : "speech_recognition_error";
+        options.onError?.(errorMessage);
       };
 
       recognition.onend = () => {
@@ -167,14 +203,10 @@ export class CockpitSpeechRecognizer {
   }
 
   stop(): void {
-    if (this.recognition) {
+    if (this.recognition !== null) {
       const rec = this.recognition;
       this.recognition = null;
-      try {
-        rec.abort();
-      } catch {
-        // Graceful catch for permission or state errors
-      }
+      rec.abort();
     }
     this.listening = false;
   }

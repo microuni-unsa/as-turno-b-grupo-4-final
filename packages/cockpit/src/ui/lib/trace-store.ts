@@ -3,6 +3,9 @@ import type { ChatTrace, ChatTraceSpan } from "@pims/types/cockpit.ts";
 
 export type AxisMode = "duration" | "turns" | "calls";
 
+const MAX_TRACES = 50;
+const SPAN_DURATION_MS = 50;
+
 export class TraceStore {
   private traces: ChatTrace[] = [];
   private activeTraceId: string | null = null;
@@ -23,6 +26,8 @@ export class TraceStore {
       ) => {
         this.ingestAgentEvent(e.detail);
       }) as EventListener);
+    } else {
+      // Non-browser / SSR environment: listener registration skipped
     }
   }
 
@@ -45,15 +50,17 @@ export class TraceStore {
       this.traces[existingIndex] = trace;
     } else {
       this.traces.unshift(trace);
-      if (this.traces.length > 50) {
+      if (this.traces.length > MAX_TRACES) {
         this.traces.pop();
       }
     }
 
     if (makeActive || this.activeTraceId === null) {
       this.activeTraceId = trace.id;
-      this.selectedSpanId =
-        trace.spans.length > 0 ? (trace.spans[0]?.id ?? null) : null;
+      const firstSpan = trace.spans.length > 0 ? trace.spans[0] : undefined;
+      this.selectedSpanId = firstSpan !== undefined ? firstSpan.id : null;
+    } else {
+      // Retain existing active trace and selection
     }
 
     this.notify();
@@ -64,32 +71,67 @@ export class TraceStore {
   }
 
   getActiveTrace(): ChatTrace | null {
-    if (!this.activeTraceId) {
-      return this.traces.length > 0 ? (this.traces[0] ?? null) : null;
+    if (this.activeTraceId === null) {
+      if (this.traces.length > 0) {
+        const first = this.traces[0];
+        return first !== undefined ? first : null;
+      }
+      return null;
     }
-    return this.traces.find((t) => t.id === this.activeTraceId) ?? null;
+    const found = this.traces.find((t) => t.id === this.activeTraceId);
+    return found !== undefined ? found : null;
   }
 
   setActiveTrace(id: string): void {
+    const targetTrace = this.traces.find((t) => t.id === id);
+    if (targetTrace === undefined) {
+      throw new Error(`TraceStore: trace with id ${id} not found`);
+    }
+
     if (this.activeTraceId !== id) {
       this.activeTraceId = id;
-      const t = this.getActiveTrace();
-      this.selectedSpanId =
-        t && t.spans.length > 0 ? (t.spans[0]?.id ?? null) : null;
+      if (targetTrace.spans.length > 0) {
+        const firstSpan = targetTrace.spans[0];
+        this.selectedSpanId = firstSpan !== undefined ? firstSpan.id : null;
+      } else {
+        this.selectedSpanId = null;
+      }
       this.notify();
+    } else {
+      // Already active trace
     }
   }
 
   getSelectedSpan(): ChatTraceSpan | null {
     const trace = this.getActiveTrace();
-    if (!trace || !this.selectedSpanId) return null;
-    return trace.spans.find((s) => s.id === this.selectedSpanId) ?? null;
+    if (trace === null || this.selectedSpanId === null) {
+      return null;
+    }
+    const found = trace.spans.find((s) => s.id === this.selectedSpanId);
+    return found !== undefined ? found : null;
   }
 
   setSelectedSpan(spanId: string | null): void {
+    if (spanId !== null) {
+      const activeTrace = this.getActiveTrace();
+      if (activeTrace === null) {
+        throw new Error(
+          "TraceStore: cannot select span without an active trace",
+        );
+      }
+      const spanExists = activeTrace.spans.some((s) => s.id === spanId);
+      if (!spanExists) {
+        throw new Error(
+          `TraceStore: span with id ${spanId} not found in active trace`,
+        );
+      }
+    }
+
     if (this.selectedSpanId !== spanId) {
       this.selectedSpanId = spanId;
       this.notify();
+    } else {
+      // Already selected span
     }
   }
 
@@ -98,9 +140,14 @@ export class TraceStore {
   }
 
   setAxisMode(mode: AxisMode): void {
+    if (mode !== "duration" && mode !== "turns" && mode !== "calls") {
+      throw new Error(`TraceStore: invalid axis mode: ${mode}`);
+    }
     if (this.axisMode !== mode) {
       this.axisMode = mode;
       this.notify();
+    } else {
+      // No change
     }
   }
 
@@ -112,6 +159,8 @@ export class TraceStore {
     if (this.compressIdle !== compress) {
       this.compressIdle = compress;
       this.notify();
+    } else {
+      // No change
     }
   }
 
@@ -120,8 +169,12 @@ export class TraceStore {
   }
 
   setSearchQuery(query: string): void {
-    this.searchQuery = query;
-    this.notify();
+    if (this.searchQuery !== query) {
+      this.searchQuery = query;
+      this.notify();
+    } else {
+      // No change
+    }
   }
 
   // Convert live agent events from SSE into an inspectable timeline trace
@@ -129,8 +182,14 @@ export class TraceStore {
     this.liveAgentEvents.push(event);
 
     const now = Date.now();
-    const incidentCode =
-      (event as { incident_code?: string }).incident_code || "AGENT-LOOP";
+    let incidentCode = "AGENT-LOOP";
+    if (
+      "incident_code" in event &&
+      typeof event.incident_code === "string" &&
+      event.incident_code.trim() !== ""
+    ) {
+      incidentCode = event.incident_code;
+    }
     const traceId = `live-agent-${incidentCode}`;
 
     let liveTrace = this.traces.find((t) => t.id === traceId);
@@ -155,19 +214,25 @@ export class TraceStore {
     const relStart = Number(
       ((now - this.liveAgentStartTime) / 1000).toFixed(2),
     );
-    const spanId = `live-span-${liveTrace.spans.length + 1}-${event.type.replace(/[^a-zA-Z0-9]/g, "_")}`;
+    const sanitizedType = event.type.replace(/[^a-zA-Z0-9]/g, "_");
+    const spanId = `live-span-${liveTrace.spans.length + 1}-${sanitizedType}`;
 
-    let spanType: "turn" | "tool" | "model" | "agent" = "agent";
-    let track = "Main";
-    if (event.type === "tool:mutation") {
-      spanType = "tool";
-      track = "Tools";
-      liveTrace.tool_calls_count += 1;
-    } else if (event.type === "rag:retrieval") {
+    let spanType: "turn" | "tool" | "model" | "agent";
+    let track: string;
+    if (event.type === "tool:mutation" || event.type === "rag:retrieval") {
       spanType = "tool";
       track = "Tools";
       liveTrace.tool_calls_count += 1;
     } else if (event.type === "role:transition") {
+      spanType = "agent";
+      track = "Main";
+    } else if (event.type === "scheduler:timer_tick") {
+      spanType = "turn";
+      track = "Timers";
+    } else if (event.type === "agent:error") {
+      spanType = "agent";
+      track = "Errors";
+    } else {
       spanType = "agent";
       track = "Main";
     }
@@ -178,8 +243,8 @@ export class TraceStore {
       type: spanType,
       status: event.type === "agent:error" ? "error" : "ok",
       start_ms: relStart * 1000,
-      end_ms: relStart * 1000 + 50,
-      duration_ms: 50,
+      end_ms: relStart * 1000 + SPAN_DURATION_MS,
+      duration_ms: SPAN_DURATION_MS,
       relative_start_ms: relStart * 1000,
       args: event as unknown as Record<string, unknown>,
       result: `Event: ${event.type}`,
@@ -195,16 +260,22 @@ export class TraceStore {
       { calls: number; errors: number; total_ms: number; max_ms: number }
     >();
     for (const span of liveTrace.spans.filter((s) => s.type === "tool")) {
-      const existing = toolMap.get(span.name) || {
-        calls: 0,
-        errors: 0,
-        total_ms: 0,
-        max_ms: 0,
-      };
-      existing.calls += 1;
-      existing.total_ms += span.duration_ms;
-      existing.max_ms = Math.max(existing.max_ms, span.duration_ms);
-      toolMap.set(span.name, existing);
+      const existing = toolMap.get(span.name);
+      if (existing !== undefined) {
+        existing.calls += 1;
+        existing.total_ms += span.duration_ms;
+        existing.max_ms = Math.max(existing.max_ms, span.duration_ms);
+        if (span.status === "error") {
+          existing.errors += 1;
+        }
+      } else {
+        toolMap.set(span.name, {
+          calls: 1,
+          errors: span.status === "error" ? 1 : 0,
+          total_ms: span.duration_ms,
+          max_ms: span.duration_ms,
+        });
+      }
     }
 
     liveTrace.aggregates = Array.from(toolMap.entries()).map(

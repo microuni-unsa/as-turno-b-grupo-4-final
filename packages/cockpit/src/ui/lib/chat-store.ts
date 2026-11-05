@@ -44,12 +44,40 @@ export interface ActiveMessageItem {
 }
 
 const STORAGE_KEY_V2 = "pims_cockpit_sessions_v2";
-const LEGACY_STORAGE_KEY = "pims_cockpit_chat";
+const DEFAULT_PERSONA: ChatPersona = "auditor";
+const DEFAULT_TITLE = "Nueva Conversación";
+const DEFAULT_CONSULTA_TITLE = "Nueva Consulta";
+const MAX_TITLE_LENGTH = 36;
+
+const TIME_FORMATTER = new Intl.DateTimeFormat("es-ES", {
+  hour: "2-digit",
+  minute: "2-digit",
+});
+
+function generateSessionId(): string {
+  if (
+    typeof crypto !== "undefined" &&
+    typeof crypto.randomUUID === "function"
+  ) {
+    return `sess-${crypto.randomUUID()}`;
+  }
+  return `sess-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+}
+
+function generateMessageId(): string {
+  if (
+    typeof crypto !== "undefined" &&
+    typeof crypto.randomUUID === "function"
+  ) {
+    return `msg-${crypto.randomUUID()}`;
+  }
+  return `msg-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+}
 
 export class ChatStore {
   private sessions: ChatSession[] = [];
   private activeSessionId: string = "";
-  private currentPersona: ChatPersona = "auditor";
+  private currentPersona: ChatPersona = DEFAULT_PERSONA;
   private listeners = new Set<() => void>();
 
   constructor() {
@@ -62,9 +90,9 @@ export class ChatStore {
       return;
     }
 
-    try {
-      const rawV2 = localStorage.getItem(STORAGE_KEY_V2);
-      if (rawV2) {
+    const rawV2 = localStorage.getItem(STORAGE_KEY_V2);
+    if (rawV2 !== null) {
+      try {
         const parsed = JSON.parse(rawV2) as {
           sessions: ChatSession[];
           activeSessionId: string;
@@ -72,58 +100,44 @@ export class ChatStore {
         };
         if (Array.isArray(parsed.sessions) && parsed.sessions.length > 0) {
           this.sessions = parsed.sessions;
-          this.activeSessionId =
-            parsed.activeSessionId || parsed.sessions[0]?.id || "";
-          this.currentPersona = parsed.persona || "auditor";
-          return;
-        }
-      }
-
-      // Check legacy format
-      const rawLegacy = localStorage.getItem(LEGACY_STORAGE_KEY);
-      if (rawLegacy) {
-        const parsedLegacy = JSON.parse(rawLegacy) as {
-          messages?: Array<{
-            id?: string;
-            sender: "user" | "assistant";
-            text: string;
-            persona?: ChatPersona;
-            response?: ChatResponse;
-            error?: boolean;
-            timestamp?: string;
-          }>;
-          persona?: ChatPersona;
-        };
-
-        if (
-          Array.isArray(parsedLegacy.messages) &&
-          parsedLegacy.messages.length > 0
-        ) {
-          const migratedSession = this.createSessionFromLegacy(
-            parsedLegacy.messages,
-            parsedLegacy.persona ?? "auditor",
+          const found = parsed.sessions.find(
+            (s) => s.id === parsed.activeSessionId,
           );
-          this.sessions = [migratedSession];
-          this.activeSessionId = migratedSession.id;
-          this.currentPersona = parsedLegacy.persona ?? "auditor";
-          this.saveToStorage();
+          if (found !== undefined) {
+            this.activeSessionId = found.id;
+          } else {
+            const first = parsed.sessions[0];
+            if (first !== undefined) {
+              this.activeSessionId = first.id;
+            } else {
+              throw new Error("ChatStore: sessions array is empty");
+            }
+          }
+          if (parsed.persona !== undefined) {
+            this.currentPersona = parsed.persona;
+          } else {
+            this.currentPersona = DEFAULT_PERSONA;
+          }
+          return;
+        } else {
+          this.initDefaultSession();
           return;
         }
+      } catch (err) {
+        throw new Error(
+          `ChatStore: failed to parse localStorage (${STORAGE_KEY_V2}): ${err instanceof Error ? err.message : String(err)}`,
+        );
       }
-    } catch (err) {
-      console.warn(
-        "Failed to load chat sessions from localStorage, initializing fresh session",
-        err,
-      );
+    } else {
+      this.initDefaultSession();
+      return;
     }
-
-    this.initDefaultSession();
   }
 
   private initDefaultSession(): void {
     const defaultSession = this.createNewSessionObject(
-      "Nueva Conversación",
-      "auditor",
+      DEFAULT_TITLE,
+      DEFAULT_PERSONA,
     );
     this.sessions = [defaultSession];
     this.activeSessionId = defaultSession.id;
@@ -137,7 +151,7 @@ export class ChatStore {
   ): ChatSession {
     const now = new Date().toISOString();
     return {
-      id: `sess-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      id: generateSessionId(),
       title,
       createdAt: now,
       updatedAt: now,
@@ -149,62 +163,11 @@ export class ChatStore {
     };
   }
 
-  private createSessionFromLegacy(
-    legacyMessages: Array<{
-      id?: string;
-      sender: "user" | "assistant";
-      text: string;
-      persona?: ChatPersona;
-      response?: ChatResponse;
-      error?: boolean;
-      timestamp?: string;
-    }>,
-    persona: ChatPersona,
-  ): ChatSession {
-    const session = this.createNewSessionObject("Conversación previa", persona);
-    let lastId: string | null = null;
-
-    for (const msg of legacyMessages) {
-      const nodeId =
-        msg.id ??
-        `node-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-      const node: ChatMessageNode = {
-        id: nodeId,
-        parentId: lastId,
-        childrenIds: [],
-        sender: msg.sender,
-        text: msg.text,
-        persona: msg.persona ?? persona,
-        response: msg.response,
-        reasoning: msg.response?.reasoning,
-        trace: msg.response?.trace,
-        error: msg.error,
-        timestamp:
-          msg.timestamp ??
-          new Date().toLocaleTimeString("es-ES", {
-            hour: "2-digit",
-            minute: "2-digit",
-          }),
-      };
-
-      session.nodes[nodeId] = node;
-      if (lastId === null) {
-        session.rootNodeIds.push(nodeId);
-      } else {
-        const parentNode = session.nodes[lastId];
-        if (parentNode) {
-          parentNode.childrenIds.push(nodeId);
-        }
-      }
-      lastId = nodeId;
-    }
-
-    session.activeLeafId = lastId;
-    return session;
-  }
-
   private saveToStorage(): void {
-    if (typeof window === "undefined") return;
+    if (typeof window === "undefined") {
+      this.notify();
+      return;
+    }
     try {
       localStorage.setItem(
         STORAGE_KEY_V2,
@@ -215,9 +178,8 @@ export class ChatStore {
         }),
       );
     } catch (err) {
-      console.warn(
-        "Storage quota exceeded or error saving chat sessions:",
-        err,
+      throw new Error(
+        `ChatStore: failed to write to localStorage: ${err instanceof Error ? err.message : String(err)}`,
       );
     }
     this.notify();
@@ -264,11 +226,13 @@ export class ChatStore {
   }
 
   setActiveSession(sessionId: string): void {
-    const exists = this.sessions.some((s) => s.id === sessionId);
-    if (exists && this.activeSessionId !== sessionId) {
+    const session = this.sessions.find((s) => s.id === sessionId);
+    if (!session) {
+      throw new Error(`ChatStore: session with id ${sessionId} not found`);
+    }
+    if (this.activeSessionId !== sessionId) {
       this.activeSessionId = sessionId;
-      const s = this.getActiveSession();
-      this.currentPersona = s.persona;
+      this.currentPersona = session.persona;
       this.saveToStorage();
     }
   }
@@ -278,8 +242,11 @@ export class ChatStore {
     persona?: ChatPersona,
     incidentCode?: string,
   ): ChatSession {
-    const finalTitle = title || "Nueva Consulta";
-    const finalPersona = persona || this.currentPersona || "auditor";
+    const finalTitle =
+      title !== undefined && title.trim() !== ""
+        ? title.trim()
+        : DEFAULT_CONSULTA_TITLE;
+    const finalPersona = persona !== undefined ? persona : this.currentPersona;
     const session = this.createNewSessionObject(
       finalTitle,
       finalPersona,
@@ -293,26 +260,37 @@ export class ChatStore {
   }
 
   deleteSession(sessionId: string): void {
+    const initialCount = this.sessions.length;
     this.sessions = this.sessions.filter((s) => s.id !== sessionId);
+    if (this.sessions.length === initialCount) {
+      throw new Error(`ChatStore: session with id ${sessionId} not found`);
+    }
     if (this.sessions.length === 0) {
       this.initDefaultSession();
     } else if (this.activeSessionId === sessionId) {
       const first = this.sessions[0];
-      if (first) {
+      if (first !== undefined) {
         this.activeSessionId = first.id;
         this.currentPersona = first.persona;
+      } else {
+        throw new Error("ChatStore: no remaining sessions found");
       }
     }
     this.saveToStorage();
   }
 
   renameSession(sessionId: string, title: string): void {
-    const s = this.sessions.find((s) => s.id === sessionId);
-    if (s && title.trim()) {
-      s.title = title.trim();
-      s.updatedAt = new Date().toISOString();
-      this.saveToStorage();
+    const session = this.sessions.find((s) => s.id === sessionId);
+    if (!session) {
+      throw new Error(`ChatStore: session with id ${sessionId} not found`);
     }
+    const trimmedTitle = title.trim();
+    if (trimmedTitle.length === 0) {
+      throw new Error("ChatStore: session title cannot be empty");
+    }
+    session.title = trimmedTitle;
+    session.updatedAt = new Date().toISOString();
+    this.saveToStorage();
   }
 
   clearAll(): void {
@@ -338,13 +316,11 @@ export class ChatStore {
     formContext?: Partial<GuidedReporting>,
   ): ChatMessageNode {
     const session = this.getActiveSession();
-    const nodeId = `msg-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-    const timestamp = new Date().toLocaleTimeString("es-ES", {
-      hour: "2-digit",
-      minute: "2-digit",
-    });
+    const nodeId = generateMessageId();
+    const timestamp = TIME_FORMATTER.format(new Date());
 
     const parentId = session.activeLeafId;
+    const finalPersona = persona !== undefined ? persona : this.currentPersona;
     const node: ChatMessageNode = {
       id: nodeId,
       parentId,
@@ -352,7 +328,7 @@ export class ChatStore {
       sender: "user",
       text,
       incidentCode,
-      persona: persona || this.currentPersona,
+      persona: finalPersona,
       timestamp,
       formContext,
     };
@@ -360,8 +336,15 @@ export class ChatStore {
     session.nodes[nodeId] = node;
     if (parentId === null) {
       session.rootNodeIds.push(nodeId);
-    } else if (session.nodes[parentId]) {
-      session.nodes[parentId].childrenIds.push(nodeId);
+    } else {
+      const parentNode = session.nodes[parentId];
+      if (parentNode !== undefined) {
+        parentNode.childrenIds.push(nodeId);
+      } else {
+        throw new Error(
+          `ChatStore: parent message node ${parentId} not found in session`,
+        );
+      }
     }
 
     session.activeLeafId = nodeId;
@@ -372,7 +355,10 @@ export class ChatStore {
       session.rootNodeIds.length === 1 &&
       Object.keys(session.nodes).length === 1
     ) {
-      session.title = text.length > 36 ? `${text.slice(0, 36)}…` : text;
+      session.title =
+        text.length > MAX_TITLE_LENGTH
+          ? `${text.slice(0, MAX_TITLE_LENGTH)}…`
+          : text;
     }
 
     this.saveToStorage();
@@ -385,11 +371,8 @@ export class ChatStore {
     error = false,
   ): ChatMessageNode {
     const session = this.getActiveSession();
-    const nodeId = `msg-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-    const timestamp = new Date().toLocaleTimeString("es-ES", {
-      hour: "2-digit",
-      minute: "2-digit",
-    });
+    const nodeId = generateMessageId();
+    const timestamp = TIME_FORMATTER.format(new Date());
 
     const node: ChatMessageNode = {
       id: nodeId,
@@ -408,8 +391,12 @@ export class ChatStore {
 
     session.nodes[nodeId] = node;
     const parentNode = session.nodes[parentUserNodeId];
-    if (parentNode) {
+    if (parentNode !== undefined) {
       parentNode.childrenIds.push(nodeId);
+    } else {
+      throw new Error(
+        `ChatStore: parent user node ${parentUserNodeId} not found in session`,
+      );
     }
 
     session.activeLeafId = nodeId;
@@ -425,15 +412,20 @@ export class ChatStore {
   ): ChatMessageNode {
     const session = this.getActiveSession();
     const targetNode = session.nodes[targetNodeId];
-    if (targetNode?.sender !== "user") {
-      throw new Error(`Invalid user node ${targetNodeId}`);
+    if (targetNode === undefined) {
+      throw new Error(`ChatStore: target node ${targetNodeId} not found`);
+    }
+    if (targetNode.sender !== "user") {
+      throw new Error(
+        `ChatStore: invalid user node ${targetNodeId}, sender is ${targetNode.sender}`,
+      );
     }
 
-    const newNodeId = `msg-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-    const timestamp = new Date().toLocaleTimeString("es-ES", {
-      hour: "2-digit",
-      minute: "2-digit",
-    });
+    const newNodeId = generateMessageId();
+    const timestamp = TIME_FORMATTER.format(new Date());
+
+    const resolvedFormContext =
+      formContext !== undefined ? formContext : targetNode.formContext;
 
     const newNode: ChatMessageNode = {
       id: newNodeId,
@@ -444,7 +436,7 @@ export class ChatStore {
       incidentCode: targetNode.incidentCode,
       persona: targetNode.persona,
       timestamp,
-      formContext: formContext ?? targetNode.formContext,
+      formContext: resolvedFormContext,
     };
 
     session.nodes[newNodeId] = newNode;
@@ -452,8 +444,12 @@ export class ChatStore {
       session.rootNodeIds.push(newNodeId);
     } else {
       const parentNode = session.nodes[targetNode.parentId];
-      if (parentNode) {
+      if (parentNode !== undefined) {
         parentNode.childrenIds.push(newNodeId);
+      } else {
+        throw new Error(
+          `ChatStore: parent node ${targetNode.parentId} not found in session`,
+        );
       }
     }
 
@@ -465,15 +461,31 @@ export class ChatStore {
 
   switchBranch(nodeId: string): void {
     const session = this.getActiveSession();
-    if (!session.nodes[nodeId]) return;
+    const targetNode = session.nodes[nodeId];
+    if (targetNode === undefined) {
+      throw new Error(
+        `ChatStore: cannot switch branch, node ${nodeId} not found in session`,
+      );
+    }
 
-    // From this node, navigate downwards following the first/latest child until a leaf is found
     let currentId = nodeId;
-    while ((session.nodes[currentId]?.childrenIds.length ?? 0) > 0) {
-      const children = session.nodes[currentId]?.childrenIds;
-      if (!children || children.length === 0) break;
+    while (true) {
+      const currentNode = session.nodes[currentId];
+      if (currentNode === undefined) {
+        throw new Error(
+          `ChatStore: node ${currentId} not found during branch descent`,
+        );
+      }
+      const children = currentNode.childrenIds;
+      if (children.length === 0) {
+        break;
+      }
       const nextId = children[children.length - 1];
-      if (!nextId) break;
+      if (nextId === undefined) {
+        throw new Error(
+          `ChatStore: child node index invalid for node ${currentId}`,
+        );
+      }
       currentId = nextId;
     }
 
@@ -484,63 +496,64 @@ export class ChatStore {
 
   getActiveBranchMessages(): ActiveMessageItem[] {
     const session = this.getActiveSession();
-    if (!session.activeLeafId || !session.nodes[session.activeLeafId]) {
+    if (session.activeLeafId === null) {
       return [];
+    }
+    const leafNode = session.nodes[session.activeLeafId];
+    if (leafNode === undefined) {
+      throw new Error(
+        `ChatStore: active leaf node ${session.activeLeafId} not found in session`,
+      );
     }
 
     // Build path from activeLeafId upwards to root
     const path: ChatMessageNode[] = [];
-    let current: ChatMessageNode | null =
-      session.nodes[session.activeLeafId] ?? null;
-    while (current) {
+    let current: ChatMessageNode | null = leafNode;
+    while (current !== null) {
       path.unshift(current);
-      current = current.parentId
-        ? (session.nodes[current.parentId] ?? null)
-        : null;
+      if (current.parentId !== null) {
+        const parentNode: ChatMessageNode | undefined =
+          session.nodes[current.parentId];
+        if (parentNode !== undefined) {
+          current = parentNode;
+        } else {
+          throw new Error(
+            `ChatStore: parent node ${current.parentId} not found for node ${current.id}`,
+          );
+        }
+      } else {
+        current = null;
+      }
     }
 
     // Compute sibling counts and branch indices
     return path.map((node) => {
-      let siblings: string[] = [];
+      let siblings: string[];
       if (node.parentId === null) {
         siblings = session.rootNodeIds;
       } else {
         const parent = session.nodes[node.parentId];
-        siblings = parent ? parent.childrenIds : [node.id];
+        if (parent !== undefined) {
+          siblings = parent.childrenIds;
+        } else {
+          throw new Error(
+            `ChatStore: parent node ${node.parentId} not found for sibling lookup`,
+          );
+        }
       }
       const branchIndex = siblings.indexOf(node.id);
+      if (branchIndex === -1) {
+        throw new Error(
+          `ChatStore: node ${node.id} not found among its siblings`,
+        );
+      }
       return {
         node,
-        branchIndex: Math.max(branchIndex, 0),
-        totalBranches: siblings.length > 0 ? siblings.length : 1,
+        branchIndex,
+        totalBranches: siblings.length,
         siblingIds: siblings,
       };
     });
-  }
-
-  // Backward compatibility methods for existing code
-  getMessages(): Array<{
-    id: string;
-    sender: "user" | "assistant";
-    text: string;
-    persona?: ChatPersona;
-    response?: ChatResponse;
-    error?: boolean;
-    timestamp: string;
-    form_mutation?: ChatFormMutation;
-    formContext?: Partial<GuidedReporting>;
-  }> {
-    return this.getActiveBranchMessages().map((item) => ({
-      id: item.node.id,
-      sender: item.node.sender,
-      text: item.node.text,
-      persona: item.node.persona,
-      response: item.node.response,
-      error: item.node.error,
-      timestamp: item.node.timestamp,
-      form_mutation: item.node.form_mutation,
-      formContext: item.node.formContext,
-    }));
   }
 
   clear(): void {

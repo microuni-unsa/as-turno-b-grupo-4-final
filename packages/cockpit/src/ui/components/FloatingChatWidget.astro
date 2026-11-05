@@ -213,8 +213,9 @@ import {
     ChatResponse,
     GuidedReporting,
   } from "@pims/types/cockpit.ts";
+  import { CONSTANTS } from "@pims/types/constants.ts";
 
-  const STORAGE_KEY_OPEN = "pims_floating_chat_open";
+  const STORAGE_KEY_OPEN = CONSTANTS.COCKPIT_STORAGE_KEY_OPEN;
 
   function escapeHtml(str: string): string {
     return str
@@ -263,11 +264,13 @@ import {
     switch (key) {
       case "severity": {
         const sevLabels: Record<string, string> = { B: "Baja", M: "Media", A: "Alta", C: "Crítica" };
-        return `Severidad: ${sevLabels[String(val)] ?? String(val)}`;
+        const sev = sevLabels[String(val)];
+        return `Severidad: ${typeof sev === "string" ? sev : String(val)}`;
       }
       case "impact": {
         const impLabels: Record<string, string> = { B: "Bajo", M: "Medio", A: "Alto", C: "Crítico" };
-        return `Impacto: ${impLabels[String(val)] ?? String(val)}`;
+        const imp = impLabels[String(val)];
+        return `Impacto: ${typeof imp === "string" ? imp : String(val)}`;
       }
       case "num_affected_subjects":
         return `Sujetos: ${val}`;
@@ -284,6 +287,20 @@ import {
       default:
         return `${key}: ${String(val).slice(0, 20)}`;
     }
+  }
+
+  function formatScoreValue(score: number | null): string {
+    if (score === null || Number.isNaN(score)) {
+      return "—";
+    }
+    return score.toFixed(CONSTANTS.SHORT_SCORE_DECIMAL_PLACES);
+  }
+
+  function formatRankValue(rank: number | null): string {
+    if (rank === null || Number.isNaN(rank)) {
+      return "—";
+    }
+    return `#${rank}`;
   }
 
   function getPersonaLabel(persona: ChatPersona): string {
@@ -345,14 +362,19 @@ import {
     // --- Visibility on Current Route ---
     function updateVisibility(): void {
       const path = window.location.pathname;
-      const isChatPage = path === "/chat" || path.startsWith("/chat/");
+      const isChatPage =
+        path === CONSTANTS.COCKPIT_ROUTE_CHAT ||
+        path.startsWith(`${CONSTANTS.COCKPIT_ROUTE_CHAT}/`);
       if (isChatPage) {
         container?.classList.add("hidden");
         return;
+      } else {
+        container?.classList.remove("hidden");
       }
-      container?.classList.remove("hidden");
 
-      const isOnNewPage = path === "/new" || path.startsWith("/new/");
+      const isOnNewPage =
+        path === CONSTANTS.COCKPIT_ROUTE_NEW ||
+        path.startsWith(`${CONSTANTS.COCKPIT_ROUTE_NEW}/`);
       if (contextBadge) {
         if (isOnNewPage) {
           contextBadge.classList.remove("hidden");
@@ -361,6 +383,8 @@ import {
           contextBadge.classList.add("hidden");
           contextBadge.classList.remove("flex");
         }
+      } else {
+        // Explicit non-fatal handling when context badge element is absent
       }
 
       if (quickActions) {
@@ -369,6 +393,8 @@ import {
         } else {
           quickActions.classList.add("hidden");
         }
+      } else {
+        // Explicit non-fatal handling when quick actions container is absent
       }
     }
 
@@ -395,6 +421,8 @@ import {
       if (speechRecognizer.isListening()) {
         speechRecognizer.stop();
         setSpeechUi(false);
+      } else {
+        setSpeechUi(false);
       }
     }
 
@@ -410,7 +438,13 @@ import {
     function updateHeader(): void {
       const session = chatStore.getActiveSession();
       if (headerTitle) {
-        headerTitle.textContent = session.title || "Copiloto IA";
+        const title =
+          typeof session.title === "string" && session.title.trim().length > 0
+            ? session.title.trim()
+            : CONSTANTS.DEFAULT_CHAT_TITLE;
+        headerTitle.textContent = title;
+      } else {
+        // Header title element missing in DOM
       }
       updatePersonaBadges();
     }
@@ -423,11 +457,15 @@ import {
       if (fabPersonaBadge) {
         fabPersonaBadge.textContent = label;
         fabPersonaBadge.className = `text-[10px] font-semibold px-2 py-0.5 rounded-full border ${classes}`;
+      } else {
+        // Fab badge missing
       }
 
       if (personaToggleBtn) {
         personaToggleBtn.textContent = label;
         personaToggleBtn.className = `text-[10px] font-semibold px-2 py-0.5 rounded-full border hover:opacity-80 transition-opacity cursor-pointer ${classes}`;
+      } else {
+        // Toggle btn missing
       }
     }
 
@@ -461,17 +499,19 @@ import {
         setSpeechUi(false);
       } else {
         expandWindow();
-        const base = inputEl?.value || "";
+        const base = inputEl ? inputEl.value : "";
         const started = speechRecognizer.start({
-          lang: "es-PE",
+          lang: CONSTANTS.LOCALE_ES_PE,
           onStart: () => {
             setSpeechUi(true);
           },
           onResult: (transcript) => {
             if (inputEl) {
-              const prefix = base ? `${base.trim()} ` : "";
+              const prefix = base.trim().length > 0 ? `${base.trim()} ` : "";
               inputEl.value = prefix + transcript;
               autoResizeInput();
+            } else {
+              // Input element not present
             }
           },
           onError: () => {
@@ -483,6 +523,8 @@ import {
         });
         if (!started) {
           setSpeechUi(false);
+        } else {
+          setSpeechUi(true);
         }
       }
     }
@@ -491,7 +533,7 @@ import {
     function autoResizeInput(): void {
       if (!inputEl) return;
       inputEl.style.height = "auto";
-      inputEl.style.height = `${Math.min(inputEl.scrollHeight, 112)}px`;
+      inputEl.style.height = `${Math.min(inputEl.scrollHeight, CONSTANTS.MAX_INPUT_AUTORESIZE_PX)}px`;
     }
 
     // --- Render Messages ---
@@ -515,166 +557,183 @@ import {
             </div>
           </div>
         `;
-        return;
-      }
+      } else {
+        messagesContainer.innerHTML = "";
 
-      messagesContainer.innerHTML = "";
+        for (const item of activeItems) {
+          const { node } = item;
+          const msgDiv = document.createElement("div");
 
-      for (const item of activeItems) {
-        const { node } = item;
-        const msgDiv = document.createElement("div");
-
-        if (node.sender === "user") {
-          msgDiv.className = "flex justify-end";
-          msgDiv.innerHTML = `
-            <div class="max-w-[85%] bg-blue-600 text-white rounded-2xl rounded-br-sm p-3 shadow-md space-y-1">
-              <p class="leading-relaxed whitespace-pre-wrap">${escapeHtml(node.text)}</p>
-              <div class="text-[9px] text-blue-200/80 text-right font-mono">${node.timestamp}</div>
-            </div>
-          `;
-        } else {
-          msgDiv.className = "flex justify-start";
-
-          // Reasoning details
-          let reasoningHtml = "";
-          if (node.reasoning) {
-            reasoningHtml = `
-              <details class="group/details bg-indigo-950/30 border border-indigo-900/50 rounded-xl overflow-hidden mb-2 text-[11px]">
-                <summary class="cursor-pointer px-2.5 py-1.5 text-indigo-300 font-medium hover:bg-indigo-950/60 flex items-center justify-between select-none">
-                  <div class="flex items-center space-x-1.5">
-                    <span>🧠</span>
-                    <span>Ver razonamiento regulatorio</span>
-                  </div>
-                  <span class="text-[9px] text-indigo-400 group-open/details:rotate-180 transition-transform">▼</span>
-                </summary>
-                <div class="p-2.5 text-indigo-200/90 leading-relaxed border-t border-indigo-900/40 bg-indigo-950/20 whitespace-pre-wrap">
-                  ${escapeHtml(node.reasoning)}
-                </div>
-              </details>
-            `;
-          }
-
-          // Verbatim Citations
-          let citationsHtml = "";
-          if (node.response?.citations && node.response.citations.length > 0) {
-            citationsHtml = `
-              <div class="mt-2.5 pt-2 border-t border-slate-800 space-y-2">
-                <div class="text-[10px] font-semibold text-slate-400 uppercase tracking-wider flex items-center space-x-1">
-                  <span>📖</span>
-                  <span>Citas Normativas (${node.response.citations.length})</span>
-                </div>
-                <div class="space-y-1.5">
-                  ${node.response.citations
-                    .map(
-                      (c) => `
-                    <div class="bg-slate-950 p-2 rounded-lg border border-slate-800 space-y-1">
-                      <div class="flex items-center justify-between">
-                        <span class="font-semibold text-blue-400 text-[10px]">${escapeHtml(c.citation)}</span>
-                        <span class="font-mono text-[9px] text-slate-500" title="${c.chunk_sha256}">${c.chunk_sha256.slice(0, 8)}…</span>
-                      </div>
-                      <blockquote class="italic text-slate-300 bg-slate-900/60 border border-slate-800 rounded p-1.5 text-[10px] leading-relaxed font-serif">
-                        "${escapeHtml(c.text)}"
-                      </blockquote>
-                      <div class="flex flex-wrap items-center gap-1.5 text-[9px] text-slate-500 font-mono pt-0.5">
-                        <span>Dense: ${c.dense_score !== null ? c.dense_score.toFixed(3) : "—"}</span>
-                        <span>BM25: ${c.bm25_rank ? `#${c.bm25_rank}` : "—"}</span>
-                        <span>RRF: ${c.rrf_score.toFixed(3)}</span>
-                        <span class="text-emerald-400 font-medium">Rerank: ${c.rerank_score.toFixed(3)}</span>
-                      </div>
-                    </div>
-                  `
-                    )
-                    .join("")}
-                </div>
+          if (node.sender === "user") {
+            msgDiv.className = "flex justify-end";
+            msgDiv.innerHTML = `
+              <div class="max-w-[85%] bg-blue-600 text-white rounded-2xl rounded-br-sm p-3 shadow-md space-y-1">
+                <p class="leading-relaxed whitespace-pre-wrap">${escapeHtml(node.text)}</p>
+                <div class="text-[9px] text-blue-200/80 text-right font-mono">${node.timestamp}</div>
               </div>
             `;
-          }
+          } else {
+            msgDiv.className = "flex justify-start";
 
-          // Form Mutation Card
-          let mutationHtml = "";
-          if (node.form_mutation) {
-            const mut = node.form_mutation;
-            const badges: string[] = [];
-            for (const [key, val] of Object.entries(mut.fields || {})) {
-              const lbl = formatFieldLabel(key, val);
-              if (lbl) {
-                badges.push(
-                  `<span class="px-1.5 py-0.5 rounded bg-blue-900/40 text-blue-300 border border-blue-700/50 font-mono text-[9px]">${escapeHtml(lbl)}</span>`
-                );
-              }
+            // Reasoning details
+            let reasoningHtml = "";
+            if (node.reasoning) {
+              reasoningHtml = `
+                <details class="group/details bg-indigo-950/30 border border-indigo-900/50 rounded-xl overflow-hidden mb-2 text-[11px]">
+                  <summary class="cursor-pointer px-2.5 py-1.5 text-indigo-300 font-medium hover:bg-indigo-950/60 flex items-center justify-between select-none">
+                    <div class="flex items-center space-x-1.5">
+                      <span>🧠</span>
+                      <span>Ver razonamiento regulatorio</span>
+                    </div>
+                    <span class="text-[9px] text-indigo-400 group-open/details:rotate-180 transition-transform">▼</span>
+                  </summary>
+                  <div class="p-2.5 text-indigo-200/90 leading-relaxed border-t border-indigo-900/40 bg-indigo-950/20 whitespace-pre-wrap">
+                    ${escapeHtml(node.reasoning)}
+                  </div>
+                </details>
+              `;
+            } else {
+              reasoningHtml = "";
             }
 
-            mutationHtml = `
-              <div class="mt-2.5 p-2.5 rounded-xl bg-blue-950/40 border border-blue-800/80 space-y-2 form-mutation-card">
-                <div class="flex items-center space-x-1.5 text-blue-300 font-semibold text-[11px]">
-                  <span>✨</span>
-                  <span>Propuesta para el Formulario</span>
+            // Verbatim Citations
+            let citationsHtml = "";
+            if (node.response?.citations && node.response.citations.length > 0) {
+              citationsHtml = `
+                <div class="mt-2.5 pt-2 border-t border-slate-800 space-y-2">
+                  <div class="text-[10px] font-semibold text-slate-400 uppercase tracking-wider flex items-center space-x-1">
+                    <span>📖</span>
+                    <span>Citas Normativas (${node.response.citations.length})</span>
+                  </div>
+                  <div class="space-y-1.5">
+                    ${node.response.citations
+                      .map(
+                        (c) => `
+                      <div class="bg-slate-950 p-2 rounded-lg border border-slate-800 space-y-1">
+                        <div class="flex items-center justify-between">
+                          <span class="font-semibold text-blue-400 text-[10px]">${escapeHtml(c.citation)}</span>
+                          <span class="font-mono text-[9px] text-slate-500" title="${c.chunk_sha256}">${c.chunk_sha256.slice(0, CONSTANTS.SHORT_HASH_LENGTH)}…</span>
+                        </div>
+                        <blockquote class="italic text-slate-300 bg-slate-900/60 border border-slate-800 rounded p-1.5 text-[10px] leading-relaxed font-serif">
+                          "${escapeHtml(c.text)}"
+                        </blockquote>
+                        <div class="flex flex-wrap items-center gap-1.5 text-[9px] text-slate-500 font-mono pt-0.5">
+                          <span>Dense: ${formatScoreValue(c.dense_score)}</span>
+                          <span>BM25: ${formatRankValue(c.bm25_rank)}</span>
+                          <span>RRF: ${formatScoreValue(c.rrf_score)}</span>
+                          <span class="text-emerald-400 font-medium">Rerank: ${formatScoreValue(c.rerank_score)}</span>
+                        </div>
+                      </div>
+                    `
+                      )
+                      .join("")}
+                  </div>
                 </div>
-                <p class="text-[11px] text-blue-100/90 leading-relaxed">${escapeHtml(mut.summary)}</p>
-                ${badges.length > 0 ? `<div class="flex flex-wrap gap-1">${badges.join("")}</div>` : ""}
-                <div class="flex items-center space-x-2 pt-1.5 border-t border-blue-900/50">
-                  <button
-                    type="button"
-                    class="btn-apply-mutation px-2 py-1 rounded bg-blue-600 hover:bg-blue-500 text-white font-medium text-[10px] transition-colors flex items-center space-x-1 shadow"
-                  >
-                    <span>✓</span>
-                    <span>Aplicar al Formulario</span>
-                  </button>
-                  <button
-                    type="button"
-                    class="btn-view-mutation px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 text-[10px] transition-colors flex items-center space-x-1"
-                  >
-                    <span>👁️</span>
-                    <span>Ver en Formulario</span>
-                  </button>
-                </div>
-              </div>
-            `;
-          }
+              `;
+            } else {
+              citationsHtml = "";
+            }
 
-          msgDiv.innerHTML = `
-            <div class="max-w-[92%] bg-slate-900/90 border border-slate-800 rounded-2xl rounded-bl-sm p-3 shadow-md space-y-2">
-              ${reasoningHtml}
-              <div class="text-slate-100 leading-relaxed">${renderMarkdown(node.text)}</div>
-              ${citationsHtml}
-              ${mutationHtml}
-              <div class="text-[9px] text-slate-500 font-mono pt-1 text-right">${node.timestamp}</div>
-            </div>
-          `;
-
-          // Form Mutation actions
-          if (node.form_mutation) {
-            const mut = node.form_mutation;
-            const applyBtn = msgDiv.querySelector(".btn-apply-mutation");
-            const viewBtn = msgDiv.querySelector(".btn-view-mutation");
-
-            applyBtn?.addEventListener("click", () => {
-              applyFormMutationToDom(mut);
-              emitFormUpdatedEvent(mut);
-              applyBtn.innerHTML = "<span>✓</span><span>¡Aplicado!</span>";
-              applyBtn.classList.remove("bg-blue-600", "hover:bg-blue-500");
-              applyBtn.classList.add("bg-emerald-600", "hover:bg-emerald-500");
-            });
-
-            viewBtn?.addEventListener("click", () => {
-              applyFormMutationToDom(mut);
-              emitFormUpdatedEvent(mut);
-              const keys = Object.keys(mut.fields || {});
-              for (const k of keys) {
-                const target =
-                  document.querySelector(`#field-${k}`) ??
-                  document.querySelector(`[name="${k}"]`);
-                if (target) {
-                  target.scrollIntoView({ behavior: "smooth", block: "center" });
-                  (target as HTMLElement).focus?.();
-                  break;
+            // Form Mutation Card
+            let mutationHtml = "";
+            if (node.form_mutation) {
+              const mut = node.form_mutation;
+              const fields = mut.fields && typeof mut.fields === "object" ? mut.fields : {};
+              const badges: string[] = [];
+              for (const [key, val] of Object.entries(fields)) {
+                const lbl = formatFieldLabel(key, val);
+                if (lbl && lbl.trim().length > 0) {
+                  badges.push(
+                    `<span class="px-1.5 py-0.5 rounded bg-blue-900/40 text-blue-300 border border-blue-700/50 font-mono text-[9px]">${escapeHtml(lbl)}</span>`
+                  );
+                } else {
+                  // Explicit skip of empty field label
                 }
               }
-            });
-          }
-        }
 
-        messagesContainer.appendChild(msgDiv);
+              const badgesHtml =
+                badges.length > 0
+                  ? `<div class="flex flex-wrap gap-1">${badges.join("")}</div>`
+                  : "";
+
+              mutationHtml = `
+                <div class="mt-2.5 p-2.5 rounded-xl bg-blue-950/40 border border-blue-800/80 space-y-2 form-mutation-card">
+                  <div class="flex items-center space-x-1.5 text-blue-300 font-semibold text-[11px]">
+                    <span>✨</span>
+                    <span>Propuesta para el Formulario</span>
+                  </div>
+                  <p class="text-[11px] text-blue-100/90 leading-relaxed">${escapeHtml(mut.summary)}</p>
+                  ${badgesHtml}
+                  <div class="flex items-center space-x-2 pt-1.5 border-t border-blue-900/50">
+                    <button
+                      type="button"
+                      class="btn-apply-mutation px-2 py-1 rounded bg-blue-600 hover:bg-blue-500 text-white font-medium text-[10px] transition-colors flex items-center space-x-1 shadow"
+                    >
+                      <span>✓</span>
+                      <span>Aplicar al Formulario</span>
+                    </button>
+                    <button
+                      type="button"
+                      class="btn-view-mutation px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 text-[10px] transition-colors flex items-center space-x-1"
+                    >
+                      <span>👁️</span>
+                      <span>Ver en Formulario</span>
+                    </button>
+                  </div>
+                </div>
+              `;
+            } else {
+              mutationHtml = "";
+            }
+
+            msgDiv.innerHTML = `
+              <div class="max-w-[92%] bg-slate-900/90 border border-slate-800 rounded-2xl rounded-bl-sm p-3 shadow-md space-y-2">
+                ${reasoningHtml}
+                <div class="text-slate-100 leading-relaxed">${renderMarkdown(node.text)}</div>
+                ${citationsHtml}
+                ${mutationHtml}
+                <div class="text-[9px] text-slate-500 font-mono pt-1 text-right">${node.timestamp}</div>
+              </div>
+            `;
+
+            // Form Mutation actions
+            if (node.form_mutation) {
+              const mut = node.form_mutation;
+              const applyBtn = msgDiv.querySelector(".btn-apply-mutation");
+              const viewBtn = msgDiv.querySelector(".btn-view-mutation");
+
+              applyBtn?.addEventListener("click", () => {
+                applyFormMutationToDom(mut);
+                emitFormUpdatedEvent(mut);
+                applyBtn.innerHTML = "<span>✓</span><span>¡Aplicado!</span>";
+                applyBtn.classList.remove("bg-blue-600", "hover:bg-blue-500");
+                applyBtn.classList.add("bg-emerald-600", "hover:bg-emerald-500");
+              });
+
+              viewBtn?.addEventListener("click", () => {
+                applyFormMutationToDom(mut);
+                emitFormUpdatedEvent(mut);
+                const fields = mut.fields && typeof mut.fields === "object" ? mut.fields : {};
+                const keys = Object.keys(fields);
+                for (const k of keys) {
+                  let target = document.querySelector(`#field-${k}`);
+                  if (!target) {
+                    target = document.querySelector(`[name="${k}"]`);
+                  }
+                  if (target) {
+                    target.scrollIntoView({ behavior: "smooth", block: "center" });
+                    (target as HTMLElement).focus?.();
+                    break;
+                  }
+                }
+              });
+            } else {
+              // No form mutation actions to bind
+            }
+          }
+
+          messagesContainer.appendChild(msgDiv);
+        }
       }
 
       messagesContainer.scrollTop = messagesContainer.scrollHeight;
@@ -688,19 +747,25 @@ import {
       if (speechRecognizer.isListening()) {
         speechRecognizer.stop();
         setSpeechUi(false);
+      } else {
+        setSpeechUi(false);
       }
 
       if (inputEl) {
         inputEl.value = "";
         autoResizeInput();
+      } else {
+        // Input element missing
       }
 
       const isOnNew =
-        window.location.pathname === "/new" ||
-        window.location.pathname.startsWith("/new/");
+        window.location.pathname === CONSTANTS.COCKPIT_ROUTE_NEW ||
+        window.location.pathname.startsWith(`${CONSTANTS.COCKPIT_ROUTE_NEW}/`);
       let formContext: Partial<GuidedReporting> | undefined = undefined;
       if (isOnNew) {
         formContext = extractCurrentFormValues();
+      } else {
+        formContext = undefined;
       }
 
       const persona = chatStore.getPersona();
@@ -729,6 +794,8 @@ import {
       messagesContainer?.appendChild(typingDiv);
       if (messagesContainer) {
         messagesContainer.scrollTop = messagesContainer.scrollHeight;
+      } else {
+        // Container missing
       }
 
       try {
@@ -739,21 +806,25 @@ import {
           incident_code: incidentCode,
         };
 
-        const res = await authenticatedFetch("/api/chat", {
+        const res = await authenticatedFetch(CONSTANTS.COCKPIT_API_CHAT, {
           method: "POST",
           headers: {
-            "Content-Type": "application/json",
+            "Content-Type": CONSTANTS.MIME_APPLICATION_JSON,
           },
           body: JSON.stringify(payload),
         });
 
         if (!res.ok) {
-          const errJson = (await res.json().catch(() => ({}))) as {
-            message?: string;
-          };
-          throw new Error(
-            errJson.message ?? `Error en el servicio de chat (${res.status})`
-          );
+          let errMsg = `Error en el servicio de chat (${res.status})`;
+          try {
+            const errJson = (await res.json()) as { message?: string };
+            if (errJson && typeof errJson === "object" && typeof errJson.message === "string") {
+              errMsg = errJson.message;
+            }
+          } catch {
+            // Non-JSON response
+          }
+          throw new Error(errMsg);
         }
 
         const response = (await res.json()) as ChatResponse;
@@ -764,15 +835,17 @@ import {
         if (response.form_mutation && isOnNew) {
           applyFormMutationToDom(response.form_mutation);
           emitFormUpdatedEvent(response.form_mutation);
+        } else {
+          // Explicit noop when no mutation or off /new page
         }
 
         renderMessages();
         updateHeader();
-      } catch (err) {
+      } catch (err: unknown) {
         typingDiv.remove();
         const errorMsg =
-          err instanceof Error
-            ? err.message
+          err instanceof Error && err.message.trim().length > 0
+            ? err.message.trim()
             : "Error inesperado al consultar el copiloto.";
         const fallbackResponse: ChatResponse = {
           reply: `⚠️ ${errorMsg}`,
@@ -811,7 +884,7 @@ import {
 
     btnMaximize?.addEventListener("click", () => {
       const activeId = chatStore.getActiveSessionId();
-      window.location.href = `/chat?session=${encodeURIComponent(activeId)}`;
+      window.location.href = `${CONSTANTS.COCKPIT_ROUTE_CHAT}?session=${encodeURIComponent(activeId)}`;
     });
 
     inputEl.addEventListener("input", autoResizeInput);
@@ -831,14 +904,20 @@ import {
     });
 
     // Quick Action Pills
-    quickActions?.querySelectorAll(".floating-quick-pill").forEach((pill) => {
-      pill.addEventListener("click", () => {
-        const prompt = (pill as HTMLElement).dataset.prompt;
-        if (prompt) {
-          void submitMessage(prompt);
-        }
+    if (quickActions) {
+      quickActions.querySelectorAll(".floating-quick-pill").forEach((pill) => {
+        pill.addEventListener("click", () => {
+          const prompt = (pill as HTMLElement).dataset.prompt;
+          if (prompt && prompt.trim().length > 0) {
+            void submitMessage(prompt.trim());
+          } else {
+            // Pill without prompt data
+          }
+        });
       });
-    });
+    } else {
+      // Quick actions not present
+    }
 
     // Subscribe to store updates
     chatStore.subscribe(() => {
@@ -853,7 +932,7 @@ import {
   }
 
   // Register on initial load and view transitions
-  document.addEventListener("astro:page-load", () => {
+  document.addEventListener(CONSTANTS.EVENT_ASTRO_PAGE_LOAD, () => {
     initFloatingWidget();
   });
 

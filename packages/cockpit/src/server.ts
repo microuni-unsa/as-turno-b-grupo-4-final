@@ -12,10 +12,11 @@ import { OpenAIModelProvider } from "@pims/models";
 import { PimsAdapter } from "@pims/pims-adapter";
 import { CorpusLoader, RAGService, RagIndexer } from "@pims/rag";
 import { TimerKindSchema } from "@pims/types/agent.ts";
+import { CONSTANTS } from "@pims/types/constants.ts";
 import { ConfigError } from "@pims/types/errors.ts";
 
-const TIMER_TICK_INTERVAL_MS = 1000;
-const SHUTDOWN_DRAIN_MS = 30_000;
+const TIMER_TICK_INTERVAL_MS = CONSTANTS.MS_PER_SECOND;
+const SHUTDOWN_DRAIN_MS = 30 * CONSTANTS.MS_PER_SECOND;
 
 async function main(): Promise<void> {
   const config = loadConfig();
@@ -39,13 +40,15 @@ async function main(): Promise<void> {
     username: config.PIMS_USERNAME,
     password: config.PIMS_PASSWORD,
     extraHeaders:
-      config.PIMS_EXTRA_HEADERS_JSON === undefined
-        ? undefined
-        : JSON.parse(config.PIMS_EXTRA_HEADERS_JSON),
+      typeof config.PIMS_EXTRA_HEADERS_JSON === "string" &&
+      config.PIMS_EXTRA_HEADERS_JSON.trim().length > 0
+        ? JSON.parse(config.PIMS_EXTRA_HEADERS_JSON)
+        : undefined,
     cookies:
-      config.PIMS_COOKIES_JSON === undefined
-        ? undefined
-        : JSON.parse(config.PIMS_COOKIES_JSON),
+      typeof config.PIMS_COOKIES_JSON === "string" &&
+      config.PIMS_COOKIES_JSON.trim().length > 0
+        ? JSON.parse(config.PIMS_COOKIES_JSON)
+        : undefined,
     onMutation: (record) => {
       events.emit({ type: "tool:mutation", ...record });
     },
@@ -124,7 +127,7 @@ async function main(): Promise<void> {
     config,
     page: (alert) => {
       console.error(
-        `PAGE:${alert.kind}:${alert.incident_code}:${alert.reason}`,
+        `${CONSTANTS.PAGE_ALERT_PREFIX}${alert.kind}:${alert.incident_code}:${alert.reason}`,
       );
       events.emit({
         type: "agent:error",
@@ -159,7 +162,7 @@ async function main(): Promise<void> {
     void agent.orchestrator.tick().catch((error: unknown) => {
       console.error("SCHEDULER_TICK_FAILED", error);
     });
-  }, config.SCHEDULER_TICK_S * 1000);
+  }, config.SCHEDULER_TICK_S * CONSTANTS.MS_PER_SECOND);
 
   const ticker = setInterval(() => {
     if (hub.clientCount === 0) {

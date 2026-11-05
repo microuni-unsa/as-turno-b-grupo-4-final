@@ -1,5 +1,6 @@
 ---
 import AppLayout from "@pims/cockpit/ui/layouts/AppLayout.astro";
+import { CONSTANTS } from "@pims/types/constants.ts";
 import {
   AlertCircle,
   AlertTriangle,
@@ -15,7 +16,7 @@ import {
 } from "lucide-astro";
 ---
 
-<AppLayout title="Nuevo Incidente Guiado | Glass-Box Cockpit" breadcrumb="Nuevo Incidente">
+<AppLayout title={CONSTANTS.BRAND_TITLE_NEW} breadcrumb="Nuevo Incidente">
   <div class="max-w-5xl mx-auto space-y-6 pb-16">
     <!-- Header -->
     <div class="flex items-center justify-between">
@@ -1086,6 +1087,11 @@ import {
     saveFormDraft,
   } from "@pims/cockpit/ui/lib/form-draft-bus.ts";
   import { ChatStore } from "@pims/cockpit/ui/lib/chat-store.ts";
+  import {
+    formatDisplayString,
+    formatSafeAttribute,
+  } from "@pims/cockpit/ui/lib/utils.ts";
+  import { CONSTANTS } from "@pims/types/constants.ts";
   import type { ChatFormMutation } from "@pims/types/cockpit.ts";
 
   const incidentForm = document.getElementById("incident-form") as HTMLFormElement | null;
@@ -1107,7 +1113,9 @@ import {
     description?: string;
     evidence?: string | null;
   }) {
-    if (!containerActions) return;
+    if (!containerActions) {
+      throw new Error("Missing #container-actions element in DOM");
+    }
     actionCounter += 1;
     const actionId = `action-row-${actionCounter}`;
     const card = document.createElement("div");
@@ -1116,7 +1124,16 @@ import {
       "action-card p-4 rounded-lg bg-slate-950 border border-slate-800 space-y-3 relative";
 
     const defaultDate =
-      initialData?.action_date || new Date().toISOString().slice(0, 10);
+      initialData?.action_date !== undefined && initialData.action_date.length > 0
+        ? initialData.action_date
+        : new Date().toISOString().slice(0, 10);
+
+    const safeResp = formatSafeAttribute(initialData?.responsible);
+    const safeDesc = formatSafeAttribute(initialData?.description);
+    const safeEvid = formatSafeAttribute(initialData?.evidence);
+    const isContention = initialData?.action_type === "C";
+    const isAnalysis = initialData?.action_type === "A";
+    const isResolution = initialData?.action_type === "R";
 
     card.innerHTML = `
       <div class="flex items-center justify-between pb-2 border-b border-slate-800">
@@ -1129,14 +1146,14 @@ import {
         <div>
           <label class="text-[11px] font-medium text-slate-400 block mb-1">Tipo de acción *</label>
           <select class="action-type w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-slate-200">
-            <option value="C" ${initialData?.action_type === "C" ? "selected" : ""}>Contención</option>
-            <option value="A" ${initialData?.action_type === "A" ? "selected" : ""}>Análisis</option>
-            <option value="R" ${initialData?.action_type === "R" ? "selected" : ""}>Resolución</option>
+            <option value="C" ${isContention ? "selected" : ""}>Contención</option>
+            <option value="A" ${isAnalysis ? "selected" : ""}>Análisis</option>
+            <option value="R" ${isResolution ? "selected" : ""}>Resolución</option>
           </select>
         </div>
         <div>
           <label class="text-[11px] font-medium text-slate-400 block mb-1">Responsable *</label>
-          <input type="text" class="action-responsible w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-slate-200" placeholder="Ej. analista-seguridad" value="${initialData?.responsible || ""}" />
+          <input type="text" class="action-responsible w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-slate-200" placeholder="Ej. analista-seguridad" value="${safeResp}" />
         </div>
         <div>
           <label class="text-[11px] font-medium text-slate-400 block mb-1">Fecha *</label>
@@ -1144,11 +1161,11 @@ import {
         </div>
         <div class="sm:col-span-3">
           <label class="text-[11px] font-medium text-slate-400 block mb-1">Descripción de la acción *</label>
-          <textarea rows="2" class="action-description w-full bg-slate-900 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-200" placeholder="Detalle de la medida ejecutada...">${initialData?.description || ""}</textarea>
+          <textarea rows="2" class="action-description w-full bg-slate-900 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-200" placeholder="Detalle de la medida ejecutada...">${safeDesc}</textarea>
         </div>
         <div class="sm:col-span-3">
           <label class="text-[11px] font-medium text-slate-400 block mb-1">Evidencia (opcional)</label>
-          <input type="text" class="action-evidence w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-slate-200" placeholder="Hash, ID de log, enlace o captura..." value="${initialData?.evidence || ""}" />
+          <input type="text" class="action-evidence w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-slate-200" placeholder="Hash, ID de log, enlace o captura..." value="${safeEvid}" />
         </div>
       </div>
     `;
@@ -1172,51 +1189,62 @@ import {
   });
 
   function saveCurrentForm(): void {
-    if (!incidentForm) return;
+    if (!incidentForm) {
+      throw new Error("Missing #incident-form element in DOM");
+    }
     const values = extractCurrentFormValues(incidentForm);
     saveFormDraft(values);
   }
 
   function initPage(): void {
-    if (!incidentForm) return;
+    if (!incidentForm) {
+      throw new Error("Missing #incident-form element in DOM");
+    }
 
     // 1. URL search params check
     const params = new URLSearchParams(window.location.search);
     const sessionId = params.get("session");
-    if (sessionId) {
+    if (sessionId !== null && sessionId.trim().length > 0) {
       const store = new ChatStore();
-      store.setActiveSession(sessionId);
+      store.setActiveSession(sessionId.trim());
+    } else {
+      // No explicit session in query params, operating on local default draft
     }
 
     // 2. Saved draft check
     const draft = loadFormDraft();
-    if (draft && Object.keys(draft).length > 0) {
+    if (draft !== null && draft !== undefined && Object.keys(draft).length > 0) {
       applyFormMutationToDom({ fields: draft }, incidentForm);
       if (
         Array.isArray(draft.actions) &&
         draft.actions.length > 0 &&
-        containerActions &&
+        containerActions !== null &&
         containerActions.children.length === 0
       ) {
         for (const act of draft.actions) {
           addActionCard(act);
         }
       }
+    } else {
+      // Fresh empty form - no draft to restore
     }
 
     // 3. Mark manual edits on badges and auto-save on change
     incidentForm.querySelectorAll("input, select, textarea").forEach((el) => {
       el.addEventListener("input", () => {
-        const name =
-          (el as HTMLInputElement).name ||
-          (el.id ? el.id.replace(/^field-/, "") : "");
-        if (name) {
+        const inputEl = el as HTMLInputElement;
+        const name = inputEl.name && inputEl.name.length > 0
+          ? inputEl.name
+          : (el.id ? el.id.replace(/^field-/, "") : "");
+        if (name.length > 0) {
           const badge = document.getElementById(`badge-${name}`);
-          if (badge && !badge.classList.contains("hidden")) {
+          if (badge !== null && !badge.classList.contains("hidden")) {
             badge.classList.remove("provenance-narrative", "provenance-default");
             badge.classList.add("provenance-partial");
             badge.textContent = "Editado";
             badge.title = "Modificado manualmente por el operador";
+          } else {
+            // No badge or hidden badge
           }
         }
         saveCurrentForm();
@@ -1227,19 +1255,24 @@ import {
 
   // 4. Listen to cockpit:form-updated on window and sync
   let isUpdatingFromEvent = false;
-  window.addEventListener("cockpit:form-updated", ((
+  window.addEventListener(CONSTANTS.EVENT_COCKPIT_FORM_UPDATED, ((
     e: CustomEvent<{ mutation?: ChatFormMutation }>,
   ) => {
-    if (!incidentForm || isUpdatingFromEvent) return;
+    if (!incidentForm) {
+      throw new Error("Missing #incident-form element during event handling");
+    }
+    if (isUpdatingFromEvent) {
+      return;
+    }
     const mutation = e.detail?.mutation;
-    if (mutation) {
+    if (mutation !== undefined && mutation !== null) {
       isUpdatingFromEvent = true;
       try {
         applyFormMutationToDom(mutation, incidentForm);
         if (
           Array.isArray(mutation.fields?.actions) &&
           mutation.fields.actions.length > 0 &&
-          containerActions &&
+          containerActions !== null &&
           containerActions.children.length === 0
         ) {
           for (const act of mutation.fields.actions) {
@@ -1250,6 +1283,8 @@ import {
       } finally {
         isUpdatingFromEvent = false;
       }
+    } else {
+      throw new Error("Event cockpit:form-updated received without mutation details");
     }
   }) as EventListener);
 
@@ -1258,61 +1293,76 @@ import {
   } else {
     initPage();
   }
-  document.addEventListener("astro:page-load", initPage);
+  document.addEventListener(CONSTANTS.EVENT_ASTRO_PAGE_LOAD, initPage);
 
   // Field explain buttons
   document.querySelectorAll(".btn-explain").forEach((btn) => {
     btn.addEventListener("click", async () => {
       const field = btn.getAttribute("data-field");
-      if (!field) return;
+      if (!field || field.trim().length === 0) {
+        throw new Error("Missing data-field on explain button");
+      }
 
-      if (modalExplainTitle)
+      if (modalExplainTitle) {
         modalExplainTitle.textContent = `Explicación técnica: ${field}`;
-      if (modalExplainContent)
+      }
+      if (modalExplainContent) {
         modalExplainContent.textContent = "Consultando catálogo y normativa RAG...";
-      if (modalExplainCitations) modalExplainCitations.innerHTML = "";
-      modalExplain?.classList.remove("hidden");
+      }
+      if (modalExplainCitations) {
+        modalExplainCitations.innerHTML = "";
+      }
+      if (modalExplain) {
+        modalExplain.classList.remove("hidden");
+      }
 
       try {
-        const res = await authenticatedFetch("/api/incidents/explain", {
+        const res = await authenticatedFetch(CONSTANTS.COCKPIT_API_EXPLAIN, {
           method: "POST",
           body: JSON.stringify({ field }),
         });
 
         if (!res.ok) {
-          if (modalExplainContent)
+          if (modalExplainContent) {
             modalExplainContent.textContent =
-              "No se pudo obtener la explicación del campo.";
+              `No se pudo obtener la explicación del campo (código ${res.status}).`;
+          }
           return;
         }
 
         const data = await res.json();
         if (data.type === "enum" && data.options) {
-          let html = `<p class="mb-2 text-slate-400">${data.explanation}</p><ul class="space-y-1.5">`;
+          let html = `<p class="mb-2 text-slate-400">${formatDisplayString(data.explanation)}</p><ul class="space-y-1.5">`;
           data.options.forEach((opt: any) => {
-            html += `<li class="p-2 rounded bg-slate-950 border border-slate-800"><span class="font-bold text-blue-400">${opt.code}</span> - <span class="text-white">${opt.label}</span>${opt.description ? `<p class="text-[11px] text-slate-400 mt-0.5">${opt.description}</p>` : ""}</li>`;
+            const desc = opt.description ? `<p class="text-[11px] text-slate-400 mt-0.5">${opt.description}</p>` : "";
+            html += `<li class="p-2 rounded bg-slate-950 border border-slate-800"><span class="font-bold text-blue-400">${opt.code}</span> - <span class="text-white">${opt.label}</span>${desc}</li>`;
           });
           html += "</ul>";
           if (modalExplainContent) modalExplainContent.innerHTML = html;
         } else {
-          if (modalExplainContent)
-            modalExplainContent.textContent = data.explanation;
+          if (modalExplainContent) {
+            modalExplainContent.textContent = formatDisplayString(data.explanation);
+          }
           if (
-            data.citations &&
+            Array.isArray(data.citations) &&
             data.citations.length > 0 &&
             modalExplainCitations
           ) {
             let citHtml = "<p class='font-semibold mt-2'>Citas normativas:</p>";
             data.citations.forEach((c: any) => {
-              citHtml += `<div class="p-1.5 rounded bg-blue-950/30 border border-blue-900/50 mt-1">${c.citation}: ${c.text.slice(0, 150)}...</div>`;
+              const citText = typeof c.text === "string" ? c.text.slice(0, 150) : "";
+              citHtml += `<div class="p-1.5 rounded bg-blue-950/30 border border-blue-900/50 mt-1">${c.citation}: ${citText}...</div>`;
             });
             modalExplainCitations.innerHTML = citHtml;
+          } else {
+            if (modalExplainCitations) modalExplainCitations.innerHTML = "";
           }
         }
       } catch (e) {
-        if (modalExplainContent)
+        if (modalExplainContent) {
           modalExplainContent.textContent =
             "Error al conectar con el servicio de explicación.";
+        }
       }
     });
   });
@@ -1326,7 +1376,10 @@ import {
     e.preventDefault();
     const btnSubmit = document.getElementById(
       "btn-submit-incident",
-    ) as HTMLButtonElement;
+    ) as HTMLButtonElement | null;
+    if (!btnSubmit) {
+      throw new Error("Missing #btn-submit-incident element");
+    }
     btnSubmit.setAttribute("disabled", "true");
     btnSubmit.innerHTML = `<span>Registrando incidente...</span>`;
 
@@ -1344,54 +1397,51 @@ import {
       } else if (key === "involves_personal_data") {
         body[key] = value === "true";
       } else if (key === "num_affected_subjects") {
-        body[key] = value ? Number(value) : null;
+        const numVal = typeof value === "string" && value.trim().length > 0 ? Number(value) : null;
+        body[key] = numVal;
       } else {
-        body[key] = value || null;
+        const strVal = typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
+        body[key] = strVal;
       }
     });
 
-    if (!body.affected_cid) body.affected_cid = [];
-    if (!body.affected_data_types) body.affected_data_types = [];
-    if (!body.security_measures_adopted) body.security_measures_adopted = [];
+    if (!Array.isArray(body.affected_cid)) body.affected_cid = [];
+    if (!Array.isArray(body.affected_data_types)) body.affected_data_types = [];
+    if (!Array.isArray(body.security_measures_adopted)) body.security_measures_adopted = [];
 
     // Collect dynamic action cards (if any were added)
     const actionCards = document.querySelectorAll(".action-card");
     const actions: any[] = [];
     actionCards.forEach((card) => {
-      const typeEl = card.querySelector(".action-type") as HTMLSelectElement;
-      const respEl = card.querySelector(
-        ".action-responsible",
-      ) as HTMLInputElement;
-      const dateEl = card.querySelector(".action-date") as HTMLInputElement;
-      const descEl = card.querySelector(
-        ".action-description",
-      ) as HTMLTextAreaElement;
-      const evidEl = card.querySelector(".action-evidence") as HTMLInputElement;
+      const typeEl = card.querySelector(".action-type") as HTMLSelectElement | null;
+      const respEl = card.querySelector(".action-responsible") as HTMLInputElement | null;
+      const dateEl = card.querySelector(".action-date") as HTMLInputElement | null;
+      const descEl = card.querySelector(".action-description") as HTMLTextAreaElement | null;
+      const evidEl = card.querySelector(".action-evidence") as HTMLInputElement | null;
 
-      const description = descEl?.value.trim();
-      if (description) {
+      const description = descEl?.value ? descEl.value.trim() : "";
+      if (description.length > 0) {
         actions.push({
-          action_type: typeEl?.value || "C",
-          responsible: respEl?.value.trim() || "operador",
-          action_date: dateEl?.value || new Date().toISOString().slice(0, 10),
+          action_type: typeEl?.value ? typeEl.value : "C",
+          responsible: respEl?.value && respEl.value.trim().length > 0 ? respEl.value.trim() : "operador",
+          action_date: dateEl?.value && dateEl.value.trim().length > 0 ? dateEl.value.trim() : new Date().toISOString().slice(0, 10),
           description,
-          evidence: evidEl?.value.trim() || null,
+          evidence: evidEl?.value && evidEl.value.trim().length > 0 ? evidEl.value.trim() : null,
         });
       }
     });
     body.actions = actions;
-
     body.idempotency_key = `agi1:create:${crypto.randomUUID()}`;
 
     try {
-      const response = await authenticatedFetch("/api/incidents", {
+      const response = await authenticatedFetch(CONSTANTS.COCKPIT_API_INCIDENTS, {
         method: "POST",
         body: JSON.stringify(body),
       });
 
       if (!response.ok) {
         const errorData = await response.json();
-        let errorMsg = errorData.message || errorData.error;
+        let errorMsg = errorData.message || errorData.error || `Error HTTP ${response.status}`;
         if (errorData.details && Array.isArray(errorData.details)) {
           errorMsg +=
             "\n" +
@@ -1413,7 +1463,7 @@ import {
       } else {
         alert(`Incidente ${result.incident_code} creado exitosamente.`);
       }
-      window.location.href = "/incidents";
+      window.location.href = CONSTANTS.COCKPIT_ROUTE_INCIDENTS;
     } catch (err) {
       alert("Error de red al enviar el incidente.");
       btnSubmit.removeAttribute("disabled");

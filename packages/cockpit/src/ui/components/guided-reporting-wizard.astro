@@ -1,0 +1,107 @@
+---
+import { CONSTANTS } from "@pims/types/constants.ts";
+import { CheckCircle2, Circle, FileText } from "lucide-astro";
+
+interface WizardStep {
+  id: string;
+  title: string;
+  description: string;
+  isComplete: boolean;
+  isActive: boolean;
+}
+
+interface Props {
+  currentStepIndex?: number;
+  steps?: WizardStep[];
+}
+
+const defaultSteps: WizardStep[] = [
+  {
+    id: "step-1",
+    title: "1. Datos Preliminares",
+    description: "Identificación inicial y tipología del incidente",
+    isComplete: false,
+    isActive: true,
+  },
+  {
+    id: "step-2",
+    title: "2. Alcance e Impacto",
+    description: "Sujetos afectados, datos personales y severidad",
+    isComplete: false,
+    isActive: false,
+  },
+  {
+    id: "step-3",
+    title: "3. Análisis Técnico",
+    description: "Causas raíz, vectores y medidas de contención",
+    isComplete: false,
+    isActive: false,
+  },
+  {
+    id: "step-4",
+    title: "4. Revisión Regulatoria",
+    description: "Validación legal GDPR Art. 33/34 y emisión",
+    isComplete: false,
+    isActive: false,
+  },
+];
+
+const rawSteps = Astro.props.steps;
+const steps: WizardStep[] = Array.isArray(rawSteps) && rawSteps.length > 0 ? rawSteps : defaultSteps;
+---
+
+<div class="bg-slate-900 border border-slate-800 rounded-xl p-5 space-y-4 shadow-sm">
+  <div class="flex items-center space-x-2.5 pb-3 border-b border-slate-800">
+    <div class="p-2 rounded-lg bg-blue-950 text-blue-400 border border-blue-900">
+      <FileText class="w-4 h-4" />
+    </div>
+    <div>
+      <h3 class="text-sm font-semibold text-white">Asistente de Registro Guiado</h3>
+      <p class="text-xs text-slate-400">Paso a paso para la captura normativa y técnica de incidentes</p>
+    </div>
+  </div>
+
+  <nav aria-label="Progreso del reporte" class="space-y-3">
+    {
+      steps.map((step, idx) => {
+        let stepStatusText = "Pendiente";
+        let stepBorderClass = "border-slate-800 bg-slate-950/40 text-slate-400";
+        let iconColorClass = "text-slate-600";
+
+        if (step.isComplete) {
+          stepStatusText = "Completado";
+          stepBorderClass = "border-emerald-800/80 bg-emerald-950/20 text-emerald-300";
+          iconColorClass = "text-emerald-400";
+        } else if (step.isActive) {
+          stepStatusText = "En progreso";
+          stepBorderClass = "border-blue-600/80 bg-blue-950/30 text-white";
+          iconColorClass = "text-blue-400";
+        }
+
+        return (
+          <div
+            class:list={[
+              "flex items-start space-x-3.5 p-3 rounded-lg border transition-colors",
+              stepBorderClass,
+            ]}
+          >
+            <div class="mt-0.5 shrink-0">
+              {step.isComplete ? (
+                <CheckCircle2 class:list={["w-4 h-4", iconColorClass]} />
+              ) : (
+                <Circle class:list={["w-4 h-4", iconColorClass]} />
+              )}
+            </div>
+            <div class="min-w-0 flex-1 space-y-0.5">
+              <div class="flex items-center justify-between">
+                <span class="text-xs font-semibold">{step.title}</span>
+                <span class="text-[10px] font-mono uppercase tracking-wider">{stepStatusText}</span>
+              </div>
+              <p class="text-[11px] text-slate-400 leading-relaxed">{step.description}</p>
+            </div>
+          </div>
+        );
+      })
+    }
+  </nav>
+</div>

@@ -1,0 +1,95 @@
+---
+import {
+  formatDateTime,
+  getImpactLabel,
+  getSeverityBadgeClasses,
+  getSeverityLabel,
+  getStatusBadgeClasses,
+  getStatusLabel,
+} from "@pims/cockpit/ui/lib/utils.ts";
+import { CONSTANTS } from "@pims/types/constants.ts";
+import { AlertTriangle, Calendar, ChevronRight } from "lucide-astro";
+
+interface Props {
+  incidentId: number;
+  incidentCode: string;
+  title: string;
+  status: string;
+  severity: string;
+  impact: string;
+  createdAt?: string | null;
+}
+
+const {
+  incidentId,
+  incidentCode,
+  title,
+  status,
+  severity,
+  impact,
+  createdAt,
+} = Astro.props;
+
+function getSafeIncidentTitle(rawTitle: string): string {
+  if (typeof rawTitle === "string" && rawTitle.trim().length > 0) {
+    return rawTitle.trim();
+  }
+  return "Incidente sin título registrado";
+}
+
+const safeTitle = getSafeIncidentTitle(title);
+const statusLabel = getStatusLabel(status);
+const statusClasses = getStatusBadgeClasses(status);
+const severityLabel = getSeverityLabel(severity);
+const severityClasses = getSeverityBadgeClasses(severity);
+const impactLabel = getImpactLabel(impact);
+const formattedCreatedDate = formatDateTime(createdAt);
+---
+
+<div class="bg-slate-900 border border-slate-800 rounded-xl p-4 space-y-3 hover:border-slate-700 transition-colors shadow-sm">
+  <div class="flex items-start justify-between gap-3">
+    <div class="space-y-1 min-w-0 flex-1">
+      <div class="flex items-center space-x-2">
+        <span class="px-2 py-0.5 rounded text-xs font-semibold bg-blue-950 text-blue-400 border border-blue-900 font-mono">
+          {incidentCode}
+        </span>
+        <span class:list={["px-2 py-0.5 rounded text-[11px] font-medium border", statusClasses]}>
+          {statusLabel}
+        </span>
+      </div>
+      <h4 class="text-sm font-semibold text-white truncate" title={safeTitle}>
+        {safeTitle}
+      </h4>
+    </div>
+
+    <a
+      href={`${CONSTANTS.COCKPIT_ROUTE_INCIDENTS}/${incidentId}`}
+      class="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors shrink-0"
+      title="Ver detalles"
+    >
+      <ChevronRight class="w-4 h-4" />
+    </a>
+  </div>
+
+  <div class="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-2 border-t border-slate-800/80 text-xs">
+    <div class="space-y-0.5">
+      <span class="text-slate-500 text-[10px] uppercase font-semibold">Severidad</span>
+      <div>
+        <span class:list={["inline-block px-1.5 py-0.5 rounded text-[10px] font-medium border", severityClasses]}>
+          {severityLabel}
+        </span>
+      </div>
+    </div>
+    <div class="space-y-0.5">
+      <span class="text-slate-500 text-[10px] uppercase font-semibold">Impacto</span>
+      <p class="text-slate-300 text-xs font-medium">{impactLabel}</p>
+    </div>
+    <div class="space-y-0.5 col-span-2 sm:col-span-1">
+      <span class="text-slate-500 text-[10px] uppercase font-semibold">Registro</span>
+      <div class="flex items-center space-x-1 text-slate-400 text-xs">
+        <Calendar class="w-3 h-3 shrink-0" />
+        <span class="truncate">{formattedCreatedDate}</span>
+      </div>
+    </div>
+  </div>
+</div>

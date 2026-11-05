@@ -1,16 +1,22 @@
 import type { CockpitPermission, CockpitSession } from "@pims/types/cockpit.ts";
 
-const SESSION_STORAGE_KEY = "pims_cockpit_session";
+export const SESSION_STORAGE_KEY = "pims_cockpit_session";
+export const EVENT_SESSION_EXPIRED = "cockpit:session-expired";
+export const REASON_TOKEN_EXPIRED = "TOKEN_EXPIRED";
+export const REASON_SESSION_EXPIRED = "SESSION_EXPIRED";
+
 let watchdogTimer: ReturnType<typeof setTimeout> | null = null;
 
-export function notifySessionExpired(reason = "SESSION_EXPIRED"): void {
+export function notifySessionExpired(reason: string): void {
   clearSession();
   if (typeof window !== "undefined") {
     window.dispatchEvent(
-      new CustomEvent("cockpit:session-expired", {
+      new CustomEvent(EVENT_SESSION_EXPIRED, {
         detail: { reason },
       }),
     );
+  } else {
+    // Non-browser / SSR environment: event dispatch skipped
   }
 }
 
@@ -20,17 +26,17 @@ export function startSessionWatchdog(): void {
     return;
   }
   const session = getSession();
-  if (!session) {
+  if (session === null) {
     return;
   }
   const expiresAt = new Date(session.expires_at_utc).getTime();
   const msRemaining = expiresAt - Date.now();
   if (msRemaining <= 0) {
-    notifySessionExpired("TOKEN_EXPIRED");
+    notifySessionExpired(REASON_TOKEN_EXPIRED);
     return;
   }
   watchdogTimer = setTimeout(() => {
-    notifySessionExpired("TOKEN_EXPIRED");
+    notifySessionExpired(REASON_TOKEN_EXPIRED);
   }, msRemaining);
 }
 
@@ -38,12 +44,17 @@ export function stopSessionWatchdog(): void {
   if (watchdogTimer !== null) {
     clearTimeout(watchdogTimer);
     watchdogTimer = null;
+  } else {
+    // No active watchdog timer
   }
 }
 
 export function saveSession(session: CockpitSession): void {
   if (typeof window === "undefined") {
     return;
+  }
+  if (!session || typeof session !== "object") {
+    throw new Error("Invalid session object provided to saveSession");
   }
   window.localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(session));
   startSessionWatchdog();
@@ -65,9 +76,11 @@ export function getSession(): CockpitSession | null {
       return null;
     }
     return session;
-  } catch {
+  } catch (err) {
     clearSession();
-    return null;
+    throw new Error(
+      `Failed to parse cockpit session from storage: ${err instanceof Error ? err.message : String(err)}`,
+    );
   }
 }
 

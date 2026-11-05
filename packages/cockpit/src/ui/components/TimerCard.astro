@@ -1,4 +1,5 @@
 ---
+import { CONSTANTS } from "@pims/types/constants.ts";
 import { Clock } from "lucide-astro";
 
 interface Props {
@@ -17,15 +18,25 @@ function getTimerFriendlyName(kind: string): string {
     case "T_AUTHORITY_72H":
       return "Plazo Legal Art. 33 GDPR (72 Horas)";
     case "T_INTERNAL_SLA":
-      return "SLA de Revisión Interna DPO (4 Horas)";
+      return `SLA de Revisión Interna DPO (${CONSTANTS.SLA_REVIEW_H} Horas)`;
     case "T_PHASE_FOLLOWUP":
       return "Seguimiento de Notificación por Fases";
     case "T_RETRY":
       return "Reintento de Notificación Automático";
     default:
-      return kind;
+      return `Temporizador no catalogado (${kind})`;
   }
 }
+
+function formatDeadlineDate(utcDateStr: string): string {
+  const d = new Date(utcDateStr);
+  if (Number.isNaN(d.getTime())) {
+    return "Fecha límite no disponible";
+  }
+  return d.toLocaleString(CONSTANTS.LOCALE_ES_PE);
+}
+
+const formattedDeadline = formatDeadlineDate(fireAtUtc);
 ---
 
 <div
@@ -43,7 +54,7 @@ function getTimerFriendlyName(kind: string): string {
         </span>
       </div>
       <p class="text-xs text-slate-500">
-        Vence: {new Date(fireAtUtc).toLocaleString("es-PE")}
+        Vence: {formattedDeadline}
       </p>
     </div>
     <div class="p-2 rounded-lg bg-slate-800 text-slate-300">
@@ -56,6 +67,7 @@ function getTimerFriendlyName(kind: string): string {
     <span
       data-remaining-display={timerId}
       data-remaining-ms={remainingMs}
+      data-fire-at={fireAtUtc}
       class="text-xl font-bold font-mono tracking-tight text-white tabular-nums"
     >
       --:--:--
@@ -65,43 +77,73 @@ function getTimerFriendlyName(kind: string): string {
 
 <script>
   import { formatRemainingTime } from "@pims/cockpit/ui/lib/utils.ts";
+  import { CONSTANTS } from "@pims/types/constants.ts";
+
+  const TIMER_BASE_CLASS = "text-xl font-bold font-mono tracking-tight tabular-nums";
+  const CLASS_EXPIRED = `${TIMER_BASE_CLASS} text-rose-500 animate-pulse`;
+  const CLASS_URGENT = `${TIMER_BASE_CLASS} text-rose-400`;
+  const CLASS_WARNING = `${TIMER_BASE_CLASS} text-amber-400`;
+  const CLASS_NORMAL = `${TIMER_BASE_CLASS} text-emerald-400`;
+
+  function getRemainingMsFromElement(el: Element): number {
+    const fireAt = el.getAttribute("data-fire-at");
+    if (fireAt) {
+      const targetTime = new Date(fireAt).getTime();
+      if (!Number.isNaN(targetTime)) {
+        return Math.max(0, targetTime - Date.now());
+      }
+    }
+    const raw = el.getAttribute("data-remaining-ms");
+    if (raw === null || raw === "") {
+      return 0;
+    }
+    const parsed = Number(raw);
+    if (Number.isNaN(parsed)) {
+      return 0;
+    }
+    return Math.max(0, parsed);
+  }
 
   function tickTimers() {
     const displays = document.querySelectorAll("[data-remaining-display]");
     for (const el of displays) {
-      let currentMs = Number(el.getAttribute("data-remaining-ms") || "0");
-      if (currentMs > 0) {
-        currentMs = Math.max(0, currentMs - 1000);
-        el.setAttribute("data-remaining-ms", String(currentMs));
-      }
+      const currentMs = getRemainingMsFromElement(el);
+      el.setAttribute("data-remaining-ms", String(currentMs));
       el.textContent = formatRemainingTime(currentMs);
 
       // Color coding based on urgency
       if (currentMs <= 0) {
-        el.className = "text-xl font-bold font-mono tracking-tight text-rose-500 tabular-nums animate-pulse";
-      } else if (currentMs < 4 * 3600 * 1000) {
-        el.className = "text-xl font-bold font-mono tracking-tight text-rose-400 tabular-nums";
-      } else if (currentMs < 12 * 3600 * 1000) {
-        el.className = "text-xl font-bold font-mono tracking-tight text-amber-400 tabular-nums";
+        el.className = CLASS_EXPIRED;
+      } else if (currentMs < 4 * CONSTANTS.MS_PER_HOUR) {
+        el.className = CLASS_URGENT;
+      } else if (currentMs < 12 * CONSTANTS.MS_PER_HOUR) {
+        el.className = CLASS_WARNING;
       } else {
-        el.className = "text-xl font-bold font-mono tracking-tight text-emerald-400 tabular-nums";
+        el.className = CLASS_NORMAL;
       }
     }
   }
 
   // Update immediately and then every second
   tickTimers();
-  setInterval(tickTimers, 1000);
+  setInterval(tickTimers, CONSTANTS.MS_PER_SECOND);
 
   // Sync with SSE agent timer ticks
-  window.addEventListener("cockpit:agent-event", ((e: CustomEvent) => {
+  window.addEventListener(CONSTANTS.EVENT_COCKPIT_AGENT_EVENT, ((e: CustomEvent) => {
+    if (!e.detail || typeof e.detail !== "object") {
+      return;
+    }
     const event = e.detail;
-    if (event.type === "scheduler:timer_tick") {
+    if (event.type === CONSTANTS.EVENT_SCHEDULER_TIMER_TICK) {
       const el = document.querySelector(`[data-remaining-display="${event.timer_id}"]`);
       if (el) {
         el.setAttribute("data-remaining-ms", String(event.remaining_ms));
         el.textContent = formatRemainingTime(event.remaining_ms);
+      } else {
+        // Explicit non-fatal handling for timer not displayed on current view
       }
+    } else {
+      // Explicit non-fatal handling for other agent event types
     }
   }) as EventListener);
 </script>

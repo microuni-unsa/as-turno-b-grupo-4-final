@@ -1,4 +1,5 @@
 ---
+import { CONSTANTS } from "@pims/types/constants.ts";
 import {
   AlertTriangle,
   LogOut,
@@ -12,38 +13,41 @@ interface Props {
   currentPath?: string;
 }
 
-const { currentPath = Astro.url.pathname } = Astro.props;
+const currentPath =
+  typeof Astro.props.currentPath === "string"
+    ? Astro.props.currentPath
+    : Astro.url.pathname;
 
 const navItems = [
   {
-    href: "/incidents",
+    href: CONSTANTS.COCKPIT_ROUTE_INCIDENTS,
     label: "Incidentes",
     icon: AlertTriangle,
-    permission: "view_incident",
+    permission: CONSTANTS.PERMISSION_VIEW_INCIDENT,
   },
   {
-    href: "/new",
+    href: CONSTANTS.COCKPIT_ROUTE_NEW,
     label: "Nuevo Incidente",
     icon: PlusCircle,
-    permission: "change_incident",
+    permission: CONSTANTS.PERMISSION_CHANGE_INCIDENT,
   },
   {
-    href: "/compliance",
+    href: CONSTANTS.COCKPIT_ROUTE_COMPLIANCE,
     label: "Cumplimiento DPO",
     icon: ShieldCheck,
-    permission: "view_incident",
+    permission: CONSTANTS.PERMISSION_VIEW_INCIDENT,
   },
   {
-    href: "/security-log",
+    href: CONSTANTS.COCKPIT_ROUTE_SECURITY_LOG,
     label: "Bitácora de Seguridad",
     icon: Terminal,
-    permission: "view_securitylog",
+    permission: CONSTANTS.PERMISSION_VIEW_SECURITYLOG,
   },
   {
-    href: "/chat",
+    href: CONSTANTS.COCKPIT_ROUTE_CHAT,
     label: "Asistente IA",
     icon: MessageSquare,
-    permission: "view_incident",
+    permission: CONSTANTS.PERMISSION_VIEW_INCIDENT,
   },
 ];
 ---
@@ -51,7 +55,7 @@ const navItems = [
 <aside class="bg-slate-900 text-slate-100 flex flex-col h-screen border-r border-slate-800 shrink-0 select-none w-72 transition-all duration-300">
   <!-- Brand / Tenant header -->
   <a
-    href="/incidents"
+    href={CONSTANTS.COCKPIT_ROUTE_INCIDENTS}
     class="p-6 border-b border-slate-800 flex items-center hover:bg-slate-800/40 transition-colors space-x-3.5"
   >
     <div
@@ -140,27 +144,64 @@ const navItems = [
 
 <script>
   import { clearSession, getSession, hasPermission } from "@pims/cockpit/ui/lib/session.ts";
+  import { CONSTANTS } from "@pims/types/constants.ts";
+
+  const NAV_ACTIVE_CLASS =
+    "w-full flex items-center space-x-3 rounded-lg text-sm font-medium transition-all duration-150 px-3 py-2.5 bg-blue-600 text-white shadow-sm shadow-blue-600/30";
+  const NAV_INACTIVE_CLASS =
+    "w-full flex items-center space-x-3 rounded-lg text-sm font-medium transition-all duration-150 px-3 py-2.5 text-slate-300 hover:bg-slate-800/70 hover:text-white";
+
+  function getAvatarInitial(username: string): string {
+    if (typeof username === "string" && username.trim().length > 0) {
+      return username.trim().charAt(0).toUpperCase();
+    }
+    return "U";
+  }
 
   function syncSidebar() {
     const session = getSession();
-    if (session) {
-      const avatar = document.getElementById("user-avatar");
-      const nameEl = document.getElementById("user-name");
-      const roleBadge = document.getElementById("user-role-badge");
+    const avatar = document.getElementById("user-avatar");
+    const nameEl = document.getElementById("user-name");
+    const roleBadge = document.getElementById("user-role-badge");
 
-      if (avatar) avatar.textContent = session.username.charAt(0).toUpperCase();
-      if (nameEl) nameEl.textContent = session.username;
-      if (roleBadge) roleBadge.textContent = session.native_role;
+    if (!avatar) {
+      throw new Error("Element #user-avatar not found in DOM");
+    }
+    if (!nameEl) {
+      throw new Error("Element #user-name not found in DOM");
+    }
+    if (!roleBadge) {
+      throw new Error("Element #user-role-badge not found in DOM");
+    }
+
+    if (session) {
+      avatar.textContent = getAvatarInitial(session.username);
+      nameEl.textContent = session.username;
+      roleBadge.textContent = session.native_role;
 
       // Filter nav items based on permissions
       const navLinks = document.querySelectorAll("#cockpit-nav a[data-permission]");
       for (const link of navLinks) {
         const permission = link.getAttribute("data-permission") as any;
-        if (permission && !hasPermission(session, permission)) {
-          (link as HTMLElement).style.display = "none";
+        if (permission) {
+          if (hasPermission(session, permission)) {
+            (link as HTMLElement).style.display = "";
+          } else {
+            (link as HTMLElement).style.display = "none";
+          }
         } else {
           (link as HTMLElement).style.display = "";
         }
+      }
+    } else {
+      // Unauthenticated state
+      avatar.textContent = "—";
+      nameEl.textContent = "Sin autenticar";
+      roleBadge.textContent = "Invitado";
+
+      const navLinks = document.querySelectorAll("#cockpit-nav a[data-permission]");
+      for (const link of navLinks) {
+        (link as HTMLElement).style.display = "none";
       }
     }
 
@@ -175,13 +216,19 @@ const navItems = [
       const icon = link.querySelector("svg");
 
       if (isActive) {
-        link.className =
-          "w-full flex items-center space-x-3 rounded-lg text-sm font-medium transition-all duration-150 px-3 py-2.5 bg-blue-600 text-white shadow-sm shadow-blue-600/30";
-        if (icon) icon.className = "w-4 h-4 shrink-0 text-white";
+        link.className = NAV_ACTIVE_CLASS;
+        if (icon) {
+          icon.className = "w-4 h-4 shrink-0 text-white";
+        } else {
+          throw new Error("SVG icon missing in nav link");
+        }
       } else {
-        link.className =
-          "w-full flex items-center space-x-3 rounded-lg text-sm font-medium transition-all duration-150 px-3 py-2.5 text-slate-300 hover:bg-slate-800/70 hover:text-white";
-        if (icon) icon.className = "w-4 h-4 shrink-0 text-slate-400";
+        link.className = NAV_INACTIVE_CLASS;
+        if (icon) {
+          icon.className = "w-4 h-4 shrink-0 text-slate-400";
+        } else {
+          throw new Error("SVG icon missing in nav link");
+        }
       }
     });
 
@@ -189,11 +236,13 @@ const navItems = [
     if (logoutBtn) {
       logoutBtn.onclick = () => {
         clearSession();
-        window.location.href = "/login";
+        window.location.href = CONSTANTS.COCKPIT_ROUTE_LOGIN;
       };
+    } else {
+      throw new Error("Element #btn-logout not found in DOM");
     }
   }
 
-  document.addEventListener("astro:page-load", syncSidebar);
+  document.addEventListener(CONSTANTS.EVENT_ASTRO_PAGE_LOAD, syncSidebar);
   syncSidebar();
 </script>

@@ -32,17 +32,18 @@ const { title, breadcrumb } = Astro.props;
 <script>
   import { getSession, startSessionWatchdog } from "@pims/cockpit/ui/lib/session.ts";
   import { sseClient } from "@pims/cockpit/ui/lib/sse-client.ts";
+  import { CONSTANTS } from "@pims/types/constants.ts";
 
   function ensureSessionAndStream() {
     const session = getSession();
-    if (!session) {
-      window.location.href = "/login";
+    if (session === null || session === undefined) {
+      window.location.href = CONSTANTS.COCKPIT_ROUTE_LOGIN;
       return;
     }
     startSessionWatchdog();
     sseClient.start();
   }
 
-  document.addEventListener("astro:page-load", ensureSessionAndStream);
+  document.addEventListener(CONSTANTS.EVENT_ASTRO_PAGE_LOAD, ensureSessionAndStream);
   ensureSessionAndStream();
 </script>
