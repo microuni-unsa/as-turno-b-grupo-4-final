@@ -876,6 +876,30 @@ export class PromptPiiBlockedError extends PimsBaseError {
   }
 }
 
+export class PiiRedactionUnavailableError extends PimsBaseError {
+  constructor(
+    message = "Presidio PII redaction sidecar is unavailable",
+    details?: PimsErrorDetails,
+  ) {
+    super(message, "PII_REDACTION_UNAVAILABLE", details);
+  }
+}
+
+export class FormNarrativeTooLongError extends PimsBaseError {
+  readonly cap: number;
+  readonly length: number;
+
+  constructor(cap: number, length: number, details?: PimsErrorDetails) {
+    super(
+      `Form narrative of ${length} characters exceeds maximum cap of ${cap}`,
+      "FORM_NARRATIVE_TOO_LONG",
+      details,
+    );
+    this.cap = cap;
+    this.length = length;
+  }
+}
+
 export class RootCauseUnprovenError extends PimsBaseError {
   constructor(message: string, details?: PimsErrorDetails) {
     super(message, "ROOT_CAUSE_UNPROVEN", details);

@@ -1,7 +1,10 @@
 import net from "node:net";
-import { extractIocs, extractPii } from "@pims/evidence/forensic-patterns.ts";
+import type { PresidioClient } from "@pims/agent/llm/presidio-client.ts";
 import { PII_PHONE_REGIONS } from "@pims/types/constants.ts";
-import { PromptPiiBlockedError } from "@pims/types/errors.ts";
+import {
+  PiiRedactionUnavailableError,
+  PromptPiiBlockedError,
+} from "@pims/types/errors.ts";
 import type {
   ChatJsonArgs,
   ChatJsonResponse,
@@ -15,111 +18,126 @@ import type {
   VisionJsonResponse,
 } from "@pims/types/models.ts";
 import { findPhoneNumbersInText } from "libphonenumber-js";
-
-const REDACTION_TOKEN_PATTERN =
-  /^\[(?:REPORTANTE|CONTACTO|ID|SISTEMA|DESCRIPCION)\]$/;
+import { parse } from "tldts";
+import { z } from "zod";
 
 export const REDACTION_TOKENS = {
+  reporter: "[REPORTANTE]",
   contact: "[CONTACTO]",
   id: "[ID]",
   system: "[SISTEMA]",
+  description: "[DESCRIPCION]",
 } as const;
 
-export type PiiCategory = "email" | "phone" | "dni" | "ruc" | "ip" | "hostname";
+export type PiiCategory =
+  | "email"
+  | "phone"
+  | "dni"
+  | "ruc"
+  | "ip"
+  | "hostname"
+  | "url";
 
-interface PiiHit {
-  category: PiiCategory;
-  value: string;
+let globalPresidioClient: PresidioClient | null = null;
+
+export function setGlobalPresidioClient(client: PresidioClient | null): void {
+  globalPresidioClient = client;
 }
 
-function collectHits(text: string): PiiHit[] {
-  const hits: PiiHit[] = [];
-
-  for (const value of extractIocs(text)) {
-    if (/^[0-9a-fA-F]{32,64}$/.test(value)) {
-      continue;
-    }
-    const isIp = net.isIP(value) !== 0;
-    hits.push({ category: isIp ? "ip" : "hostname", value });
-  }
-
-  for (const value of extractPii(text)) {
-    if (REDACTION_TOKEN_PATTERN.test(value)) {
-      continue;
-    }
-    let category: PiiCategory = "email";
-    if (value.includes("@")) {
-      category = "email";
-    } else if (value.startsWith("+")) {
-      category = "phone";
-    } else if (/^[XYZxyz\d]/.test(value)) {
-      category = "dni";
-    }
-    hits.push({ category, value });
-  }
-
-  return hits;
+export function getGlobalPresidioClient(): PresidioClient | null {
+  return globalPresidioClient;
 }
 
-function tokenFor(category: PiiCategory): string {
-  if (category === "email" || category === "phone") {
-    return REDACTION_TOKENS.contact;
+export async function redactForPrompt(
+  text: string,
+  client?: PresidioClient | null,
+): Promise<string> {
+  if (!text) {
+    return text;
   }
-  if (category === "dni" || category === "ruc") {
-    return REDACTION_TOKENS.id;
+  const presidio = client ?? globalPresidioClient;
+  if (!presidio) {
+    throw new PiiRedactionUnavailableError(
+      "Presidio analyzer client is required for prompt redaction",
+    );
   }
-  return REDACTION_TOKENS.system;
+  const result = await presidio.redact(text);
+  return result.redactedText;
 }
 
-export function redactForPrompt(text: string): string {
-  const phoneSpans: Array<{ start: number; end: number }> = [];
-  for (const region of PII_PHONE_REGIONS) {
-    for (const match of findPhoneNumbersInText(text, region)) {
-      if (match.number.isValid()) {
-        phoneSpans.push({ start: match.startsAt, end: match.endsAt });
-      }
-    }
-  }
-
-  let redacted = text;
-  const uniqueSpans = new Map<string, { start: number; end: number }>();
-  for (const span of phoneSpans) {
-    uniqueSpans.set(`${span.start}:${span.end}`, span);
-  }
-  const orderedSpans = Array.from(uniqueSpans.values()).sort(
-    (a, b) => b.start - a.start,
-  );
-  for (const span of orderedSpans) {
-    redacted =
-      redacted.slice(0, span.start) +
-      REDACTION_TOKENS.contact +
-      redacted.slice(span.end);
-  }
-
-  const hits = collectHits(redacted).sort(
-    (a, b) => b.value.length - a.value.length,
-  );
-
-  for (const hit of hits) {
-    redacted = redacted.split(hit.value).join(tokenFor(hit.category));
-  }
-  return redacted;
-}
-
-export function redactOptionalForPrompt(
+export async function redactOptionalForPrompt(
   value: string | null | undefined,
-): string | null {
-  return value === null || value === undefined ? null : redactForPrompt(value);
+  client?: PresidioClient | null,
+): Promise<string | null> {
+  if (value === null || value === undefined) {
+    return null;
+  }
+  return redactForPrompt(value, client);
 }
 
-export function assertPromptSafe(system: string, messages: Message[]): void {
-  const combined = [system, ...messages.map((message) => message.content)].join(
-    "\n",
-  );
+const emailValidator = z.string().email();
+
+export function assertPromptSafe(
+  systemOrText: string,
+  messages?: Message[],
+): void {
+  const combined = [
+    systemOrText,
+    ...(messages ?? []).map((message) => message.content),
+  ].join("\n");
 
   const categories = new Set<PiiCategory>();
-  for (const hit of collectHits(combined)) {
-    categories.add(hit.category);
+
+  // 1. Phone validation via formal libphonenumber-js
+  for (const region of PII_PHONE_REGIONS) {
+    try {
+      for (const match of findPhoneNumbersInText(combined, region)) {
+        if (match.number.isValid()) {
+          categories.add("phone");
+          break;
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  // 2. Email, IP, URL/hostname validation via formal libs
+  const words = combined.split(/[\s,;"'()<>[\]{}]+/);
+  for (const word of words) {
+    const clean = word.trim();
+    if (!clean || clean.startsWith("[")) {
+      continue;
+    }
+
+    if (clean.includes("@")) {
+      if (emailValidator.safeParse(clean).success) {
+        categories.add("email");
+      }
+    }
+
+    if (net.isIP(clean) !== 0 && clean !== "127.0.0.1" && clean !== "0.0.0.0") {
+      categories.add("ip");
+    }
+
+    if (clean.startsWith("http://") || clean.startsWith("https://")) {
+      categories.add("url");
+    } else if (clean.includes(".") && !clean.endsWith(".")) {
+      const parsed = parse(clean);
+      if (parsed.isIp) {
+        categories.add("ip");
+      } else if (parsed.domain && parsed.isIcann && parsed.publicSuffix) {
+        // Only trigger if valid ICANN domain with recognized public suffix
+        categories.add("hostname");
+      }
+    }
+
+    if (/^\d{8}$/.test(clean)) {
+      categories.add("dni");
+    }
+    if (/^(10|15|17|20)\d{9}$/.test(clean)) {
+      categories.add("ruc");
+    }
   }
 
   if (categories.size > 0) {
@@ -129,30 +147,82 @@ export function assertPromptSafe(system: string, messages: Message[]): void {
 
 export class AgentModelClient implements ModelProvider {
   private readonly inner: ModelProvider;
+  private readonly presidio: PresidioClient | null;
 
-  constructor(inner: ModelProvider) {
+  static assertPromptSafe(systemOrText: string, messages?: Message[]): void {
+    assertPromptSafe(systemOrText, messages);
+  }
+
+  constructor(inner: ModelProvider, presidio?: PresidioClient | null) {
     this.inner = inner;
+    this.presidio = presidio ?? globalPresidioClient;
+  }
+
+  getPresidioClient(): PresidioClient | null {
+    return this.presidio;
+  }
+
+  private async redactText(text: string): Promise<string> {
+    if (!text) {
+      return text;
+    }
+    if (this.presidio) {
+      const res = await this.presidio.redact(text);
+      return res.redactedText;
+    }
+    throw new PiiRedactionUnavailableError(
+      "Presidio analyzer client is required for model calls",
+    );
   }
 
   async chat_json(args: ChatJsonArgs): Promise<ChatJsonResponse> {
-    assertPromptSafe(args.system, args.messages);
-    return this.inner.chat_json(args);
+    const redactedSystem = await this.redactText(args.system);
+    const redactedMessages = await Promise.all(
+      args.messages.map(async (msg) => ({
+        ...msg,
+        content: await this.redactText(msg.content),
+      })),
+    );
+
+    assertPromptSafe(redactedSystem, redactedMessages);
+    return this.inner.chat_json({
+      ...args,
+      system: redactedSystem,
+      messages: redactedMessages,
+    });
   }
 
   async vision_json(args: VisionJsonArgs): Promise<VisionJsonResponse> {
-    assertPromptSafe(args.system, [{ role: "user", content: args.prompt }]);
-    return this.inner.vision_json(args);
+    const redactedSystem = await this.redactText(args.system);
+    const redactedPrompt = await this.redactText(args.prompt);
+
+    assertPromptSafe(redactedSystem, [
+      { role: "user", content: redactedPrompt },
+    ]);
+    return this.inner.vision_json({
+      ...args,
+      system: redactedSystem,
+      prompt: redactedPrompt,
+    });
   }
 
   async embed(args: EmbedArgs): Promise<EmbedResponse> {
+    const redactedTexts = await Promise.all(
+      args.texts.map((text) => this.redactText(text)),
+    );
+    for (const text of redactedTexts) {
+      assertPromptSafe("", [{ role: "user", content: text }]);
+    }
     return this.inner.embed({
-      texts: args.texts.map((text) => redactForPrompt(text)),
+      texts: redactedTexts,
     });
   }
 
   async rerank(args: RerankArgs): Promise<RerankResponse> {
+    const redactedQuery = await this.redactText(args.query);
+    assertPromptSafe("", [{ role: "user", content: redactedQuery }]);
     return this.inner.rerank({
-      query: redactForPrompt(args.query),
+      query: redactedQuery,
       passages: args.passages,
     });
   }

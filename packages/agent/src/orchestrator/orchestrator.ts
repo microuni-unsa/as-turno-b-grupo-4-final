@@ -557,7 +557,7 @@ export class IncidentOrchestrator {
     systemOrUrl: string,
   ): Promise<number[]> {
     const response = await this.deps.modelClient.embed({
-      texts: [redactForPrompt(`${title} ${systemOrUrl}`)],
+      texts: [await redactForPrompt(`${title} ${systemOrUrl}`)],
     });
     const vector = response.vectors[0];
     if (vector === undefined) {
@@ -1097,26 +1097,34 @@ export class IncidentOrchestrator {
 
       const current = await this.deps.adapter.getIncident(incident.id);
       const actions = current.actions ?? [];
-      const redactedHistory = history.map((row) => ({
-        ...row,
-        description:
-          row.description === null || row.description === undefined
-            ? row.description
-            : redactForPrompt(row.description),
-      }));
-      const redactedActions = actions.map((row) => ({
-        ...row,
-        description: redactForPrompt(row.description),
-        evidence:
-          row.evidence === null || row.evidence === undefined
-            ? row.evidence
-            : redactForPrompt(row.evidence),
-      }));
-      const evidence: TotEvidence[] = staged.map((attachment) => ({
-        ref: `file:${attachment.file_name}:${attachment.sha256.slice(0, 8)}`,
-        kind: "attachment",
-        description: redactForPrompt(`attachment ${attachment.file_name}`),
-      }));
+      const redactedHistory = await Promise.all(
+        history.map(async (row) => ({
+          ...row,
+          description:
+            row.description === null || row.description === undefined
+              ? row.description
+              : await redactForPrompt(row.description),
+        })),
+      );
+      const redactedActions = await Promise.all(
+        actions.map(async (row) => ({
+          ...row,
+          description: await redactForPrompt(row.description),
+          evidence:
+            row.evidence === null || row.evidence === undefined
+              ? row.evidence
+              : await redactForPrompt(row.evidence),
+        })),
+      );
+      const evidence: TotEvidence[] = await Promise.all(
+        staged.map(async (attachment) => ({
+          ref: `file:${attachment.file_name}:${attachment.sha256.slice(0, 8)}`,
+          kind: "attachment",
+          description: await redactForPrompt(
+            `attachment ${attachment.file_name}`,
+          ),
+        })),
+      );
 
       const rootCauseRaw = await this.deps.modelClient.chat_json({
         system: ROOT_CAUSE_SYSTEM,

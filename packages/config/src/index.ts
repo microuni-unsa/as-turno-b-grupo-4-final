@@ -98,6 +98,12 @@ export interface AgentConfig {
   LEASE_RENEW_S: number;
   DEPLOY_PORT: number;
   DEPLOY_DATA_DIR: string;
+  PRESIDIO_URL: string;
+  PRESIDIO_IMAGE: string;
+  PRESIDIO_MODEL: string;
+  PRESIDIO_TIMEOUT_MS: number;
+  PRESIDIO_MIN_SCORE: number;
+  FORM_NARRATIVE_MAX_CHARS: number;
 }
 
 export function loadModelProviderOptions(credentials: Record<string, string>): {
@@ -549,6 +555,58 @@ export function loadConfig(
     }
   }
 
+  const presidioUrl = env.PRESIDIO_URL ?? "http://127.0.0.1:3001";
+  try {
+    new URL(presidioUrl);
+  } catch {
+    throw new ConfigError(
+      "PRESIDIO_URL must be a valid URL",
+      "CONFIG_TYPE:PRESIDIO_URL",
+    );
+  }
+
+  const presidioImage = env.PRESIDIO_IMAGE ?? "presidio-analyzer:2.2.x-es";
+  const presidioModel = env.PRESIDIO_MODEL ?? "es_core_news_md";
+
+  const presidioTimeoutRaw = env.PRESIDIO_TIMEOUT_MS;
+  let presidioTimeoutMs = 1500;
+  if (presidioTimeoutRaw !== undefined) {
+    const parsed = Number(presidioTimeoutRaw);
+    if (!Number.isInteger(parsed) || parsed <= 0) {
+      throw new ConfigError(
+        "PRESIDIO_TIMEOUT_MS must be a positive integer",
+        "CONFIG_TYPE:PRESIDIO_TIMEOUT_MS",
+      );
+    }
+    presidioTimeoutMs = parsed;
+  }
+
+  const presidioMinScoreRaw = env.PRESIDIO_MIN_SCORE;
+  let presidioMinScore = 0.5;
+  if (presidioMinScoreRaw !== undefined) {
+    const parsed = Number.parseFloat(presidioMinScoreRaw);
+    if (Number.isNaN(parsed) || parsed < 0 || parsed > 1) {
+      throw new ConfigError(
+        "PRESIDIO_MIN_SCORE must be a float between 0 and 1",
+        "CONFIG_TYPE:PRESIDIO_MIN_SCORE",
+      );
+    }
+    presidioMinScore = parsed;
+  }
+
+  const formNarrativeMaxCharsRaw = env.FORM_NARRATIVE_MAX_CHARS;
+  let formNarrativeMaxChars = 4000;
+  if (formNarrativeMaxCharsRaw !== undefined) {
+    const parsed = Number.parseInt(formNarrativeMaxCharsRaw, 10);
+    if (Number.isNaN(parsed) || parsed <= 0) {
+      throw new ConfigError(
+        "FORM_NARRATIVE_MAX_CHARS must be a positive integer",
+        "CONFIG_TYPE:FORM_NARRATIVE_MAX_CHARS",
+      );
+    }
+    formNarrativeMaxChars = parsed;
+  }
+
   return {
     PIMS_BASE_URL: pimsBaseUrl,
     PIMS_SCHEMA: pimsSchema,
@@ -658,5 +716,11 @@ export function loadConfig(
       : 60,
     DEPLOY_PORT: env.DEPLOY_PORT ? Number.parseInt(env.DEPLOY_PORT, 10) : 8080,
     DEPLOY_DATA_DIR: env.DEPLOY_DATA_DIR ?? "/app/data",
+    PRESIDIO_URL: presidioUrl,
+    PRESIDIO_IMAGE: presidioImage,
+    PRESIDIO_MODEL: presidioModel,
+    PRESIDIO_TIMEOUT_MS: presidioTimeoutMs,
+    PRESIDIO_MIN_SCORE: presidioMinScore,
+    FORM_NARRATIVE_MAX_CHARS: formNarrativeMaxChars,
   };
 }

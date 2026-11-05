@@ -3,6 +3,7 @@ import {
   AlertTriangle,
   LogOut,
   MessageSquare,
+  PlusCircle,
   ShieldCheck,
   Terminal,
 } from "lucide-astro";
@@ -19,6 +20,12 @@ const navItems = [
     label: "Incidentes",
     icon: AlertTriangle,
     permission: "view_incident",
+  },
+  {
+    href: "/new",
+    label: "Nuevo Incidente",
+    icon: PlusCircle,
+    permission: "change_incident",
   },
   {
     href: "/compliance",
@@ -151,6 +158,8 @@ const navItems = [
         const permission = link.getAttribute("data-permission") as any;
         if (permission && !hasPermission(session, permission)) {
           (link as HTMLElement).style.display = "none";
+        } else {
+          (link as HTMLElement).style.display = "";
         }
       }
     }
@@ -175,6 +184,7 @@ const navItems = [
         if (icon) icon.className = "w-4 h-4 shrink-0 text-slate-400";
       }
     });
+
     const logoutBtn = document.getElementById("btn-logout");
     if (logoutBtn) {
       logoutBtn.onclick = () => {

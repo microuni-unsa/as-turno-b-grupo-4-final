@@ -1,7 +1,4 @@
-import {
-  type AgentModelClient,
-  redactForPrompt,
-} from "@pims/agent/llm/safe-prompt.ts";
+import type { AgentModelClient } from "@pims/agent/llm/safe-prompt.ts";
 import { awarenessFromIncident } from "@pims/agent/orchestrator/scheduler.ts";
 import type { AgentConfig } from "@pims/config";
 import type { EvidenceStore } from "@pims/evidence/evidence-store.ts";
@@ -306,7 +303,7 @@ function renderIncidentProse(incident: PimsIncident): string {
         : String(incident.num_affected_subjects)
     }`,
   );
-  return redactForPrompt(lines.join("\n"));
+  return lines.join("\n");
 }
 
 function canonicalizeCitations(
@@ -437,7 +434,7 @@ export class NoticeDraftService {
       messages: [
         {
           role: "user",
-          content: `${renderIncidentProse(incident)}\nAllowed normative citations (return citations[] using ONLY the identifiers C1..Cn; never invent):\n${rag.citations.map((citation, index) => `C${index + 1} = ${redactForPrompt(citation)}`).join("\n")}`,
+          content: `${renderIncidentProse(incident)}\nAllowed normative citations (return citations[] using ONLY the identifiers C1..Cn; never invent):\n${rag.citations.map((citation, index) => `C${index + 1} = ${citation}`).join("\n")}`,
         },
       ],
       json_schema: AUTHORITY_JSON_SCHEMA,
@@ -623,7 +620,7 @@ export class NoticeDraftService {
       messages: [
         {
           role: "user",
-          content: `${renderIncidentProse(incident)}\nAllowed normative citations (return citations[] using ONLY the identifiers C1..Cn; never invent):\n${rag.citations.map((citation, index) => `C${index + 1} = ${redactForPrompt(citation)}`).join("\n")}\nConstraints: write body_plain in Spanish; every sentence must have at most 20 words; do not include digits or numeric literals in body_plain; keep every field concrete and free of legal jargon.`,
+          content: `${renderIncidentProse(incident)}\nAllowed normative citations (return citations[] using ONLY the identifiers C1..Cn; never invent):\n${rag.citations.map((citation, index) => `C${index + 1} = ${citation}`).join("\n")}\nConstraints: write body_plain in Spanish; every sentence must have at most 20 words; do not include digits or numeric literals in body_plain; keep every field concrete and free of legal jargon.`,
         },
       ],
       json_schema: SUBJECT_JSON_SCHEMA,
@@ -691,7 +688,7 @@ export class NoticeDraftService {
       messages: [
         {
           role: "user",
-          content: `${renderIncidentProse(incident)}\nChecklist de cierre: ${checklist.join(", ")}\nAllowed normative citations (return citations[] using ONLY the identifiers C1..Cn; never invent):\n${rag.citations.map((citation, index) => `C${index + 1} = ${redactForPrompt(citation)}`).join("\n")}\nConstraints: write summary and remediation in Spanish; every sentence must have at most 20 words; do not include digits or numeric literals.`,
+          content: `${renderIncidentProse(incident)}\nChecklist de cierre: ${checklist.join(", ")}\nAllowed normative citations (return citations[] using ONLY the identifiers C1..Cn; never invent):\n${rag.citations.map((citation, index) => `C${index + 1} = ${citation}`).join("\n")}\nConstraints: write summary and remediation in Spanish; every sentence must have at most 20 words; do not include digits or numeric literals.`,
         },
       ],
       json_schema: RESOLUTION_JSON_SCHEMA,

@@ -21,6 +21,23 @@ services:
       timeout: 5s
       retries: 5
 
+  # PII Redaction sidecar (Presidio Analyzer with Spanish model & PE_DNI/PE_RUC recognizers)
+  presidio:
+    build:
+      context: ./docker/presidio
+    image: presidio-analyzer:2.2.x-es
+    container_name: pims-presidio
+    restart: unless-stopped
+    ports:
+      - "3001:3000"
+    environment:
+      PORT: "3000"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:3000/health || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
   # Optional web-based database management tool for inspecting tables and vector embeddings
   adminer:
     image: adminer:latest

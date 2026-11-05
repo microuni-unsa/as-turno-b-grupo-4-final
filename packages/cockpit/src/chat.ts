@@ -1,7 +1,4 @@
-import {
-  type AgentModelClient,
-  redactForPrompt,
-} from "@pims/agent/llm/safe-prompt.ts";
+import type { AgentModelClient } from "@pims/agent/llm/safe-prompt.ts";
 import {
   checkPendingDecisions,
   getIncidentStatus,
@@ -19,7 +16,6 @@ import type {
   ChatPersona,
   ChatRequest,
   ChatResponse,
-  CockpitIncidentSummary,
   CockpitSession,
 } from "@pims/types/cockpit.ts";
 import { MODEL_ROUTE_REASONING } from "@pims/types/constants.ts";
@@ -29,11 +25,7 @@ import {
   CockpitPermissionDeniedError,
   CockpitPiiBlockedError,
 } from "@pims/types/errors.ts";
-import {
-  type JsonObject,
-  JsonObjectSchema,
-  type JsonValue,
-} from "@pims/types/models.ts";
+import { JsonObjectSchema, type JsonValue } from "@pims/types/models.ts";
 import type { RetrievalPassage } from "@pims/types/rag.ts";
 
 const PERSONA_PROMPTS: Record<ChatPersona, string> = {
@@ -66,34 +58,6 @@ export function resolvePersona(
 function extractIncidentCode(message: string): string | null {
   const match = message.match(/\b[A-Z]{2,}-\d+\b/i);
   return match === null ? null : match[0].toUpperCase();
-}
-
-function redactSummary(
-  summary: CockpitIncidentSummary,
-): CockpitIncidentSummary {
-  return { ...summary, title: redactForPrompt(summary.title) };
-}
-
-function sanitizeForPrompt(value: JsonValue): JsonValue {
-  if (typeof value === "string") {
-    return redactForPrompt(value);
-  }
-  if (typeof value === "number") {
-    const text = String(value);
-    const redacted = redactForPrompt(text);
-    return redacted === text ? value : redacted;
-  }
-  if (Array.isArray(value)) {
-    return value.map((entry) => sanitizeForPrompt(entry));
-  }
-  if (typeof value === "object" && value !== null) {
-    const out: JsonObject = {};
-    for (const [key, entry] of Object.entries(value)) {
-      out[key] = sanitizeForPrompt(entry);
-    }
-    return out;
-  }
-  return value;
 }
 
 function normalizeReplyText(value: JsonValue | undefined): string | null {
@@ -179,7 +143,6 @@ export async function handleChat(
     throw new CockpitPermissionDeniedError("view_incident");
   }
   const persona = resolvePersona(session, request.persona);
-  const redactedMessage = redactForPrompt(request.message);
 
   const toolCalls: string[] = [];
   const activeIncidents = await listActiveIncidents(deps.adapter);
@@ -208,7 +171,7 @@ export async function handleChat(
     const status = await getIncidentStatus(deps.adapter, code);
     toolCalls.push("get_incident_status");
     incidentStatus = {
-      summary: redactSummary(status.summary),
+      summary: status.summary,
       timestamps: status.timestamps,
       actions_count: status.actions_count,
       attachments_count: status.attachments_count,
@@ -244,17 +207,16 @@ export async function handleChat(
 
   const context = JsonObjectSchema.parse({
     persona,
-    user_message: redactedMessage,
+    user_message: request.message,
     incident_code: code,
     incident: incidentStatus,
-    active_incidents: activeIncidents.map((summary) => redactSummary(summary)),
+    active_incidents: activeIncidents,
     timers,
     citations: citationEntries,
     pending_decisions: pendingDecisions,
   });
 
-  const safeContext = JsonObjectSchema.parse(sanitizeForPrompt(context));
-  const serializedContext = JSON.stringify(safeContext);
+  const serializedContext = JSON.stringify(context);
   const response = await deps.modelClient.chat_json({
     route: MODEL_ROUTE_REASONING,
     system: `${PERSONA_PROMPTS[persona]} ${RESPONSE_CONTRACT}`,

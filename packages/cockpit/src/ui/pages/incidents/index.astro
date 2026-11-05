@@ -1,7 +1,7 @@
 ---
 import AppLayout from "@pims/cockpit/ui/layouts/AppLayout.astro";
 import DecisionModal from "@pims/cockpit/ui/components/DecisionModal.astro";
-import { AlertCircle, AlertTriangle, ArrowRight, CheckCircle2, Clock, Eye, Filter, RefreshCw, Search, ShieldAlert, X } from "lucide-astro";
+import { AlertCircle, AlertTriangle, ArrowRight, CheckCircle2, Clock, Eye, Filter, Plus, RefreshCw, Search, ShieldAlert, X } from "lucide-astro";
 ---
 
 <AppLayout title="Incidentes | Glass-Box Cockpit" breadcrumb="Incidentes">
@@ -16,14 +16,25 @@ import { AlertCircle, AlertTriangle, ArrowRight, CheckCircle2, Clock, Eye, Filte
           Registro y seguimiento de incidentes de seguridad y privacidad en tiempo real
         </p>
       </div>
-      <button
-        id="btn-refresh-list"
-        type="button"
-        class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-medium transition-colors flex items-center space-x-1.5 border border-slate-700"
-      >
-        <RefreshCw class="w-3.5 h-3.5" />
-        <span>Sincronizar</span>
-      </button>
+      <div class="flex items-center space-x-2">
+        <a
+          id="btn-new-incident"
+          href="/new"
+          data-permission="change_incident"
+          class="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium transition-colors flex items-center space-x-1.5 shadow-sm"
+        >
+          <Plus class="w-3.5 h-3.5" />
+          <span>Nuevo Incidente</span>
+        </a>
+        <button
+          id="btn-refresh-list"
+          type="button"
+          class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-medium transition-colors flex items-center space-x-1.5 border border-slate-700"
+        >
+          <RefreshCw class="w-3.5 h-3.5" />
+          <span>Sincronizar</span>
+        </button>
+      </div>
     </div>
 
     <!-- Metrics Cards Row -->
@@ -226,6 +237,7 @@ import { AlertCircle, AlertTriangle, ArrowRight, CheckCircle2, Clock, Eye, Filte
 <script>
   import { authenticatedFetch } from "@pims/cockpit/ui/lib/api.ts";
   import { sseClient } from "@pims/cockpit/ui/lib/sse-client.ts";
+  import { getSession, hasPermission } from "@pims/cockpit/ui/lib/session.ts";
   import type { CockpitIncidentSummary, StreamSnapshot } from "@pims/types/cockpit.ts";
   import {
     formatDateTime,
@@ -380,6 +392,12 @@ import { AlertCircle, AlertTriangle, ArrowRight, CheckCircle2, Clock, Eye, Filte
   }
 
   async function initIncidentsPage() {
+    const session = getSession();
+    if (session && !hasPermission(session, "change_incident")) {
+      const btnNew = getEl("btn-new-incident");
+      if (btnNew) btnNew.style.display = "none";
+    }
+
     const existingSnapshot = sseClient.getState().snapshot;
     if (existingSnapshot && existingSnapshot.incidents) {
       allIncidents = existingSnapshot.incidents;

@@ -46,6 +46,56 @@ describe("Configuration Manager", () => {
     expect(config.MODEL_LOGPROBS).toBe(true);
     expect(config.WATCHER_POLL_INTERVAL_MS).toBe(5000);
     expect(config.RAG_CORPUS_DIR).toBe("corpus");
+    expect(config.PRESIDIO_URL).toBe("http://127.0.0.1:3001");
+    expect(config.PRESIDIO_IMAGE).toBe("presidio-analyzer:2.2.x-es");
+    expect(config.PRESIDIO_MODEL).toBe("es_core_news_md");
+    expect(config.PRESIDIO_TIMEOUT_MS).toBe(1500);
+    expect(config.PRESIDIO_MIN_SCORE).toBe(0.5);
+    expect(config.FORM_NARRATIVE_MAX_CHARS).toBe(4000);
+  });
+
+  it("strictly validates PRESIDIO configs and FORM_NARRATIVE_MAX_CHARS", () => {
+    try {
+      loadConfig({ ...baseValidEnv, PRESIDIO_URL: "not-a-url" });
+      expect.unreachable("should have thrown");
+    } catch (err) {
+      expect((err as ConfigError).code).toBe("CONFIG_TYPE:PRESIDIO_URL");
+    }
+
+    try {
+      loadConfig({ ...baseValidEnv, PRESIDIO_TIMEOUT_MS: "0" });
+      expect.unreachable("should have thrown");
+    } catch (err) {
+      expect((err as ConfigError).code).toBe("CONFIG_TYPE:PRESIDIO_TIMEOUT_MS");
+    }
+
+    try {
+      loadConfig({ ...baseValidEnv, PRESIDIO_MIN_SCORE: "2.5" });
+      expect.unreachable("should have thrown");
+    } catch (err) {
+      expect((err as ConfigError).code).toBe("CONFIG_TYPE:PRESIDIO_MIN_SCORE");
+    }
+
+    try {
+      loadConfig({ ...baseValidEnv, FORM_NARRATIVE_MAX_CHARS: "-10" });
+      expect.unreachable("should have thrown");
+    } catch (err) {
+      expect((err as ConfigError).code).toBe(
+        "CONFIG_TYPE:FORM_NARRATIVE_MAX_CHARS",
+      );
+    }
+
+    const validCustom = loadConfig({
+      ...baseValidEnv,
+      PRESIDIO_URL: "http://presidio:3000",
+      PRESIDIO_TIMEOUT_MS: "3000",
+      PRESIDIO_MIN_SCORE: "0.7",
+      FORM_NARRATIVE_MAX_CHARS: "5000",
+    });
+    expect(validCustom.PRESIDIO_URL).toBe("http://presidio:3000");
+    expect(validCustom.PRESIDIO_TIMEOUT_MS).toBe(3000);
+    expect(validCustom.PRESIDIO_MIN_SCORE).toBe(0.7);
+    expect(validCustom.FORM_NARRATIVE_MAX_CHARS).toBe(5000);
   });
 
   it("rejects missing PIMS authentication", () => {

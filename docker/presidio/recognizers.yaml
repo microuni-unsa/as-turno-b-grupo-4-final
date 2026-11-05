@@ -1,0 +1,97 @@
+supported_languages: 
+  - es
+  - en
+global_regex_flags: 26
+
+recognizers:
+  - name: EmailRecognizer
+    supported_languages:
+      - language: es
+      - language: en
+    type: predefined
+
+  - name: PhoneRecognizer
+    supported_languages:
+      - language: es
+      - language: en
+    type: predefined
+
+  - name: IpRecognizer
+    supported_languages:
+      - language: es
+      - language: en
+    type: predefined
+
+  - name: UrlRecognizer
+    supported_languages:
+      - language: es
+      - language: en
+    type: predefined
+
+  - name: EsNieRecognizer
+    supported_languages:
+      - language: es
+    type: predefined
+
+  - name: EsNifRecognizer
+    supported_languages:
+      - language: es
+    type: predefined
+
+  - name: PE_DNI
+    type: custom
+    supported_language: es
+    supported_entity: PE_DNI
+    patterns:
+      - name: dni_pattern
+        regex: "\\b\\d{8}\\b"
+        score: 0.6
+    context:
+      - dni
+      - documento
+      - identidad
+      - libreta
+      - reportante
+
+  - name: PE_RUC
+    type: custom
+    supported_language: es
+    supported_entity: PE_RUC
+    patterns:
+      - name: ruc_pattern
+        regex: "\\b(10|15|17|20)\\d{9}\\b"
+        score: 0.8
+    context:
+      - ruc
+      - contribuyente
+      - sunat
+      - fiscal
+      - empresa
+
+  - name: PE_PHONE
+    type: custom
+    supported_language: es
+    supported_entity: PHONE_NUMBER
+    patterns:
+      - name: pe_phone_pattern
+        regex: "(?:\\+51\\s*)?(?:9\\d{8}|[1-8]\\d{7}|[1-8]\\d{6})"
+        score: 0.85
+    context:
+      - telefono
+      - teléfono
+      - celular
+      - movil
+      - móvil
+      - contacto
+      - llamar
+      - anexo
+
+  - name: SENSITIVE_DESCRIPTION
+    type: custom
+    supported_language: es
+    supported_entity: SENSITIVE_DESCRIPTION
+    patterns:
+      - name: description_pattern
+        regex: "(?i)\\b(?:diagn[oó]stico|tratamiento\\s+m[eé]dico|historia\\s+cl[ií]nica|antecedentes\\s+m[eé]dicos|datos\\s+biom[eé]tricos|informaci[oó]n\\s+gen[eé]tica)\\b[^\\.\\n]+"
+        score: 0.85
+

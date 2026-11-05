@@ -12,10 +12,15 @@ import {
   listAllIncidents,
 } from "@pims/cockpit/chat-tools.ts";
 import { buildSnapshot, CockpitEventHub } from "@pims/cockpit/event-hub.ts";
+import {
+  draftGuidedIncident,
+  explainField,
+} from "@pims/cockpit/guided-create.ts";
 import type { AgentConfig } from "@pims/config";
 import type { EvidenceStore } from "@pims/evidence/evidence-store.ts";
 import type { PimsAdapter } from "@pims/pims-adapter";
 import type { RAGService } from "@pims/rag";
+import type { IntakePayload } from "@pims/types/agent.ts";
 import {
   type ChatRequest,
   ChatRequestSchema,
@@ -23,6 +28,9 @@ import {
   type CockpitSession,
   ExemptionAttestationRequestSchema,
   type ExemptionAttestationResponse,
+  GuidedDraftRequestSchema,
+  GuidedExplainRequestSchema,
+  GuidedSubmitRequestSchema,
   RevisionRequestSchema,
   type StreamSnapshot,
 } from "@pims/types/cockpit.ts";
@@ -37,8 +45,10 @@ import {
   CockpitRoleUnknownError,
   CockpitSessionInvalidError,
   ExemptionUngroundedError,
+  FormNarrativeTooLongError,
   ModelUnavailableError,
   NotifyNoRecipientsError,
+  PiiRedactionUnavailableError,
   PimsAuthFailedError,
   PimsBaseError,
   PimsNotFoundError,
@@ -81,7 +91,12 @@ interface CockpitEnv {
 interface ReadinessCache {
   at_ms: number;
   ready: boolean;
-  checks: { database: boolean; rag_index: boolean; pims: boolean };
+  checks: {
+    database: boolean;
+    rag_index: boolean;
+    pims: boolean;
+    presidio: boolean;
+  };
 }
 
 function errorStatus(error: unknown): number {
@@ -122,13 +137,15 @@ function errorStatus(error: unknown): number {
   if (
     error instanceof CockpitChatInvalidError ||
     error instanceof CockpitPiiBlockedError ||
-    error instanceof CitationFabricatedError
+    error instanceof CitationFabricatedError ||
+    error instanceof FormNarrativeTooLongError
   ) {
     return 400;
   }
   if (
     error instanceof PimsUnavailableError ||
-    error instanceof ModelUnavailableError
+    error instanceof ModelUnavailableError ||
+    error instanceof PiiRedactionUnavailableError
   ) {
     return 503;
   }
@@ -147,7 +164,10 @@ function errorCode(error: unknown): string {
 
 function errorMessage(error: unknown): string {
   if (error instanceof ZodError) {
-    return "Request body failed validation";
+    const details = error.issues
+      .map((i) => `${i.path.join(".") || "root"}: ${i.message}`)
+      .join(", ");
+    return `Request body failed validation: ${details}`;
   }
   if (error instanceof PimsBaseError) {
     return error.message;
@@ -233,6 +253,111 @@ export function createCockpitApp(deps: CockpitAppDeps): Hono<CockpitEnv> {
     requirePermission(session, "view_incident");
     const incidents = await listAllIncidents(deps.adapter);
     return c.json({ incidents });
+  });
+
+  app.post("/api/incidents/draft", async (c) => {
+    const session = c.get("session");
+    requirePermission(session, "change_incident");
+    const body = await c.req.json().catch(() => ({}));
+    const request = GuidedDraftRequestSchema.parse(body);
+    const result = await draftGuidedIncident(
+      request,
+      {
+        config: deps.config,
+        modelClient: deps.agent.modelClient,
+        presidioClient: deps.agent.presidioClient,
+        ragService: deps.ragService,
+        now: clock,
+      },
+      session.username,
+    );
+    return c.json(result);
+  });
+
+  app.post("/api/incidents/explain", async (c) => {
+    const session = c.get("session");
+    requirePermission(session, "view_incident");
+    const body = await c.req.json().catch(() => ({}));
+    const request = GuidedExplainRequestSchema.parse(body);
+    const result = await explainField(request, {
+      config: deps.config,
+      modelClient: deps.agent.modelClient,
+      presidioClient: deps.agent.presidioClient,
+      ragService: deps.ragService,
+      now: clock,
+    });
+    return c.json(result);
+  });
+
+  app.post("/api/incidents", async (c) => {
+    const session = c.get("session");
+    requirePermission(session, "change_incident");
+    const body = await c.req.json().catch(() => ({}));
+    const request = GuidedSubmitRequestSchema.parse(body);
+
+    const intakePayload: IntakePayload = {
+      channel: "cockpit_guided",
+      title: request.title,
+      description: request.description ?? undefined,
+      involves_personal_data: request.involves_personal_data,
+      incident_date: request.incident_date,
+      incident_time: request.incident_time ?? undefined,
+      detection_date: request.detection_date ?? undefined,
+      detection_time: request.detection_time ?? undefined,
+      incident_type: request.incident_type,
+      affected_data_types: request.affected_data_types,
+      security_measures_adopted: request.security_measures_adopted,
+      affected_cid: request.affected_cid,
+      num_affected_subjects: request.num_affected_subjects ?? undefined,
+      compromised_system: request.compromised_system ?? undefined,
+      affected_url: request.affected_url ?? undefined,
+      reporter:
+        request.rep_document_number || request.rep_first_name
+          ? {
+              document_number: request.rep_document_number ?? undefined,
+              document_expiry: request.rep_document_expiry ?? undefined,
+              first_name: request.rep_first_name ?? undefined,
+              last_name_p: request.rep_last_name_p ?? undefined,
+              last_name_m: request.rep_last_name_m ?? undefined,
+              position: request.rep_position ?? undefined,
+              phone: request.rep_phone ?? undefined,
+              email: request.rep_email ?? undefined,
+            }
+          : undefined,
+      entity:
+        request.entity_ruc || request.entity_name
+          ? {
+              type: request.entity_type as "R" | "U" | undefined,
+              ruc: request.entity_ruc ?? undefined,
+              name: request.entity_name ?? undefined,
+              phone: request.entity_phone ?? undefined,
+              extension: request.entity_extension ?? undefined,
+              department: request.entity_department ?? undefined,
+              province: request.entity_province ?? undefined,
+              district: request.entity_district ?? undefined,
+            }
+          : undefined,
+      dpo:
+        request.dpo_contact_email || request.dpo_contact_name
+          ? {
+              name: request.dpo_contact_name ?? undefined,
+              email: request.dpo_contact_email ?? undefined,
+              phone: request.dpo_contact_phone ?? undefined,
+            }
+          : undefined,
+    };
+
+    const intakeResult = await deps.agent.orchestrator.intake(intakePayload);
+    const isDedupe = intakeResult.dedupe.action !== "create";
+    return c.json(
+      {
+        incident_code: intakeResult.incident.incident_code,
+        status: intakeResult.incident.status,
+        dedupe: isDedupe,
+        marker: isDedupe ? "DEDUPE_MERGED:cockpit_guided" : undefined,
+      },
+      isDedupe ? 200 : 201,
+    );
   });
 
   app.get("/api/compliance", async (c) => {
@@ -466,6 +591,7 @@ export function createCockpitApp(deps: CockpitAppDeps): Hono<CockpitEnv> {
     if (readiness === null || now - readiness.at_ms > READINESS_CACHE_TTL_MS) {
       let database = false;
       let pims = false;
+      let presidio = false;
       try {
         await deps.store.sql`SELECT 1`;
         database = true;
@@ -478,19 +604,26 @@ export function createCockpitApp(deps: CockpitAppDeps): Hono<CockpitEnv> {
       } catch {
         pims = false;
       }
+      try {
+        presidio = await deps.agent.presidioClient.isHealthy();
+      } catch {
+        presidio = false;
+      }
       readiness = {
         at_ms: now,
-        ready: database && pims,
+        ready: database && pims && presidio,
         checks: {
           database,
           rag_index: deps.ragService.getVersion() !== "",
           pims,
+          presidio,
         },
       };
       readiness.ready =
         readiness.checks.database &&
         readiness.checks.rag_index &&
-        readiness.checks.pims;
+        readiness.checks.pims &&
+        readiness.checks.presidio;
     }
     return c.json(
       readiness.ready
@@ -506,7 +639,11 @@ export function createCockpitApp(deps: CockpitAppDeps): Hono<CockpitEnv> {
 
   app.onError((error, c) => {
     return c.json(
-      { error: errorCode(error), message: errorMessage(error) },
+      {
+        error: errorCode(error),
+        message: errorMessage(error),
+        details: error instanceof ZodError ? error.issues : undefined,
+      },
       errorStatus(error) as 400 | 401 | 403 | 404 | 409 | 500 | 503,
     );
   });

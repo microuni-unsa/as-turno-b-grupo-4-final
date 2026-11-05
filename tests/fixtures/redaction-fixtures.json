@@ -1,0 +1,74 @@
+[
+  {
+    "id": "dni_8",
+    "description": "Peruvian 8-digit DNI identification number",
+    "input": "El denunciante con DNI 72345678 reportó la brecha.",
+    "expected_redacted": "El denunciante con DNI [ID] reportó la brecha.",
+    "expected_entities": ["PE_DNI"],
+    "expected_tokens": ["[ID]"]
+  },
+  {
+    "id": "ruc_11",
+    "description": "Peruvian 11-digit RUC tax number",
+    "input": "Proveedor con RUC 20512345678 detectó accesos anómalos.",
+    "expected_redacted": "Proveedor con RUC [ID] detectó accesos anómalos.",
+    "expected_entities": ["PE_RUC"],
+    "expected_tokens": ["[ID]"]
+  },
+  {
+    "id": "nie_spain",
+    "description": "Spanish NIE foreigner identification number",
+    "input": "Operador extranjero con NIE X1234567L notificó al equipo de seguridad.",
+    "expected_redacted": "Operador extranjero con NIE [ID] notificó al equipo de seguridad.",
+    "expected_entities": ["ES_NIE"],
+    "expected_tokens": ["[ID]"]
+  },
+  {
+    "id": "spanish_full_name",
+    "description": "Spanish full personal name",
+    "input": "El reporte fue recibido por Carlos Mendoza Morales en guardia.",
+    "expected_redacted": "El reporte fue recibido por [REPORTANTE] en guardia.",
+    "expected_entities": ["PERSON"],
+    "expected_tokens": ["[REPORTANTE]"]
+  },
+  {
+    "id": "phone_pe",
+    "description": "Peruvian mobile phone number with +51 prefix",
+    "input": "Contacto telefónico de soporte +51 987654321 disponible 24/7.",
+    "expected_redacted": "Contacto telefónico de soporte [CONTACTO] disponible 24/7.",
+    "expected_entities": ["PHONE_NUMBER"],
+    "expected_tokens": ["[CONTACTO]"]
+  },
+  {
+    "id": "lima_address",
+    "description": "Lima Peru geographical location",
+    "input": "Instalaciones en Lima Perú bajo monitoreo.",
+    "expected_redacted": "Instalaciones en [SISTEMA] bajo monitoreo.",
+    "expected_entities": ["LOCATION"],
+    "expected_tokens": ["[SISTEMA]"]
+  },
+  {
+    "id": "email_address",
+    "description": "Corporate / institutional email address",
+    "input": "Remitir los hallazgos a soporte.seguridad@unsa.edu.pe a la brevedad.",
+    "expected_redacted": "Remitir los hallazgos a [CONTACTO] a la brevedad.",
+    "expected_entities": ["EMAIL_ADDRESS"],
+    "expected_tokens": ["[CONTACTO]"]
+  },
+  {
+    "id": "url_system",
+    "description": "Compromised system HTTPS URL",
+    "input": "El incidente comprometió el portal https://admissions.unsa.edu.pe durante la noche.",
+    "expected_redacted": "El incidente comprometió el portal [SISTEMA] durante la noche.",
+    "expected_entities": ["URL"],
+    "expected_tokens": ["[SISTEMA]"]
+  },
+  {
+    "id": "sensitive_description",
+    "description": "PII-bearing sensitive free-text description span",
+    "input": "Se filtró un archivo con diagnóstico médico y resultados clínicos.",
+    "expected_redacted": "Se filtró un archivo con [DESCRIPCION].",
+    "expected_entities": ["SENSITIVE_DESCRIPTION"],
+    "expected_tokens": ["[DESCRIPCION]"]
+  }
+]

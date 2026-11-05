@@ -108,6 +108,7 @@ function respond(content: JsonObject): {
 export async function startIntegrationHarness(options?: {
   autoNotify?: boolean;
   chatHandler?: HarnessChatHandler;
+  presidioUrl?: string;
 }): Promise<IntegrationHarness> {
   const projectRoot = process.cwd();
   const now = new Date("2026-10-01T20:00:00.000Z");
@@ -365,6 +366,8 @@ export async function startIntegrationHarness(options?: {
     SCHEDULER_MAX_TIMERS: "100",
     AUTO_NOTIFY: options?.autoNotify === true ? "true" : "false",
     WATCHER_POLL_INTERVAL_MS: "5000",
+    PRESIDIO_URL: options?.presidioUrl ?? "http://127.0.0.1:3001",
+    PRESIDIO_TIMEOUT_MS: "5000",
   });
 
   const agent = await createAgent(

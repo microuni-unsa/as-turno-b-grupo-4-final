@@ -1,7 +1,11 @@
 import type { AgentEventEmitter } from "@pims/agent/events/agent-events.ts";
 import { IndicatorEmitter } from "@pims/agent/indicators/indicator-emitter.ts";
 import { CloseChecklistVerifier } from "@pims/agent/lifecycle/close-checklist.ts";
-import { AgentModelClient } from "@pims/agent/llm/safe-prompt.ts";
+import { PresidioClient } from "@pims/agent/llm/presidio-client.ts";
+import {
+  AgentModelClient,
+  setGlobalPresidioClient,
+} from "@pims/agent/llm/safe-prompt.ts";
 import { IncidentOrchestrator } from "@pims/agent/orchestrator/orchestrator.ts";
 import { RoleRegistry } from "@pims/agent/orchestrator/roles.ts";
 import {
@@ -36,6 +40,7 @@ export * from "@pims/agent/lifecycle/awareness.ts";
 export * from "@pims/agent/lifecycle/close-checklist.ts";
 export * from "@pims/agent/lifecycle/dedupe.ts";
 export * from "@pims/agent/lifecycle/markers.ts";
+export * from "@pims/agent/llm/presidio-client.ts";
 export * from "@pims/agent/llm/safe-prompt.ts";
 export * from "@pims/agent/orchestrator/lifecycle.ts";
 export * from "@pims/agent/orchestrator/orchestrator.ts";
@@ -57,6 +62,7 @@ export interface CreateAgentDeps {
   modelProvider: ModelProvider;
   ragService: RAGService;
   config: AgentConfig;
+  presidioClient?: PresidioClient;
   bundleSealer?: BundleSealer;
   composer?: NoticeComposer;
   exemptionEngine?: ExemptionEngine;
@@ -79,6 +85,7 @@ export interface Agent {
   orchestrator: IncidentOrchestrator;
   indicator: IndicatorEmitter;
   modelClient: AgentModelClient;
+  presidioClient: PresidioClient;
   closeChecklist: CloseChecklistVerifier;
 }
 
@@ -104,7 +111,15 @@ export async function createAgent(
   const bundleSealer = deps.bundleSealer ?? new BundleSealer(evidenceStore);
   const composer = deps.composer ?? new NoticeComposer({ now: clock });
   const exemptionEngine = deps.exemptionEngine ?? new ExemptionEngine();
-  const modelClient = new AgentModelClient(deps.modelProvider);
+  const presidioClient =
+    deps.presidioClient ??
+    new PresidioClient({
+      baseUrl: config.PRESIDIO_URL,
+      timeoutMs: config.PRESIDIO_TIMEOUT_MS,
+      minScore: config.PRESIDIO_MIN_SCORE,
+    });
+  setGlobalPresidioClient(presidioClient);
+  const modelClient = new AgentModelClient(deps.modelProvider, presidioClient);
 
   const roles = new RoleRegistry();
   const closeChecklist = new CloseChecklistVerifier({
@@ -230,6 +245,7 @@ export async function createAgent(
     orchestrator,
     indicator,
     modelClient,
+    presidioClient,
     closeChecklist,
   };
 }

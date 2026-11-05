@@ -5,6 +5,9 @@ import {
 } from "@pims/types/agent.ts";
 import { ExemptionEvaluationResultSchema } from "@pims/types/notices.ts";
 import {
+  AFFECTED_CID,
+  ALL_AFFECTED_DATA_TYPES,
+  ALL_SECURITY_MEASURES,
   INCIDENT_IMPACTS,
   INCIDENT_SEVERITIES,
   INCIDENT_STATUSES,
@@ -162,3 +165,115 @@ export const StreamSnapshotSchema = z.object({
   pending_decisions: z.array(PendingDecisionSchema),
 });
 export type StreamSnapshot = z.infer<typeof StreamSnapshotSchema>;
+
+export const GuidedReportingSchema = z.object({
+  title: z.string().min(1).max(150),
+  description: z.string().max(1000).nullable().optional(),
+  incident_date: z.string().min(1),
+  incident_time: z.string().nullable().optional(),
+  detection_date: z.string().nullable().optional(),
+  detection_time: z.string().nullable().optional(),
+  incident_type: z.enum(INCIDENT_TYPES),
+  involves_personal_data: z.boolean(),
+  affected_data_types: z.array(z.enum(ALL_AFFECTED_DATA_TYPES)).default([]),
+  num_affected_subjects: z.number().nullable().optional(),
+  affected_treatment: z.string().nullable().optional(),
+  compromised_system: z.string().nullable().optional(),
+  affected_url: z.string().nullable().optional(),
+  security_measures_adopted: z.array(z.enum(ALL_SECURITY_MEASURES)).default([]),
+  affected_cid: z.array(z.enum(AFFECTED_CID)).default([]),
+  rep_document_number: z.string().nullable().optional(),
+  rep_document_expiry: z.string().nullable().optional(),
+  rep_first_name: z.string().nullable().optional(),
+  rep_last_name_p: z.string().nullable().optional(),
+  rep_last_name_m: z.string().nullable().optional(),
+  rep_position: z.string().nullable().optional(),
+  rep_phone: z.string().nullable().optional(),
+  rep_email: z.string().nullable().optional(),
+  entity_type: z.string().nullable().optional(),
+  entity_ruc: z.string().nullable().optional(),
+  entity_name: z.string().nullable().optional(),
+  entity_phone: z.string().nullable().optional(),
+  entity_extension: z.string().nullable().optional(),
+  entity_department: z.string().nullable().optional(),
+  entity_province: z.string().nullable().optional(),
+  entity_district: z.string().nullable().optional(),
+  reported_by: z.string().nullable().optional(),
+  dpo_contact_name: z.string().nullable().optional(),
+  dpo_contact_email: z.string().nullable().optional(),
+  dpo_contact_phone: z.string().nullable().optional(),
+});
+export type GuidedReporting = z.infer<typeof GuidedReportingSchema>;
+
+export const GuidedProvenanceSchema = z.enum([
+  "narrative",
+  "partial",
+  "default",
+]);
+export type GuidedProvenance = z.infer<typeof GuidedProvenanceSchema>;
+
+export const GuidedDraftRequestSchema = z.object({
+  narrative: z.string().optional(),
+  partial: GuidedReportingSchema.partial().optional(),
+  sections: z.array(z.string()).optional(),
+});
+export type GuidedDraftRequest = z.infer<typeof GuidedDraftRequestSchema>;
+
+export const GuidedDraftResponseSchema = z.object({
+  draft: GuidedReportingSchema,
+  provenance: z.record(z.string(), GuidedProvenanceSchema),
+  redaction_report: z.object({
+    total_spans: z.number().int().nonnegative(),
+    entities_found: z.array(z.string()),
+  }),
+  warnings: z.array(z.string()),
+});
+export type GuidedDraftResponse = z.infer<typeof GuidedDraftResponseSchema>;
+
+export const GuidedExplainRequestSchema = z.object({
+  field: z.string().min(1),
+  context: z.record(z.string(), z.unknown()).optional(),
+});
+export type GuidedExplainRequest = z.infer<typeof GuidedExplainRequestSchema>;
+
+export const GuidedExplainOptionSchema = z.object({
+  code: z.string(),
+  label: z.string(),
+  description: z.string().optional(),
+});
+export type GuidedExplainOption = z.infer<typeof GuidedExplainOptionSchema>;
+
+export const GuidedExplainResponseSchema = z.object({
+  field: z.string().min(1),
+  type: z.enum(["enum", "semantic"]),
+  explanation: z.string(),
+  citations: z.array(ChatCitationSchema).optional(),
+  options: z.array(GuidedExplainOptionSchema).optional(),
+});
+export type GuidedExplainResponse = z.infer<typeof GuidedExplainResponseSchema>;
+
+export const GuidedSubmitRequestSchema = GuidedReportingSchema.extend({
+  idempotency_key: z.string().min(1),
+});
+export type GuidedSubmitRequest = z.infer<typeof GuidedSubmitRequestSchema>;
+
+export const PresidioRecognizerResultSchema = z.object({
+  entity_type: z.string(),
+  start: z.number().int().nonnegative(),
+  end: z.number().int().nonnegative(),
+  score: z.number(),
+  analysis_explanation: z.unknown().optional(),
+});
+export type PresidioRecognizerResult = z.infer<
+  typeof PresidioRecognizerResultSchema
+>;
+
+export const PresidioAnalyzeRequestSchema = z.object({
+  text: z.string(),
+  language: z.literal("es"),
+  score_threshold: z.number().optional(),
+  entities: z.array(z.string()).optional(),
+});
+export type PresidioAnalyzeRequest = z.infer<
+  typeof PresidioAnalyzeRequestSchema
+>;

@@ -98,7 +98,8 @@ const { breadcrumb } = Astro.props;
     const path = window.location.pathname;
     const breadcrumbLabel = document.getElementById("header-breadcrumb-label");
     if (breadcrumbLabel) {
-      if (path.startsWith("/incidents")) breadcrumbLabel.textContent = "Incidentes";
+      if (path === "/new") breadcrumbLabel.textContent = "Nuevo Incidente";
+      else if (path.startsWith("/incidents")) breadcrumbLabel.textContent = "Incidentes";
       else if (path.startsWith("/compliance")) breadcrumbLabel.textContent = "Cumplimiento DPO";
       else if (path.startsWith("/security-log")) breadcrumbLabel.textContent = "Bitácora de Seguridad";
       else if (path.startsWith("/chat")) breadcrumbLabel.textContent = "Asistente IA";

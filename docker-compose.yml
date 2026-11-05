@@ -14,12 +14,28 @@ services:
       retries: 20
     restart: unless-stopped
 
+  presidio:
+    build:
+      context: ./docker/presidio
+    image: presidio-analyzer:2.2.x-es
+    environment:
+      PORT: "3000"
+    ports:
+      - "3001:3000"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:3000/health || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
   app:
     build: .
     env_file:
       - .env
     environment:
       EVIDENCE_DB_URL: postgres://pims:pims@db:5432/pims_evidence
+      PRESIDIO_URL: http://presidio:3000
       DEPLOY_PORT: "8080"
       DEPLOY_DATA_DIR: /app/data
       HOME: /tmp
@@ -32,6 +48,8 @@ services:
       - /tmp
     depends_on:
       db:
+        condition: service_healthy
+      presidio:
         condition: service_healthy
     restart: unless-stopped
 

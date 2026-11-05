@@ -10,6 +10,7 @@
     "test": "vitest run",
     "test:unit": "vitest run tests/unit",
     "test:integration": "vitest run tests/integration",
+    "test:acceptance": "vitest run tests/acceptance",
     "check": "biome check && tsc --noEmit",
     "check:fix": "biome check --write && tsc --noEmit",
     "dev:ui": "bun --filter @pims/cockpit dev:ui",

@@ -865,7 +865,12 @@ export const TriageCalibrationSchema = z
   .strict();
 export type TriageCalibration = z.infer<typeof TriageCalibrationSchema>;
 
-export const INTAKE_CHANNELS = ["form", "siem", "processor_notice"] as const;
+export const INTAKE_CHANNELS = [
+  "form",
+  "siem",
+  "processor_notice",
+  "cockpit_guided",
+] as const;
 export const IntakeChannelSchema = z.enum(INTAKE_CHANNELS);
 export type IntakeChannel = z.infer<typeof IntakeChannelSchema>;
 
