@@ -7,8 +7,6 @@ import {
   CheckCircle2,
   HelpCircle,
   Info,
-  Mic,
-  MicOff,
   Plus,
   Send,
   Sparkles,
@@ -37,58 +35,9 @@ import {
             </span>
           </h1>
           <p class="text-xs text-slate-400 mt-1">
-            Formulario unificado con el PIMS primario. Complete los campos con asistencia de IA o dictado por voz. Las secciones de medidas y acciones pueden dejarse vacías y serán completadas por el orquestador.
+            Formulario unificado con el PIMS primario. Puede interactuar con el Copiloto IA flotante en la esquina inferior derecha o dictar por voz para completar y ajustar los campos.
           </p>
         </div>
-      </div>
-    </div>
-
-    <!-- AI Drafting & Dictation Section -->
-    <div class="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-sm space-y-4">
-      <div class="flex items-center justify-between">
-        <div class="flex items-center space-x-2">
-          <Sparkles class="w-4 h-4 text-blue-400" />
-          <h2 class="text-sm font-semibold text-white">Narrativa libre o dictada</h2>
-        </div>
-        <div class="flex items-center space-x-2">
-          <button
-            id="btn-dictate"
-            type="button"
-            class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium transition-colors flex items-center space-x-1.5 border border-slate-700"
-          >
-            <Mic id="icon-mic" class="w-3.5 h-3.5 text-rose-400" />
-            <MicOff id="icon-mic-off" class="w-3.5 h-3.5 text-slate-400 hidden" />
-            <span id="label-dictate">Dictar por voz</span>
-          </button>
-          <button
-            id="btn-draft-ai"
-            type="button"
-            class="px-4 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium transition-colors flex items-center space-x-1.5 shadow-sm"
-          >
-            <Sparkles class="w-3.5 h-3.5" />
-            <span>Redactar borrador con IA</span>
-          </button>
-        </div>
-      </div>
-
-      <div class="relative">
-        <textarea
-          id="input-narrative"
-          rows="4"
-          maxlength="4000"
-          placeholder="Describa el incidente con sus propias palabras o utilice el botón de dictado (ej. 'El día de hoy a las 09:30 detectamos una filtración de registros de postulantes en el portal de admisiones debido a una credencial comprometida. Afectó a unos 500 postulantes con DNI y correos...')"
-          class="w-full bg-slate-950 border border-slate-800 rounded-lg p-3 text-xs text-slate-200 placeholder:text-slate-600 focus:border-blue-500 focus:outline-none resize-y"
-        ></textarea>
-        <div class="flex justify-between items-center text-[10px] text-slate-500 mt-1 px-1">
-          <span id="speech-indicator" class="hidden text-amber-400 animate-pulse">Escuchando micrófono (Web Speech API)...</span>
-          <span class="ml-auto tabular-nums"><span id="char-count">0</span> / 4000 caracteres</span>
-        </div>
-      </div>
-
-      <!-- Redaction Report & Warnings Banner -->
-      <div id="draft-feedback-banner" class="hidden p-3 rounded-lg border text-xs space-y-1.5">
-        <div id="redaction-summary" class="font-medium"></div>
-        <div id="draft-warnings" class="space-y-0.5 text-amber-300"></div>
       </div>
     </div>
 
@@ -1109,120 +1058,65 @@ import {
     color: rgb(203, 213, 225);
     border-color: rgb(71, 85, 105);
   }
+
+  .field-updated-highlight {
+    outline: 2px solid #3b82f6 !important;
+    background-color: rgba(30, 58, 138, 0.2) !important;
+    transition: all 0.5s ease-out;
+  }
+  .field-highlight-pulse {
+    animation: pulse 1.5s cubic-bezier(0.4, 0, 0.6, 1) 2;
+  }
+  @keyframes pulse {
+    0%, 100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.8;
+    }
+  }
 </style>
 
 <script>
   import { authenticatedFetch } from "@pims/cockpit/ui/lib/api.ts";
+  import {
+    applyFormMutationToDom,
+    extractCurrentFormValues,
+    loadFormDraft,
+    saveFormDraft,
+  } from "@pims/cockpit/ui/lib/form-draft-bus.ts";
+  import { ChatStore } from "@pims/cockpit/ui/lib/chat-store.ts";
+  import type { ChatFormMutation } from "@pims/types/cockpit.ts";
 
-  const narrativeInput = document.getElementById("input-narrative") as HTMLTextAreaElement;
-  const charCount = document.getElementById("char-count");
-  const btnDictate = document.getElementById("btn-dictate");
-  const iconMic = document.getElementById("icon-mic");
-  const iconMicOff = document.getElementById("icon-mic-off");
-  const labelDictate = document.getElementById("label-dictate");
-  const speechIndicator = document.getElementById("speech-indicator");
-  const btnDraftAi = document.getElementById("btn-draft-ai");
-  const incidentForm = document.getElementById("incident-form") as HTMLFormElement;
+  const incidentForm = document.getElementById("incident-form") as HTMLFormElement | null;
   const modalExplain = document.getElementById("modal-explain");
   const modalExplainTitle = document.getElementById("modal-explain-title");
   const modalExplainContent = document.getElementById("modal-explain-content");
   const modalExplainCitations = document.getElementById("modal-explain-citations");
   const btnCloseExplain = document.getElementById("btn-close-explain");
-  const draftFeedbackBanner = document.getElementById("draft-feedback-banner");
-  const redactionSummary = document.getElementById("redaction-summary");
-  const draftWarnings = document.getElementById("draft-warnings");
   const btnAddAction = document.getElementById("btn-add-action");
   const containerActions = document.getElementById("container-actions");
-
-  narrativeInput?.addEventListener("input", () => {
-    if (charCount) {
-      charCount.textContent = String(narrativeInput.value.length);
-    }
-  });
-
-  // Client-side Web Speech API dictation
-  let recognition: any = null;
-  let isRecording = false;
-
-  const SpeechRecognition =
-    (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-
-  if (SpeechRecognition && btnDictate) {
-    recognition = new SpeechRecognition();
-    recognition.continuous = true;
-    recognition.interimResults = true;
-    recognition.lang = "es-PE";
-
-    recognition.onresult = (event: any) => {
-      let finalTranscript = "";
-      for (let i = event.resultIndex; i < event.results.length; ++i) {
-        if (event.results[i].isFinal) {
-          finalTranscript += event.results[i][0].transcript;
-        }
-      }
-      if (finalTranscript && narrativeInput) {
-        narrativeInput.value = (narrativeInput.value ? narrativeInput.value + " " : "") + finalTranscript;
-        if (charCount) charCount.textContent = String(narrativeInput.value.length);
-      }
-    };
-
-    recognition.onerror = () => {
-      stopDictation();
-    };
-
-    recognition.onend = () => {
-      stopDictation();
-    };
-
-    btnDictate.addEventListener("click", () => {
-      if (isRecording) {
-        stopDictation();
-      } else {
-        startDictation();
-      }
-    });
-  } else if (btnDictate) {
-    btnDictate.title = "Reconocimiento de voz no soportado en este navegador";
-  }
-
-  function startDictation() {
-    if (!recognition) return;
-    try {
-      recognition.start();
-      isRecording = true;
-      iconMic?.classList.add("hidden");
-      iconMicOff?.classList.remove("hidden");
-      if (labelDictate) labelDictate.textContent = "Detener dictado";
-      speechIndicator?.classList.remove("hidden");
-    } catch (e) {
-      console.error(e);
-    }
-  }
-
-  function stopDictation() {
-    if (!recognition) return;
-    try {
-      recognition.stop();
-    } catch {}
-    isRecording = false;
-    iconMic?.classList.remove("hidden");
-    iconMicOff?.classList.add("hidden");
-    if (labelDictate) labelDictate.textContent = "Dictar por voz";
-    speechIndicator?.classList.add("hidden");
-  }
 
   // Dynamic Action items helper
   let actionCounter = 0;
 
-  function addActionCard(initialData?: { action_type?: string; responsible?: string; action_date?: string; description?: string; evidence?: string }) {
+  function addActionCard(initialData?: {
+    action_type?: string;
+    responsible?: string;
+    action_date?: string;
+    description?: string;
+    evidence?: string | null;
+  }) {
     if (!containerActions) return;
     actionCounter += 1;
     const actionId = `action-row-${actionCounter}`;
     const card = document.createElement("div");
     card.id = actionId;
-    card.className = "action-card p-4 rounded-lg bg-slate-950 border border-slate-800 space-y-3 relative";
+    card.className =
+      "action-card p-4 rounded-lg bg-slate-950 border border-slate-800 space-y-3 relative";
 
-    const defaultDate = initialData?.action_date || new Date().toISOString().slice(0, 10);
+    const defaultDate =
+      initialData?.action_date || new Date().toISOString().slice(0, 10);
 
     card.innerHTML = `
       <div class="flex items-center justify-between pb-2 border-b border-slate-800">
@@ -1261,6 +1155,12 @@ import {
 
     card.querySelector(".btn-remove-action")?.addEventListener("click", () => {
       card.remove();
+      saveCurrentForm();
+    });
+
+    card.querySelectorAll("input, select, textarea").forEach((el) => {
+      el.addEventListener("input", saveCurrentForm);
+      el.addEventListener("change", saveCurrentForm);
     });
 
     containerActions.appendChild(card);
@@ -1268,148 +1168,97 @@ import {
 
   btnAddAction?.addEventListener("click", () => {
     addActionCard();
+    saveCurrentForm();
   });
 
-  // Draft with AI
-  btnDraftAi?.addEventListener("click", async () => {
-    const narrative = narrativeInput?.value.trim() ?? "";
-    const formData = new FormData(incidentForm);
-    const partial: Record<string, any> = {};
-    formData.forEach((value, key) => {
-      if (key !== "affected_data_types" && key !== "affected_cid" && key !== "security_measures_adopted" && value) {
-        partial[key] = value;
-      }
-    });
-
-    btnDraftAi.setAttribute("disabled", "true");
-    btnDraftAi.innerHTML = `<span>Procesando...</span>`;
-
-    try {
-      const response = await authenticatedFetch("/api/incidents/draft", {
-        method: "POST",
-        body: JSON.stringify({ narrative, partial }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        alert(`Error al redactar: ${errorData.message || errorData.error}`);
-        return;
-      }
-
-      const result = await response.json();
-      applyDraft(result.draft, result.provenance);
-
-      if (draftFeedbackBanner && redactionSummary && draftWarnings) {
-        draftFeedbackBanner.classList.remove("hidden");
-        draftFeedbackBanner.className = "p-3.5 rounded-xl border text-xs space-y-1.5 bg-blue-950/40 border-blue-800/80 text-blue-200 shadow-sm";
-        
-        const aiFilledCount = Object.entries(result.provenance).filter(([k, p]) => p === "narrative" && result.draft[k] !== null && result.draft[k] !== "" && (!Array.isArray(result.draft[k]) || result.draft[k].length > 0)).length;
-        
-        redactionSummary.innerHTML = `
-          <div class="flex items-center gap-2">
-            <span class="text-emerald-400 font-semibold text-sm">✨ Análisis completado con éxito</span>
-            <span class="text-blue-300">— Se autocompletaron ${aiFilledCount} campos a partir de su narrativa.</span>
-          </div>
-          <div class="text-[11px] text-slate-300 mt-1">
-            <strong>Protección de privacidad:</strong> ${result.redaction_report.total_spans} datos identificatorios fueron anonimizados para la consulta de IA y restaurados fielmente en el formulario para su validación.
-          </div>
-        `;
-
-        draftWarnings.innerHTML = "";
-        if (result.warnings && result.warnings.length > 0) {
-          result.warnings.forEach((warn: string) => {
-            const p = document.createElement("p");
-            p.textContent = `• ${warn}`;
-            draftWarnings.appendChild(p);
-          });
-        }
-      }
-    } catch (error) {
-      alert("Error de red al consultar el asistente.");
-    } finally {
-      btnDraftAi.removeAttribute("disabled");
-      btnDraftAi.innerHTML = `<svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/></svg><span>Analizar y autocompletar formulario con IA</span>`;
-    }
-  });
-
-  function applyDraft(draft: any, provenance: Record<string, string>) {
-    for (const [key, val] of Object.entries(draft)) {
-      const input = document.getElementById(`field-${key}`) as HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement;
-      if (input && val !== null && val !== undefined) {
-        input.value = String(val);
-      }
-
-      if (key === "involves_personal_data") {
-        const radios = document.getElementsByName("involves_personal_data") as NodeListOf<HTMLInputElement>;
-        radios.forEach((r) => {
-          r.checked = (r.value === "true" && val === true) || (r.value === "false" && val === false);
-        });
-      }
-
-      if (key === "affected_cid" && Array.isArray(val)) {
-        const checkboxes = document.getElementsByName("affected_cid") as NodeListOf<HTMLInputElement>;
-        checkboxes.forEach((cb) => {
-          cb.checked = val.includes(cb.value);
-        });
-      }
-
-      if (key === "affected_data_types" && Array.isArray(val)) {
-        const checkboxes = document.getElementsByName("affected_data_types") as NodeListOf<HTMLInputElement>;
-        checkboxes.forEach((cb) => {
-          cb.checked = val.includes(cb.value);
-        });
-      }
-
-      if (key === "security_measures_adopted" && Array.isArray(val)) {
-        const checkboxes = document.getElementsByName("security_measures_adopted") as NodeListOf<HTMLInputElement>;
-        checkboxes.forEach((cb) => {
-          cb.checked = val.includes(cb.value);
-        });
-      }
-
-      if (key === "actions" && Array.isArray(val) && val.length > 0) {
-        if (containerActions && containerActions.children.length === 0) {
-          val.forEach((act: any) => addActionCard(act));
-        }
-      }
-
-      // Update provenance badge
-      const badge = document.getElementById(`badge-${key}`);
-      if (badge) {
-        badge.classList.remove("hidden", "provenance-narrative", "provenance-partial", "provenance-default");
-        const hasVal = val !== null && val !== undefined && val !== "" && (!Array.isArray(val) || val.length > 0);
-
-        if (provenance[key] === "narrative" && hasVal) {
-          badge.classList.remove("hidden");
-          badge.classList.add("provenance-narrative");
-          badge.textContent = "✨ IA";
-          badge.title = "Completado automáticamente por IA a partir de la narrativa";
-        } else if (provenance[key] === "default" && hasVal) {
-          badge.classList.remove("hidden");
-          badge.classList.add("provenance-default");
-          badge.textContent = "Predeterminado";
-          badge.title = "Valor institucional predeterminado";
-        } else {
-          // If empty, leave hidden! No confusing badges on empty fields!
-          badge.classList.add("hidden");
-        }
-      }
-
-      // Listen for operator modification to mark field as manually edited
-      const fieldEl = document.getElementById(`field-${key}`);
-      if (fieldEl) {
-        fieldEl.addEventListener("input", () => {
-          const b = document.getElementById(`badge-${key}`);
-          if (b && !b.classList.contains("hidden")) {
-            b.classList.remove("provenance-narrative", "provenance-default");
-            b.classList.add("provenance-partial");
-            b.textContent = "Editado";
-            b.title = "Modificado manualmente por el operador";
-          }
-        }, { once: true });
-      }
-    }
+  function saveCurrentForm(): void {
+    if (!incidentForm) return;
+    const values = extractCurrentFormValues(incidentForm);
+    saveFormDraft(values);
   }
+
+  function initPage(): void {
+    if (!incidentForm) return;
+
+    // 1. URL search params check
+    const params = new URLSearchParams(window.location.search);
+    const sessionId = params.get("session");
+    if (sessionId) {
+      const store = new ChatStore();
+      store.setActiveSession(sessionId);
+    }
+
+    // 2. Saved draft check
+    const draft = loadFormDraft();
+    if (draft && Object.keys(draft).length > 0) {
+      applyFormMutationToDom({ fields: draft }, incidentForm);
+      if (
+        Array.isArray(draft.actions) &&
+        draft.actions.length > 0 &&
+        containerActions &&
+        containerActions.children.length === 0
+      ) {
+        for (const act of draft.actions) {
+          addActionCard(act);
+        }
+      }
+    }
+
+    // 3. Mark manual edits on badges and auto-save on change
+    incidentForm.querySelectorAll("input, select, textarea").forEach((el) => {
+      el.addEventListener("input", () => {
+        const name =
+          (el as HTMLInputElement).name ||
+          (el.id ? el.id.replace(/^field-/, "") : "");
+        if (name) {
+          const badge = document.getElementById(`badge-${name}`);
+          if (badge && !badge.classList.contains("hidden")) {
+            badge.classList.remove("provenance-narrative", "provenance-default");
+            badge.classList.add("provenance-partial");
+            badge.textContent = "Editado";
+            badge.title = "Modificado manualmente por el operador";
+          }
+        }
+        saveCurrentForm();
+      });
+      el.addEventListener("change", saveCurrentForm);
+    });
+  }
+
+  // 4. Listen to cockpit:form-updated on window and sync
+  let isUpdatingFromEvent = false;
+  window.addEventListener("cockpit:form-updated", ((
+    e: CustomEvent<{ mutation?: ChatFormMutation }>,
+  ) => {
+    if (!incidentForm || isUpdatingFromEvent) return;
+    const mutation = e.detail?.mutation;
+    if (mutation) {
+      isUpdatingFromEvent = true;
+      try {
+        applyFormMutationToDom(mutation, incidentForm);
+        if (
+          Array.isArray(mutation.fields?.actions) &&
+          mutation.fields.actions.length > 0 &&
+          containerActions &&
+          containerActions.children.length === 0
+        ) {
+          for (const act of mutation.fields.actions) {
+            addActionCard(act);
+          }
+        }
+        saveCurrentForm();
+      } finally {
+        isUpdatingFromEvent = false;
+      }
+    }
+  }) as EventListener);
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", initPage);
+  } else {
+    initPage();
+  }
+  document.addEventListener("astro:page-load", initPage);
 
   // Field explain buttons
   document.querySelectorAll(".btn-explain").forEach((btn) => {
@@ -1417,8 +1266,10 @@ import {
       const field = btn.getAttribute("data-field");
       if (!field) return;
 
-      if (modalExplainTitle) modalExplainTitle.textContent = `Explicación técnica: ${field}`;
-      if (modalExplainContent) modalExplainContent.textContent = "Consultando catálogo y normativa RAG...";
+      if (modalExplainTitle)
+        modalExplainTitle.textContent = `Explicación técnica: ${field}`;
+      if (modalExplainContent)
+        modalExplainContent.textContent = "Consultando catálogo y normativa RAG...";
       if (modalExplainCitations) modalExplainCitations.innerHTML = "";
       modalExplain?.classList.remove("hidden");
 
@@ -1429,7 +1280,9 @@ import {
         });
 
         if (!res.ok) {
-          if (modalExplainContent) modalExplainContent.textContent = "No se pudo obtener la explicación del campo.";
+          if (modalExplainContent)
+            modalExplainContent.textContent =
+              "No se pudo obtener la explicación del campo.";
           return;
         }
 
@@ -1442,8 +1295,13 @@ import {
           html += "</ul>";
           if (modalExplainContent) modalExplainContent.innerHTML = html;
         } else {
-          if (modalExplainContent) modalExplainContent.textContent = data.explanation;
-          if (data.citations && data.citations.length > 0 && modalExplainCitations) {
+          if (modalExplainContent)
+            modalExplainContent.textContent = data.explanation;
+          if (
+            data.citations &&
+            data.citations.length > 0 &&
+            modalExplainCitations
+          ) {
             let citHtml = "<p class='font-semibold mt-2'>Citas normativas:</p>";
             data.citations.forEach((c: any) => {
               citHtml += `<div class="p-1.5 rounded bg-blue-950/30 border border-blue-900/50 mt-1">${c.citation}: ${c.text.slice(0, 150)}...</div>`;
@@ -1452,7 +1310,9 @@ import {
           }
         }
       } catch (e) {
-        if (modalExplainContent) modalExplainContent.textContent = "Error al conectar con el servicio de explicación.";
+        if (modalExplainContent)
+          modalExplainContent.textContent =
+            "Error al conectar con el servicio de explicación.";
       }
     });
   });
@@ -1464,7 +1324,9 @@ import {
   // Submit Incident
   incidentForm?.addEventListener("submit", async (e) => {
     e.preventDefault();
-    const btnSubmit = document.getElementById("btn-submit-incident") as HTMLButtonElement;
+    const btnSubmit = document.getElementById(
+      "btn-submit-incident",
+    ) as HTMLButtonElement;
     btnSubmit.setAttribute("disabled", "true");
     btnSubmit.innerHTML = `<span>Registrando incidente...</span>`;
 
@@ -1472,7 +1334,11 @@ import {
     const body: Record<string, any> = {};
 
     formData.forEach((value, key) => {
-      if (key === "affected_cid" || key === "affected_data_types" || key === "security_measures_adopted") {
+      if (
+        key === "affected_cid" ||
+        key === "affected_data_types" ||
+        key === "security_measures_adopted"
+      ) {
         if (!body[key]) body[key] = [];
         body[key].push(value);
       } else if (key === "involves_personal_data") {
@@ -1493,9 +1359,13 @@ import {
     const actions: any[] = [];
     actionCards.forEach((card) => {
       const typeEl = card.querySelector(".action-type") as HTMLSelectElement;
-      const respEl = card.querySelector(".action-responsible") as HTMLInputElement;
+      const respEl = card.querySelector(
+        ".action-responsible",
+      ) as HTMLInputElement;
       const dateEl = card.querySelector(".action-date") as HTMLInputElement;
-      const descEl = card.querySelector(".action-description") as HTMLTextAreaElement;
+      const descEl = card.querySelector(
+        ".action-description",
+      ) as HTMLTextAreaElement;
       const evidEl = card.querySelector(".action-evidence") as HTMLInputElement;
 
       const description = descEl?.value.trim();
@@ -1523,7 +1393,11 @@ import {
         const errorData = await response.json();
         let errorMsg = errorData.message || errorData.error;
         if (errorData.details && Array.isArray(errorData.details)) {
-          errorMsg += "\n" + errorData.details.map((d: any) => `• ${d.path.join(".")}: ${d.message}`).join("\n");
+          errorMsg +=
+            "\n" +
+            errorData.details
+              .map((d: any) => `• ${d.path.join(".")}: ${d.message}`)
+              .join("\n");
         }
         alert(`Error al crear incidente:\n${errorMsg}`);
         btnSubmit.removeAttribute("disabled");
@@ -1533,7 +1407,9 @@ import {
 
       const result = await response.json();
       if (result.dedupe) {
-        alert(`Incidente duplicado consolidado en registro existente: ${result.incident_code}`);
+        alert(
+          `Incidente duplicado consolidado en registro existente: ${result.incident_code}`,
+        );
       } else {
         alert(`Incidente ${result.incident_code} creado exitosamente.`);
       }

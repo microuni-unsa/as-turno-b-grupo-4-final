@@ -1,11 +1,18 @@
+import type { PresidioClient } from "@pims/agent/llm/presidio-client.ts";
+import type { AgentModelClient } from "@pims/agent/llm/safe-prompt.ts";
+import { draftGuidedIncident } from "@pims/cockpit/guided-create.ts";
+import type { AgentConfig } from "@pims/config";
 import type { EvidenceStore } from "@pims/evidence/evidence-store.ts";
 import type { PimsAdapter } from "@pims/pims-adapter";
+import type { RAGService } from "@pims/rag";
 import { type WatcherState, WatcherStateSchema } from "@pims/types/agent.ts";
 import type {
   ChatCitation,
+  ChatFormMutation,
   CockpitIncidentSummary,
   CockpitSession,
   CockpitTimer,
+  GuidedReporting,
   PendingDecision,
 } from "@pims/types/cockpit.ts";
 import { PimsNotFoundError, PimsValidationError } from "@pims/types/errors.ts";
@@ -425,4 +432,135 @@ export async function checkPendingDecisions(
   }
 
   return decisions;
+}
+
+const FORM_CREATE_KEYWORDS: readonly string[] = [
+  "crear incidente",
+  "nuevo incidente",
+  "reporte de brecha",
+  "incidente nuevo",
+  "filtración",
+  "filtracion",
+  "ransomware",
+  "afectó a",
+  "afecto a",
+  "vulnerabilidad",
+  "ataque",
+  "compromiso",
+  "exfiltración",
+  "exfiltracion",
+];
+
+const FORM_UPDATE_KEYWORDS: readonly string[] = [
+  "cambiar",
+  "actualizar",
+  "modificar",
+  "poner",
+  "asignar",
+  "establecer",
+  "severidad",
+  "impacto",
+  "datos personales",
+  "sujetos afectados",
+  "título",
+  "titulo",
+  "descripcion",
+  "descripción",
+];
+
+const MANDATORY_FORM_FIELDS: readonly (keyof GuidedReporting)[] = [
+  "title",
+  "incident_date",
+  "incident_type",
+  "involves_personal_data",
+];
+
+export function detectFormIntent(
+  message: string,
+  formContext?: Partial<GuidedReporting>,
+): boolean {
+  if (
+    formContext !== undefined &&
+    formContext !== null &&
+    Object.keys(formContext).length > 0
+  ) {
+    return true;
+  }
+  const lower = message.toLowerCase();
+  for (const kw of FORM_CREATE_KEYWORDS) {
+    if (lower.includes(kw)) {
+      return true;
+    }
+  }
+  for (const kw of FORM_UPDATE_KEYWORDS) {
+    if (lower.includes(kw)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+export async function analyzeFormMutation(
+  deps: {
+    config: AgentConfig;
+    modelClient: AgentModelClient;
+    presidioClient: PresidioClient;
+    ragService: RAGService;
+    now?: () => Date;
+  },
+  message: string,
+  formContext?: Partial<GuidedReporting>,
+  username?: string,
+): Promise<ChatFormMutation | undefined> {
+  if (!detectFormIntent(message, formContext)) {
+    return undefined;
+  }
+
+  const draftResponse = await draftGuidedIncident(
+    { narrative: message, partial: formContext ?? {} },
+    deps,
+    username ?? "operador",
+  );
+
+  const changedFields: string[] = [];
+  if (formContext !== undefined && formContext !== null) {
+    for (const [key, value] of Object.entries(draftResponse.draft)) {
+      const prev = (formContext as Record<string, unknown>)[key];
+      if (JSON.stringify(value) !== JSON.stringify(prev)) {
+        changedFields.push(key);
+      }
+    }
+  }
+
+  const lower = message.toLowerCase();
+  const asksToChangeFields = FORM_UPDATE_KEYWORDS.some((kw) =>
+    lower.includes(kw),
+  );
+  const isUpdate =
+    formContext !== undefined &&
+    formContext !== null &&
+    Object.keys(formContext).length > 2 &&
+    asksToChangeFields;
+  const action: ChatFormMutation["action"] = isUpdate ? "update" : "draft";
+
+  const missingFields: string[] = [];
+  for (const field of MANDATORY_FORM_FIELDS) {
+    const value = draftResponse.draft[field];
+    if (value === null || value === undefined || value === "") {
+      missingFields.push(field);
+    }
+  }
+
+  const summary =
+    action === "update"
+      ? "Se actualizaron campos del formulario"
+      : "Borrador de incidente generado a partir de la narrativa";
+
+  return {
+    action,
+    fields: draftResponse.draft,
+    provenance: draftResponse.provenance,
+    summary,
+    missing_mandatory_fields: missingFields,
+  };
 }

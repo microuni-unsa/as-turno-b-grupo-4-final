@@ -1,0 +1,866 @@
+---
+import {
+  Bot,
+  ChevronDown,
+  Maximize2,
+  Mic,
+  MicOff,
+  Minus,
+  Plus,
+  Send,
+  Sparkles,
+} from "lucide-astro";
+---
+
+<aside
+  id="floating-chat-container"
+  class="fixed bottom-5 right-5 z-50 select-none font-sans"
+  aria-label="Copiloto IA Flotante"
+>
+  <!-- 1. COLLAPSED FAB -->
+  <div
+    id="floating-chat-fab"
+    class="flex items-center space-x-3 bg-slate-950/95 border border-slate-800 backdrop-blur-xl text-slate-100 shadow-2xl rounded-full px-4 py-2.5 cursor-pointer hover:border-blue-500/50 hover:bg-slate-900 transition-all duration-200 group"
+  >
+    <div class="w-6 h-6 rounded-full bg-blue-600/20 border border-blue-500/40 text-blue-400 flex items-center justify-center shrink-0">
+      <Bot class="w-3.5 h-3.5" />
+    </div>
+    <span class="font-medium text-xs text-white">Copiloto IA</span>
+    <span
+      id="fab-persona-badge"
+      class="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-indigo-950/80 text-indigo-300 border border-indigo-800"
+    >
+      Auditor
+    </span>
+    <button
+      id="fab-quick-mic-btn"
+      type="button"
+      class="p-1 rounded-full text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+      title="Dictar por voz"
+    >
+      <Mic class="w-3.5 h-3.5" />
+    </button>
+  </div>
+
+  <!-- 2. EXPANDED WINDOW -->
+  <div
+    id="floating-chat-window"
+    class="hidden flex-col w-[420px] max-w-[calc(100vw-2.5rem)] h-[580px] max-h-[85vh] bg-slate-950/95 border border-slate-800 backdrop-blur-xl text-slate-100 rounded-2xl shadow-2xl overflow-hidden"
+  >
+    <!-- Header -->
+    <header class="p-3 border-b border-slate-800 bg-slate-900/80 flex items-center justify-between gap-2 shrink-0">
+      <div class="flex items-center space-x-2 min-w-0">
+        <div class="w-6 h-6 rounded-lg bg-blue-600/20 border border-blue-500/40 text-blue-400 flex items-center justify-center shrink-0">
+          <Bot class="w-3.5 h-3.5" />
+        </div>
+        <div class="min-w-0 flex items-center space-x-2">
+          <span
+            id="floating-chat-title"
+            class="font-semibold text-xs text-white truncate max-w-[150px]"
+            title="Copiloto IA"
+          >
+            Copiloto IA
+          </span>
+          <button
+            id="floating-persona-toggle-btn"
+            type="button"
+            class="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-indigo-950/80 text-indigo-300 border border-indigo-800 hover:border-indigo-600 transition-colors cursor-pointer"
+            title="Cambiar perfil (Auditor / Ejecutivo / DPO)"
+          >
+            Auditor
+          </button>
+        </div>
+      </div>
+
+      <div class="flex items-center space-x-1 shrink-0">
+        <button
+          id="floating-btn-new-chat"
+          type="button"
+          class="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+          title="Nuevo Chat"
+        >
+          <Plus class="w-3.5 h-3.5" />
+        </button>
+        <button
+          id="floating-btn-maximize"
+          type="button"
+          class="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+          title="Expandir a Pantalla Completa"
+        >
+          <Maximize2 class="w-3.5 h-3.5" />
+        </button>
+        <button
+          id="floating-btn-minimize"
+          type="button"
+          class="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+          title="Minimizar a botón flotante"
+        >
+          <Minus class="w-3.5 h-3.5" />
+        </button>
+      </div>
+    </header>
+
+    <!-- Context Badge (when on /new) -->
+    <div
+      id="floating-context-badge"
+      class="hidden bg-emerald-950/40 border-b border-emerald-900/50 px-3 py-1.5 items-center justify-between text-[11px] text-emerald-300 shrink-0"
+    >
+      <div class="flex items-center space-x-1.5">
+        <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+        <span class="font-medium">Vinculado al Formulario de Incidente</span>
+      </div>
+      <span class="text-[10px] text-emerald-400/80 font-mono">Sincronizado</span>
+    </div>
+
+    <!-- Scrollable Message Area -->
+    <div
+      id="floating-messages-container"
+      class="flex-1 overflow-y-auto p-3 space-y-3 text-xs select-text scroll-smooth"
+    >
+      <!-- Rendered dynamically -->
+    </div>
+
+    <!-- Input Area -->
+    <footer class="p-2.5 border-t border-slate-800 bg-slate-900/60 shrink-0 space-y-2">
+      <!-- Quick action pills when on /new -->
+      <div
+        id="floating-quick-actions"
+        class="hidden flex items-center space-x-1.5 overflow-x-auto pb-1 text-[10px] select-none"
+      >
+        <button
+          type="button"
+          data-prompt="Por favor analiza los datos del formulario y autocompleta los campos obligatorios pendientes."
+          class="floating-quick-pill px-2 py-0.5 rounded-full bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-800 whitespace-nowrap transition-colors"
+        >
+          Autocompletar faltantes
+        </button>
+        <button
+          type="button"
+          data-prompt="Estima la severidad e impacto para este incidente según los criterios regulatorios y el formulario actual."
+          class="floating-quick-pill px-2 py-0.5 rounded-full bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-800 whitespace-nowrap transition-colors"
+        >
+          Estimar severidad e impacto
+        </button>
+        <button
+          type="button"
+          data-prompt="¿Cuáles son los plazos regulatorios aplicables según el Art. 33 del GDPR y la normativa peruana para este caso?"
+          class="floating-quick-pill px-2 py-0.5 rounded-full bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-800 whitespace-nowrap transition-colors"
+        >
+          Verificar plazos Art. 33
+        </button>
+        <button
+          type="button"
+          data-prompt="Ayúdame a limpiar o restablecer los campos del formulario de incidente."
+          class="floating-quick-pill px-2 py-0.5 rounded-full bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-800 whitespace-nowrap transition-colors"
+        >
+          Limpiar campos
+        </button>
+      </div>
+
+      <!-- Voice listening indicator bar -->
+      <div
+        id="floating-speech-indicator"
+        class="hidden flex items-center space-x-2 px-2.5 py-1 rounded bg-rose-950/60 border border-rose-900/50 text-rose-300 text-[10px] animate-pulse"
+      >
+        <span class="w-1.5 h-1.5 rounded-full bg-rose-500"></span>
+        <span>Escuchando voz (es-PE)...</span>
+      </div>
+
+      <!-- Textarea + buttons -->
+      <div class="flex items-end space-x-1.5 bg-slate-950 border border-slate-800 rounded-xl p-1.5 focus-within:border-blue-500 transition-colors">
+        <textarea
+          id="floating-chat-input"
+          rows="1"
+          placeholder="Pregunta al copiloto..."
+          class="flex-1 bg-transparent border-0 resize-none text-xs text-slate-100 placeholder:text-slate-500 focus:outline-none max-h-28 px-1.5 py-1 leading-relaxed"
+        ></textarea>
+
+        <button
+          id="floating-mic-btn"
+          type="button"
+          class="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors shrink-0"
+          title="Dictar por voz"
+        >
+          <Mic id="floating-icon-mic" class="w-4 h-4" />
+          <MicOff id="floating-icon-micoff" class="w-4 h-4 hidden text-rose-400" />
+        </button>
+
+        <button
+          id="floating-send-btn"
+          type="button"
+          class="p-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white transition-colors shrink-0 disabled:opacity-40 disabled:cursor-not-allowed"
+          title="Enviar mensaje"
+        >
+          <Send class="w-4 h-4" />
+        </button>
+      </div>
+    </footer>
+  </div>
+</aside>
+
+<script>
+  import { authenticatedFetch } from "@pims/cockpit/ui/lib/api.ts";
+  import { chatStore, type ChatMessageNode } from "@pims/cockpit/ui/lib/chat-store.ts";
+  import {
+    applyFormMutationToDom,
+    emitFormUpdatedEvent,
+    extractCurrentFormValues,
+  } from "@pims/cockpit/ui/lib/form-draft-bus.ts";
+  import { CockpitSpeechRecognizer } from "@pims/cockpit/ui/lib/speech-recognition.ts";
+  import type {
+    ChatFormMutation,
+    ChatPersona,
+    ChatResponse,
+    GuidedReporting,
+  } from "@pims/types/cockpit.ts";
+
+  const STORAGE_KEY_OPEN = "pims_floating_chat_open";
+
+  function escapeHtml(str: string): string {
+    return str
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
+  }
+
+  function renderMarkdown(raw: string): string {
+    let escaped = escapeHtml(raw);
+
+    // Fenced code blocks
+    escaped = escaped.replace(/```([a-zA-Z0-9_-]*)\n([\s\S]*?)```/g, (_match, _lang, code) => {
+      return `<pre class="my-2 p-2 bg-slate-950 border border-slate-800 rounded-lg overflow-x-auto font-mono text-[11px] text-emerald-300 leading-relaxed"><code>${code.trim()}</code></pre>`;
+    });
+
+    // Inline code
+    escaped = escaped.replace(/`([^`]+)`/g, '<code class="bg-slate-800/90 text-amber-300 px-1 py-0.5 rounded font-mono text-[11px]">$1</code>');
+
+    // Headings
+    escaped = escaped.replace(/^### (.*$)/gim, '<h4 class="font-bold text-slate-100 text-xs mt-2.5 mb-1">$1</h4>');
+    escaped = escaped.replace(/^## (.*$)/gim, '<h3 class="font-bold text-white text-xs mt-3 mb-1.5">$1</h3>');
+    escaped = escaped.replace(/^# (.*$)/gim, '<h2 class="font-bold text-white text-sm mt-3 mb-2">$1</h2>');
+
+    // Bold & Italic
+    escaped = escaped.replace(/\*\*([^*]+)\*\*/g, '<strong class="font-semibold text-white">$1</strong>');
+    escaped = escaped.replace(/\*([^*]+)\*/g, '<em class="italic text-slate-200">$1</em>');
+
+    // Bullet lists
+    escaped = escaped.replace(/^\s*[-*]\s+(.*$)/gim, '<li class="ml-3 list-disc text-slate-200 my-0.5">$1</li>');
+
+    // Numbered lists
+    escaped = escaped.replace(/^\s*(\d+)\.\s+(.*$)/gim, '<li class="ml-3 list-decimal text-slate-200 my-0.5">$2</li>');
+
+    // Paragraphs / line breaks
+    escaped = escaped.replace(/\n\n/g, '<div class="h-1.5"></div>');
+    escaped = escaped.replace(/\n/g, '<br/>');
+
+    return escaped;
+  }
+
+  function formatFieldLabel(key: string, val: unknown): string {
+    if (val === undefined || val === null || val === "") return "";
+    switch (key) {
+      case "severity": {
+        const sevLabels: Record<string, string> = { B: "Baja", M: "Media", A: "Alta", C: "Crítica" };
+        return `Severidad: ${sevLabels[String(val)] ?? String(val)}`;
+      }
+      case "impact": {
+        const impLabels: Record<string, string> = { B: "Bajo", M: "Medio", A: "Alto", C: "Crítico" };
+        return `Impacto: ${impLabels[String(val)] ?? String(val)}`;
+      }
+      case "num_affected_subjects":
+        return `Sujetos: ${val}`;
+      case "involves_personal_data":
+        return `Datos personales: ${val ? "Sí" : "No"}`;
+      case "incident_type":
+        return `Tipo: ${val}`;
+      case "affected_cid":
+        return `CID: ${Array.isArray(val) ? val.join(", ") : val}`;
+      case "affected_data_types":
+        return `Datos: ${Array.isArray(val) ? val.join(", ") : val}`;
+      case "title":
+        return `Título: ${String(val).slice(0, 24)}…`;
+      default:
+        return `${key}: ${String(val).slice(0, 20)}`;
+    }
+  }
+
+  function getPersonaLabel(persona: ChatPersona): string {
+    switch (persona) {
+      case "auditor":
+        return "Auditor";
+      case "ejecutivo":
+        return "Ejecutivo";
+      case "dpo":
+        return "DPO";
+      default:
+        return persona;
+    }
+  }
+
+  function getPersonaBadgeClasses(persona: ChatPersona): string {
+    switch (persona) {
+      case "auditor":
+        return "bg-indigo-950/80 text-indigo-300 border-indigo-800";
+      case "ejecutivo":
+        return "bg-amber-950/80 text-amber-300 border-amber-800";
+      case "dpo":
+        return "bg-emerald-950/80 text-emerald-300 border-emerald-800";
+      default:
+        return "bg-slate-800 text-slate-300 border-slate-700";
+    }
+  }
+
+  const speechRecognizer = new CockpitSpeechRecognizer();
+
+  function initFloatingWidget(): void {
+    const container = document.getElementById("floating-chat-container");
+    const fabEl = document.getElementById("floating-chat-fab");
+    const windowEl = document.getElementById("floating-chat-window");
+    const fabPersonaBadge = document.getElementById("fab-persona-badge");
+    const fabQuickMicBtn = document.getElementById("fab-quick-mic-btn");
+
+    const headerTitle = document.getElementById("floating-chat-title");
+    const personaToggleBtn = document.getElementById("floating-persona-toggle-btn");
+    const btnNewChat = document.getElementById("floating-btn-new-chat");
+    const btnMaximize = document.getElementById("floating-btn-maximize");
+    const btnMinimize = document.getElementById("floating-btn-minimize");
+
+    const contextBadge = document.getElementById("floating-context-badge");
+    const messagesContainer = document.getElementById("floating-messages-container");
+    const quickActions = document.getElementById("floating-quick-actions");
+    const speechIndicator = document.getElementById("floating-speech-indicator");
+
+    const inputEl = document.getElementById("floating-chat-input") as HTMLTextAreaElement | null;
+    const micBtn = document.getElementById("floating-mic-btn");
+    const iconMic = document.getElementById("floating-icon-mic");
+    const iconMicOff = document.getElementById("floating-icon-micoff");
+    const sendBtn = document.getElementById("floating-send-btn") as HTMLButtonElement | null;
+
+    if (!container || !fabEl || !windowEl || !messagesContainer || !inputEl || !sendBtn) {
+      return;
+    }
+
+    // --- Visibility on Current Route ---
+    function updateVisibility(): void {
+      const path = window.location.pathname;
+      const isChatPage = path === "/chat" || path.startsWith("/chat/");
+      if (isChatPage) {
+        container?.classList.add("hidden");
+        return;
+      }
+      container?.classList.remove("hidden");
+
+      const isOnNewPage = path === "/new" || path.startsWith("/new/");
+      if (contextBadge) {
+        if (isOnNewPage) {
+          contextBadge.classList.remove("hidden");
+          contextBadge.classList.add("flex");
+        } else {
+          contextBadge.classList.add("hidden");
+          contextBadge.classList.remove("flex");
+        }
+      }
+
+      if (quickActions) {
+        if (isOnNewPage) {
+          quickActions.classList.remove("hidden");
+        } else {
+          quickActions.classList.add("hidden");
+        }
+      }
+    }
+
+    // --- Window State (Expanded vs Collapsed) ---
+    function isExpanded(): boolean {
+      return localStorage.getItem(STORAGE_KEY_OPEN) === "true";
+    }
+
+    function expandWindow(): void {
+      fabEl?.classList.add("hidden");
+      windowEl?.classList.remove("hidden");
+      windowEl?.classList.add("flex");
+      localStorage.setItem(STORAGE_KEY_OPEN, "true");
+      renderMessages();
+      updateHeader();
+      inputEl?.focus();
+    }
+
+    function collapseWindow(): void {
+      windowEl?.classList.add("hidden");
+      windowEl?.classList.remove("flex");
+      fabEl?.classList.remove("hidden");
+      localStorage.setItem(STORAGE_KEY_OPEN, "false");
+      if (speechRecognizer.isListening()) {
+        speechRecognizer.stop();
+        setSpeechUi(false);
+      }
+    }
+
+    function restoreWindowState(): void {
+      if (isExpanded()) {
+        expandWindow();
+      } else {
+        collapseWindow();
+      }
+    }
+
+    // --- Header & Persona ---
+    function updateHeader(): void {
+      const session = chatStore.getActiveSession();
+      if (headerTitle) {
+        headerTitle.textContent = session.title || "Copiloto IA";
+      }
+      updatePersonaBadges();
+    }
+
+    function updatePersonaBadges(): void {
+      const persona = chatStore.getPersona();
+      const label = getPersonaLabel(persona);
+      const classes = getPersonaBadgeClasses(persona);
+
+      if (fabPersonaBadge) {
+        fabPersonaBadge.textContent = label;
+        fabPersonaBadge.className = `text-[10px] font-semibold px-2 py-0.5 rounded-full border ${classes}`;
+      }
+
+      if (personaToggleBtn) {
+        personaToggleBtn.textContent = label;
+        personaToggleBtn.className = `text-[10px] font-semibold px-2 py-0.5 rounded-full border hover:opacity-80 transition-opacity cursor-pointer ${classes}`;
+      }
+    }
+
+    function cyclePersona(): void {
+      const current = chatStore.getPersona();
+      let next: ChatPersona = "auditor";
+      if (current === "auditor") next = "ejecutivo";
+      else if (current === "ejecutivo") next = "dpo";
+      else next = "auditor";
+
+      chatStore.setPersona(next);
+      updatePersonaBadges();
+    }
+
+    // --- Speech Dictation ---
+    function setSpeechUi(listening: boolean): void {
+      if (listening) {
+        speechIndicator?.classList.remove("hidden");
+        iconMic?.classList.add("hidden");
+        iconMicOff?.classList.remove("hidden");
+      } else {
+        speechIndicator?.classList.add("hidden");
+        iconMic?.classList.remove("hidden");
+        iconMicOff?.classList.add("hidden");
+      }
+    }
+
+    function toggleSpeech(): void {
+      if (speechRecognizer.isListening()) {
+        speechRecognizer.stop();
+        setSpeechUi(false);
+      } else {
+        expandWindow();
+        const base = inputEl?.value || "";
+        const started = speechRecognizer.start({
+          lang: "es-PE",
+          onStart: () => {
+            setSpeechUi(true);
+          },
+          onResult: (transcript) => {
+            if (inputEl) {
+              const prefix = base ? `${base.trim()} ` : "";
+              inputEl.value = prefix + transcript;
+              autoResizeInput();
+            }
+          },
+          onError: () => {
+            setSpeechUi(false);
+          },
+          onEnd: () => {
+            setSpeechUi(false);
+          },
+        });
+        if (!started) {
+          setSpeechUi(false);
+        }
+      }
+    }
+
+    // --- Auto-resize Textarea ---
+    function autoResizeInput(): void {
+      if (!inputEl) return;
+      inputEl.style.height = "auto";
+      inputEl.style.height = `${Math.min(inputEl.scrollHeight, 112)}px`;
+    }
+
+    // --- Render Messages ---
+    function renderMessages(): void {
+      if (!messagesContainer) return;
+      const activeItems = chatStore.getActiveBranchMessages();
+
+      if (activeItems.length === 0) {
+        messagesContainer.innerHTML = `
+          <div class="flex flex-col items-center justify-center text-center p-6 space-y-3 my-auto">
+            <div class="w-10 h-10 rounded-xl bg-blue-600/20 border border-blue-500/40 text-blue-400 flex items-center justify-center shadow-lg shadow-blue-500/10">
+              <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+              </svg>
+            </div>
+            <div class="space-y-1">
+              <h3 class="font-semibold text-white text-xs">Copiloto IA Regulatorio</h3>
+              <p class="text-[11px] text-slate-400 leading-relaxed">
+                Asistencia normativa (ISO/IEC 27701, Ley 29733, GDPR Art. 33/34), cálculo de plazos y llenado guiado de incidentes.
+              </p>
+            </div>
+          </div>
+        `;
+        return;
+      }
+
+      messagesContainer.innerHTML = "";
+
+      for (const item of activeItems) {
+        const { node } = item;
+        const msgDiv = document.createElement("div");
+
+        if (node.sender === "user") {
+          msgDiv.className = "flex justify-end";
+          msgDiv.innerHTML = `
+            <div class="max-w-[85%] bg-blue-600 text-white rounded-2xl rounded-br-sm p-3 shadow-md space-y-1">
+              <p class="leading-relaxed whitespace-pre-wrap">${escapeHtml(node.text)}</p>
+              <div class="text-[9px] text-blue-200/80 text-right font-mono">${node.timestamp}</div>
+            </div>
+          `;
+        } else {
+          msgDiv.className = "flex justify-start";
+
+          // Reasoning details
+          let reasoningHtml = "";
+          if (node.reasoning) {
+            reasoningHtml = `
+              <details class="group/details bg-indigo-950/30 border border-indigo-900/50 rounded-xl overflow-hidden mb-2 text-[11px]">
+                <summary class="cursor-pointer px-2.5 py-1.5 text-indigo-300 font-medium hover:bg-indigo-950/60 flex items-center justify-between select-none">
+                  <div class="flex items-center space-x-1.5">
+                    <span>🧠</span>
+                    <span>Ver razonamiento regulatorio</span>
+                  </div>
+                  <span class="text-[9px] text-indigo-400 group-open/details:rotate-180 transition-transform">▼</span>
+                </summary>
+                <div class="p-2.5 text-indigo-200/90 leading-relaxed border-t border-indigo-900/40 bg-indigo-950/20 whitespace-pre-wrap">
+                  ${escapeHtml(node.reasoning)}
+                </div>
+              </details>
+            `;
+          }
+
+          // Verbatim Citations
+          let citationsHtml = "";
+          if (node.response?.citations && node.response.citations.length > 0) {
+            citationsHtml = `
+              <div class="mt-2.5 pt-2 border-t border-slate-800 space-y-2">
+                <div class="text-[10px] font-semibold text-slate-400 uppercase tracking-wider flex items-center space-x-1">
+                  <span>📖</span>
+                  <span>Citas Normativas (${node.response.citations.length})</span>
+                </div>
+                <div class="space-y-1.5">
+                  ${node.response.citations
+                    .map(
+                      (c) => `
+                    <div class="bg-slate-950 p-2 rounded-lg border border-slate-800 space-y-1">
+                      <div class="flex items-center justify-between">
+                        <span class="font-semibold text-blue-400 text-[10px]">${escapeHtml(c.citation)}</span>
+                        <span class="font-mono text-[9px] text-slate-500" title="${c.chunk_sha256}">${c.chunk_sha256.slice(0, 8)}…</span>
+                      </div>
+                      <blockquote class="italic text-slate-300 bg-slate-900/60 border border-slate-800 rounded p-1.5 text-[10px] leading-relaxed font-serif">
+                        "${escapeHtml(c.text)}"
+                      </blockquote>
+                      <div class="flex flex-wrap items-center gap-1.5 text-[9px] text-slate-500 font-mono pt-0.5">
+                        <span>Dense: ${c.dense_score !== null ? c.dense_score.toFixed(3) : "—"}</span>
+                        <span>BM25: ${c.bm25_rank ? `#${c.bm25_rank}` : "—"}</span>
+                        <span>RRF: ${c.rrf_score.toFixed(3)}</span>
+                        <span class="text-emerald-400 font-medium">Rerank: ${c.rerank_score.toFixed(3)}</span>
+                      </div>
+                    </div>
+                  `
+                    )
+                    .join("")}
+                </div>
+              </div>
+            `;
+          }
+
+          // Form Mutation Card
+          let mutationHtml = "";
+          if (node.form_mutation) {
+            const mut = node.form_mutation;
+            const badges: string[] = [];
+            for (const [key, val] of Object.entries(mut.fields || {})) {
+              const lbl = formatFieldLabel(key, val);
+              if (lbl) {
+                badges.push(
+                  `<span class="px-1.5 py-0.5 rounded bg-blue-900/40 text-blue-300 border border-blue-700/50 font-mono text-[9px]">${escapeHtml(lbl)}</span>`
+                );
+              }
+            }
+
+            mutationHtml = `
+              <div class="mt-2.5 p-2.5 rounded-xl bg-blue-950/40 border border-blue-800/80 space-y-2 form-mutation-card">
+                <div class="flex items-center space-x-1.5 text-blue-300 font-semibold text-[11px]">
+                  <span>✨</span>
+                  <span>Propuesta para el Formulario</span>
+                </div>
+                <p class="text-[11px] text-blue-100/90 leading-relaxed">${escapeHtml(mut.summary)}</p>
+                ${badges.length > 0 ? `<div class="flex flex-wrap gap-1">${badges.join("")}</div>` : ""}
+                <div class="flex items-center space-x-2 pt-1.5 border-t border-blue-900/50">
+                  <button
+                    type="button"
+                    class="btn-apply-mutation px-2 py-1 rounded bg-blue-600 hover:bg-blue-500 text-white font-medium text-[10px] transition-colors flex items-center space-x-1 shadow"
+                  >
+                    <span>✓</span>
+                    <span>Aplicar al Formulario</span>
+                  </button>
+                  <button
+                    type="button"
+                    class="btn-view-mutation px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 text-[10px] transition-colors flex items-center space-x-1"
+                  >
+                    <span>👁️</span>
+                    <span>Ver en Formulario</span>
+                  </button>
+                </div>
+              </div>
+            `;
+          }
+
+          msgDiv.innerHTML = `
+            <div class="max-w-[92%] bg-slate-900/90 border border-slate-800 rounded-2xl rounded-bl-sm p-3 shadow-md space-y-2">
+              ${reasoningHtml}
+              <div class="text-slate-100 leading-relaxed">${renderMarkdown(node.text)}</div>
+              ${citationsHtml}
+              ${mutationHtml}
+              <div class="text-[9px] text-slate-500 font-mono pt-1 text-right">${node.timestamp}</div>
+            </div>
+          `;
+
+          // Form Mutation actions
+          if (node.form_mutation) {
+            const mut = node.form_mutation;
+            const applyBtn = msgDiv.querySelector(".btn-apply-mutation");
+            const viewBtn = msgDiv.querySelector(".btn-view-mutation");
+
+            applyBtn?.addEventListener("click", () => {
+              applyFormMutationToDom(mut);
+              emitFormUpdatedEvent(mut);
+              applyBtn.innerHTML = "<span>✓</span><span>¡Aplicado!</span>";
+              applyBtn.classList.remove("bg-blue-600", "hover:bg-blue-500");
+              applyBtn.classList.add("bg-emerald-600", "hover:bg-emerald-500");
+            });
+
+            viewBtn?.addEventListener("click", () => {
+              applyFormMutationToDom(mut);
+              emitFormUpdatedEvent(mut);
+              const keys = Object.keys(mut.fields || {});
+              for (const k of keys) {
+                const target =
+                  document.querySelector(`#field-${k}`) ??
+                  document.querySelector(`[name="${k}"]`);
+                if (target) {
+                  target.scrollIntoView({ behavior: "smooth", block: "center" });
+                  (target as HTMLElement).focus?.();
+                  break;
+                }
+              }
+            });
+          }
+        }
+
+        messagesContainer.appendChild(msgDiv);
+      }
+
+      messagesContainer.scrollTop = messagesContainer.scrollHeight;
+    }
+
+    // --- Message Submission ---
+    async function submitMessage(queryText: string): Promise<void> {
+      const trimmed = queryText.trim();
+      if (!trimmed) return;
+
+      if (speechRecognizer.isListening()) {
+        speechRecognizer.stop();
+        setSpeechUi(false);
+      }
+
+      if (inputEl) {
+        inputEl.value = "";
+        autoResizeInput();
+      }
+
+      const isOnNew =
+        window.location.pathname === "/new" ||
+        window.location.pathname.startsWith("/new/");
+      let formContext: Partial<GuidedReporting> | undefined = undefined;
+      if (isOnNew) {
+        formContext = extractCurrentFormValues();
+      }
+
+      const persona = chatStore.getPersona();
+      const session = chatStore.getActiveSession();
+      const incidentCode = session.incidentCode;
+
+      // Add user message
+      const userNode = chatStore.addUserMessage(
+        trimmed,
+        incidentCode,
+        persona,
+        formContext
+      );
+      renderMessages();
+      updateHeader();
+
+      // Show typing indicator
+      const typingDiv = document.createElement("div");
+      typingDiv.id = "floating-typing-indicator";
+      typingDiv.className =
+        "flex items-center space-x-2 text-[11px] text-slate-400 italic py-1 px-1";
+      typingDiv.innerHTML = `
+        <div class="w-3 h-3 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+        <span>Consultando Copiloto IA...</span>
+      `;
+      messagesContainer?.appendChild(typingDiv);
+      if (messagesContainer) {
+        messagesContainer.scrollTop = messagesContainer.scrollHeight;
+      }
+
+      try {
+        const payload = {
+          message: trimmed,
+          persona,
+          form_context: formContext,
+          incident_code: incidentCode,
+        };
+
+        const res = await authenticatedFetch("/api/chat", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(payload),
+        });
+
+        if (!res.ok) {
+          const errJson = (await res.json().catch(() => ({}))) as {
+            message?: string;
+          };
+          throw new Error(
+            errJson.message ?? `Error en el servicio de chat (${res.status})`
+          );
+        }
+
+        const response = (await res.json()) as ChatResponse;
+        typingDiv.remove();
+
+        chatStore.addAssistantResponse(userNode.id, response);
+
+        if (response.form_mutation && isOnNew) {
+          applyFormMutationToDom(response.form_mutation);
+          emitFormUpdatedEvent(response.form_mutation);
+        }
+
+        renderMessages();
+        updateHeader();
+      } catch (err) {
+        typingDiv.remove();
+        const errorMsg =
+          err instanceof Error
+            ? err.message
+            : "Error inesperado al consultar el copiloto.";
+        const fallbackResponse: ChatResponse = {
+          reply: `⚠️ ${errorMsg}`,
+          citations: [],
+          tool_calls: [],
+          persona,
+        };
+        chatStore.addAssistantResponse(userNode.id, fallbackResponse, true);
+        renderMessages();
+      }
+    }
+
+    // --- Event Listeners Setup ---
+    fabEl.addEventListener("click", () => {
+      expandWindow();
+    });
+
+    fabQuickMicBtn?.addEventListener("click", (e) => {
+      e.stopPropagation();
+      toggleSpeech();
+    });
+
+    btnMinimize?.addEventListener("click", () => {
+      collapseWindow();
+    });
+
+    personaToggleBtn?.addEventListener("click", () => {
+      cyclePersona();
+    });
+
+    btnNewChat?.addEventListener("click", () => {
+      chatStore.createSession("Nueva Conversación", chatStore.getPersona());
+      renderMessages();
+      updateHeader();
+    });
+
+    btnMaximize?.addEventListener("click", () => {
+      const activeId = chatStore.getActiveSessionId();
+      window.location.href = `/chat?session=${encodeURIComponent(activeId)}`;
+    });
+
+    inputEl.addEventListener("input", autoResizeInput);
+    inputEl.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        void submitMessage(inputEl.value);
+      }
+    });
+
+    sendBtn.addEventListener("click", () => {
+      void submitMessage(inputEl.value);
+    });
+
+    micBtn?.addEventListener("click", () => {
+      toggleSpeech();
+    });
+
+    // Quick Action Pills
+    quickActions?.querySelectorAll(".floating-quick-pill").forEach((pill) => {
+      pill.addEventListener("click", () => {
+        const prompt = (pill as HTMLElement).dataset.prompt;
+        if (prompt) {
+          void submitMessage(prompt);
+        }
+      });
+    });
+
+    // Subscribe to store updates
+    chatStore.subscribe(() => {
+      renderMessages();
+      updateHeader();
+    });
+
+    // Initial state
+    updateVisibility();
+    restoreWindowState();
+    updateHeader();
+  }
+
+  // Register on initial load and view transitions
+  document.addEventListener("astro:page-load", () => {
+    initFloatingWidget();
+  });
+
+  // Run on initial script execution
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", initFloatingWidget);
+  } else {
+    initFloatingWidget();
+  }
+</script>

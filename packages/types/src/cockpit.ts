@@ -61,10 +61,103 @@ export const CockpitSessionSchema = z.object({
 });
 export type CockpitSession = z.infer<typeof CockpitSessionSchema>;
 
+export const GuidedActionSchema = z.object({
+  action_type: z.enum(ACTION_TYPES),
+  responsible: z.string().min(1),
+  action_date: z.string().min(1),
+  description: z.string().min(1),
+  evidence: z.string().nullable().optional(),
+});
+export type GuidedAction = z.infer<typeof GuidedActionSchema>;
+
+export const GuidedReportingSchema = z.object({
+  title: z.string().min(1).max(150),
+  description: z.string().max(1000).nullable().optional(),
+  incident_date: z.string().min(1),
+  incident_time: z.string().nullable().optional(),
+  detection_date: z.string().nullable().optional(),
+  detection_time: z.string().nullable().optional(),
+  incident_type: z.enum(INCIDENT_TYPES),
+  involves_personal_data: z.boolean(),
+  status: z.enum(INCIDENT_STATUSES).default("O"),
+  severity: z.enum(INCIDENT_SEVERITIES).nullable().optional(),
+  impact: z.enum(INCIDENT_IMPACTS).nullable().optional(),
+  affected_data_types: z.array(z.enum(ALL_AFFECTED_DATA_TYPES)).default([]),
+  num_affected_subjects: z.number().nullable().optional(),
+  affected_treatment: z.string().nullable().optional(),
+  compromised_system: z.string().nullable().optional(),
+  affected_url: z.string().nullable().optional(),
+  evidence_refs: z.string().nullable().optional(),
+  security_measures_adopted: z.array(z.enum(ALL_SECURITY_MEASURES)).default([]),
+  affected_cid: z.array(z.enum(AFFECTED_CID)).default([]),
+  rep_document_number: z.string().nullable().optional(),
+  rep_document_expiry: z.string().nullable().optional(),
+  rep_first_name: z.string().nullable().optional(),
+  rep_last_name_p: z.string().nullable().optional(),
+  rep_last_name_m: z.string().nullable().optional(),
+  rep_position: z.string().nullable().optional(),
+  rep_phone: z.string().nullable().optional(),
+  rep_email: z.string().nullable().optional(),
+  entity_type: z.string().nullable().optional(),
+  entity_ruc: z.string().nullable().optional(),
+  entity_name: z.string().nullable().optional(),
+  entity_phone: z.string().nullable().optional(),
+  entity_extension: z.string().nullable().optional(),
+  entity_department: z.string().nullable().optional(),
+  entity_province: z.string().nullable().optional(),
+  entity_district: z.string().nullable().optional(),
+  reported_by: z.string().nullable().optional(),
+  assigned_to: z.string().nullable().optional(),
+  dpo_contact_name: z.string().nullable().optional(),
+  dpo_contact_email: z.string().nullable().optional(),
+  dpo_contact_phone: z.string().nullable().optional(),
+  measure_updated_registry: z.enum(FORM_MEASURE_VALUES).nullable().optional(),
+  measure_new_security: z.enum(FORM_MEASURE_VALUES).nullable().optional(),
+  measure_improved_policies: z.enum(FORM_MEASURE_VALUES).nullable().optional(),
+  measure_considered_resolved: z
+    .enum(FORM_MEASURE_VALUES)
+    .nullable()
+    .optional(),
+  measure_reported_authorities: z
+    .enum(FORM_MEASURE_VALUES)
+    .nullable()
+    .optional(),
+  resolved_date: z.string().nullable().optional(),
+  actions: z.array(GuidedActionSchema).default([]),
+});
+export type GuidedReporting = z.infer<typeof GuidedReportingSchema>;
+
+export const GuidedProvenanceSchema = z.enum([
+  "narrative",
+  "partial",
+  "default",
+]);
+export type GuidedProvenance = z.infer<typeof GuidedProvenanceSchema>;
+
+export const ChatFormMutationActionSchema = z.enum([
+  "draft",
+  "update",
+  "clear",
+  "validate",
+]);
+export type ChatFormMutationAction = z.infer<
+  typeof ChatFormMutationActionSchema
+>;
+
+export const ChatFormMutationSchema = z.object({
+  action: ChatFormMutationActionSchema,
+  fields: GuidedReportingSchema.partial(),
+  provenance: z.record(z.string(), GuidedProvenanceSchema).optional(),
+  summary: z.string(),
+  missing_mandatory_fields: z.array(z.string()).optional(),
+});
+export type ChatFormMutation = z.infer<typeof ChatFormMutationSchema>;
+
 export const ChatRequestSchema = z.object({
   message: z.string().min(1).max(2000),
   incident_code: z.string().min(1).optional(),
   persona: ChatPersonaSchema.optional(),
+  form_context: GuidedReportingSchema.partial().optional(),
 });
 export type ChatRequest = z.infer<typeof ChatRequestSchema>;
 
@@ -147,6 +240,7 @@ export const ChatResponseSchema = z.object({
   tool_calls: z.array(z.string()),
   reasoning: z.string().optional(),
   trace: ChatTraceSchema,
+  form_mutation: ChatFormMutationSchema.optional(),
 });
 export type ChatResponse = z.infer<typeof ChatResponseSchema>;
 
@@ -215,79 +309,6 @@ export const StreamSnapshotSchema = z.object({
   pending_decisions: z.array(PendingDecisionSchema),
 });
 export type StreamSnapshot = z.infer<typeof StreamSnapshotSchema>;
-
-export const GuidedActionSchema = z.object({
-  action_type: z.enum(ACTION_TYPES),
-  responsible: z.string().min(1),
-  action_date: z.string().min(1),
-  description: z.string().min(1),
-  evidence: z.string().nullable().optional(),
-});
-export type GuidedAction = z.infer<typeof GuidedActionSchema>;
-
-export const GuidedReportingSchema = z.object({
-  title: z.string().min(1).max(150),
-  description: z.string().max(1000).nullable().optional(),
-  incident_date: z.string().min(1),
-  incident_time: z.string().nullable().optional(),
-  detection_date: z.string().nullable().optional(),
-  detection_time: z.string().nullable().optional(),
-  incident_type: z.enum(INCIDENT_TYPES),
-  involves_personal_data: z.boolean(),
-  status: z.enum(INCIDENT_STATUSES).default("O"),
-  severity: z.enum(INCIDENT_SEVERITIES).nullable().optional(),
-  impact: z.enum(INCIDENT_IMPACTS).nullable().optional(),
-  affected_data_types: z.array(z.enum(ALL_AFFECTED_DATA_TYPES)).default([]),
-  num_affected_subjects: z.number().nullable().optional(),
-  affected_treatment: z.string().nullable().optional(),
-  compromised_system: z.string().nullable().optional(),
-  affected_url: z.string().nullable().optional(),
-  evidence_refs: z.string().nullable().optional(),
-  security_measures_adopted: z.array(z.enum(ALL_SECURITY_MEASURES)).default([]),
-  affected_cid: z.array(z.enum(AFFECTED_CID)).default([]),
-  rep_document_number: z.string().nullable().optional(),
-  rep_document_expiry: z.string().nullable().optional(),
-  rep_first_name: z.string().nullable().optional(),
-  rep_last_name_p: z.string().nullable().optional(),
-  rep_last_name_m: z.string().nullable().optional(),
-  rep_position: z.string().nullable().optional(),
-  rep_phone: z.string().nullable().optional(),
-  rep_email: z.string().nullable().optional(),
-  entity_type: z.string().nullable().optional(),
-  entity_ruc: z.string().nullable().optional(),
-  entity_name: z.string().nullable().optional(),
-  entity_phone: z.string().nullable().optional(),
-  entity_extension: z.string().nullable().optional(),
-  entity_department: z.string().nullable().optional(),
-  entity_province: z.string().nullable().optional(),
-  entity_district: z.string().nullable().optional(),
-  reported_by: z.string().nullable().optional(),
-  assigned_to: z.string().nullable().optional(),
-  dpo_contact_name: z.string().nullable().optional(),
-  dpo_contact_email: z.string().nullable().optional(),
-  dpo_contact_phone: z.string().nullable().optional(),
-  measure_updated_registry: z.enum(FORM_MEASURE_VALUES).nullable().optional(),
-  measure_new_security: z.enum(FORM_MEASURE_VALUES).nullable().optional(),
-  measure_improved_policies: z.enum(FORM_MEASURE_VALUES).nullable().optional(),
-  measure_considered_resolved: z
-    .enum(FORM_MEASURE_VALUES)
-    .nullable()
-    .optional(),
-  measure_reported_authorities: z
-    .enum(FORM_MEASURE_VALUES)
-    .nullable()
-    .optional(),
-  resolved_date: z.string().nullable().optional(),
-  actions: z.array(GuidedActionSchema).default([]),
-});
-export type GuidedReporting = z.infer<typeof GuidedReportingSchema>;
-
-export const GuidedProvenanceSchema = z.enum([
-  "narrative",
-  "partial",
-  "default",
-]);
-export type GuidedProvenance = z.infer<typeof GuidedProvenanceSchema>;
 
 export const GuidedDraftRequestSchema = z.object({
   narrative: z.string().optional(),

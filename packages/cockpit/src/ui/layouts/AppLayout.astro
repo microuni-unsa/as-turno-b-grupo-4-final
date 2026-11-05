@@ -3,6 +3,7 @@ import BaseLayout from "@pims/cockpit/ui/layouts/BaseLayout.astro";
 import Header from "@pims/cockpit/ui/components/Header.astro";
 import SessionExpiredModal from "@pims/cockpit/ui/components/SessionExpiredModal.astro";
 import Sidebar from "@pims/cockpit/ui/components/Sidebar.astro";
+import FloatingChatWidget from "@pims/cockpit/ui/components/FloatingChatWidget.astro";
 
 interface Props {
   title?: string;
@@ -25,6 +26,7 @@ const { title, breadcrumb } = Astro.props;
     </div>
   </div>
   <SessionExpiredModal />
+  <FloatingChatWidget transition:persist="cockpit-floating-chat" />
 </BaseLayout>
 
 <script>

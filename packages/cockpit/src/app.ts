@@ -589,6 +589,8 @@ export function createCockpitApp(deps: CockpitAppDeps): Hono<CockpitEnv> {
         adapter: deps.adapter,
         store: deps.store,
         modelClient: deps.agent.modelClient,
+        presidioClient: deps.agent.presidioClient,
+        ragService: deps.ragService,
         config: deps.config,
         clock,
       },

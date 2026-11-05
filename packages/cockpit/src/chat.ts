@@ -1,6 +1,9 @@
+import type { PresidioClient } from "@pims/agent/llm/presidio-client.ts";
 import type { AgentModelClient } from "@pims/agent/llm/safe-prompt.ts";
 import {
+  analyzeFormMutation,
   checkPendingDecisions,
+  detectFormIntent,
   getIncidentStatus,
   getRagCitations,
   getRegulatoryTimers,
@@ -11,8 +14,10 @@ import type { AgentConfig } from "@pims/config";
 import type { EvidenceStore } from "@pims/evidence/evidence-store.ts";
 import { extractIocs, extractPii } from "@pims/evidence/forensic-patterns.ts";
 import type { PimsAdapter } from "@pims/pims-adapter";
+import type { RAGService } from "@pims/rag";
 import type {
   ChatCitation,
+  ChatFormMutation,
   ChatPersona,
   ChatRequest,
   ChatResponse,
@@ -133,6 +138,8 @@ export interface HandleChatDeps {
   adapter: PimsAdapter;
   store: EvidenceStore;
   modelClient: AgentModelClient;
+  presidioClient?: PresidioClient;
+  ragService?: RAGService;
   config: AgentConfig;
   clock: () => Date;
 }
@@ -347,7 +354,44 @@ export async function handleChat(
     );
   }
 
-  const context = JsonObjectSchema.parse({
+  let formMutation: ChatFormMutation | undefined;
+  const presidioClient = deps.presidioClient;
+  const ragService = deps.ragService;
+  if (
+    detectFormIntent(request.message, request.form_context) &&
+    presidioClient !== undefined &&
+    ragService !== undefined
+  ) {
+    const mutation = await instrumentSpan(
+      "form_mutation",
+      "tool",
+      { message: request.message },
+      () =>
+        analyzeFormMutation(
+          {
+            config: deps.config,
+            modelClient: deps.modelClient,
+            presidioClient,
+            ragService,
+            now: deps.clock,
+          },
+          request.message,
+          request.form_context,
+          session.username,
+        ),
+      (res) => ({
+        action: res?.action,
+        summary: res?.summary,
+        missing_count: res?.missing_mandatory_fields?.length ?? 0,
+      }),
+    );
+    toolCalls.push("form_mutation");
+    if (mutation !== undefined) {
+      formMutation = mutation;
+    }
+  }
+
+  const contextData: Record<string, JsonValue> = {
     persona,
     user_message: request.message,
     incident_code: code,
@@ -356,7 +400,13 @@ export async function handleChat(
     timers,
     citations: citationEntries,
     pending_decisions: pendingDecisions,
-  });
+  };
+  if (formMutation !== undefined) {
+    contextData.form_mutation = JSON.parse(
+      JSON.stringify(formMutation),
+    ) as JsonValue;
+  }
+  const context = JsonObjectSchema.parse(contextData);
 
   const serializedContext = JSON.stringify(context);
   const response = await instrumentSpan(
@@ -505,7 +555,7 @@ export async function handleChat(
     aggregates,
   };
 
-  return {
+  const chatResponse: ChatResponse = {
     reply,
     persona,
     citations: resolved,
@@ -514,4 +564,8 @@ export async function handleChat(
     reasoning,
     trace,
   };
+  if (formMutation !== undefined) {
+    chatResponse.form_mutation = formMutation;
+  }
+  return chatResponse;
 }

@@ -3,6 +3,7 @@ import AppLayout from "@pims/cockpit/ui/layouts/AppLayout.astro";
 import {
   Activity,
   AlertTriangle,
+  ArrowRight,
   Bot,
   Brain,
   Check,
@@ -22,6 +23,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Plus,
+  PlusCircle,
   RotateCw,
   Search,
   Send,
@@ -172,6 +174,17 @@ import {
               <span>Trazas</span>
             </button>
           </div>
+
+          <!-- Create Incident from Chat Button -->
+          <button
+            id="btn-create-incident-from-chat"
+            type="button"
+            class="flex items-center space-x-1.5 px-2.5 py-1.5 rounded-lg bg-blue-600/20 hover:bg-blue-600/30 text-blue-300 hover:text-white border border-blue-500/30 font-medium text-xs transition-colors"
+            title="Transferir contexto a Nuevo Incidente"
+          >
+            <PlusCircle class="w-3.5 h-3.5" />
+            <span class="hidden sm:inline">Crear incidente con este chat</span>
+          </button>
 
           <!-- Export Button -->
           <button
@@ -509,6 +522,7 @@ import {
   import { traceStore, type AxisMode } from "@pims/cockpit/ui/lib/trace-store.ts";
   import { canSwitchPersona, getSession } from "@pims/cockpit/ui/lib/session.ts";
   import { sseClient } from "@pims/cockpit/ui/lib/sse-client.ts";
+  import { loadFormDraft, saveFormDraft } from "@pims/cockpit/ui/lib/form-draft-bus.ts";
   import type { ChatCitation, ChatPersona, ChatTrace, ChatTraceSpan, StreamSnapshot } from "@pims/types/cockpit.ts";
 
   const session = getSession();
@@ -519,6 +533,13 @@ import {
   let zoomLevel = 1.0;
 
   function initChatApp(): void {
+    // Check URL search params for session
+    const urlParams = new URLSearchParams(window.location.search);
+    const sessionParam = urlParams.get("session");
+    if (sessionParam) {
+      chatStore.setActiveSession(sessionParam);
+    }
+
     // DOM Elements
     const sessionsContainer = document.getElementById("sessions-container");
     const sessionCountLabel = document.getElementById("session-count-label");
@@ -530,6 +551,7 @@ import {
     const activeSessionTitle = document.getElementById("active-session-title");
     const btnRenameSession = document.getElementById("btn-rename-session");
     const btnExportChat = document.getElementById("btn-export-chat");
+    const btnCreateIncident = document.getElementById("btn-create-incident-from-chat");
 
     const modeChat = document.getElementById("mode-chat");
     const modeSplit = document.getElementById("mode-split");
@@ -723,6 +745,22 @@ import {
       a.download = `chat-${session.id}.md`;
       a.click();
       URL.revokeObjectURL(url);
+    });
+
+    // --- Create Incident with Chat Draft ---
+    btnCreateIncident?.addEventListener("click", () => {
+      const activeSession = chatStore.getActiveSession();
+      const activeSessionId = chatStore.getActiveSessionId();
+      const activeItems = chatStore.getActiveBranchMessages();
+      const lastMutation = [...activeItems]
+        .reverse()
+        .find((item) => item.node.form_mutation)?.node.form_mutation;
+
+      const draft =
+        lastMutation?.fields ?? activeSession.draftSnapshot ?? loadFormDraft() ?? {};
+      saveFormDraft(draft);
+
+      window.location.href = `/new?session=${encodeURIComponent(activeSessionId)}`;
     });
 
     // --- Render Sessions Sidebar ---
@@ -979,6 +1017,53 @@ import {
             `;
           }
 
+          let formMutationHtml = "";
+          if (node.form_mutation) {
+            const fm = node.form_mutation;
+            const f = fm.fields || {};
+            const chips: string[] = [];
+
+            if (f.title) {
+              chips.push(`<span class="px-2 py-0.5 rounded-full bg-slate-900 border border-slate-700 text-[11px] text-slate-200"><strong>Título:</strong> ${escapeHtml(String(f.title))}</span>`);
+            }
+            if (f.severity) {
+              chips.push(`<span class="px-2 py-0.5 rounded-full bg-slate-900 border border-slate-700 text-[11px] text-slate-200"><strong>Severidad:</strong> ${escapeHtml(String(f.severity))}</span>`);
+            }
+            if (f.num_affected_subjects !== undefined && f.num_affected_subjects !== null) {
+              chips.push(`<span class="px-2 py-0.5 rounded-full bg-slate-900 border border-slate-700 text-[11px] text-slate-200"><strong>Afectados:</strong> ${escapeHtml(String(f.num_affected_subjects))}</span>`);
+            }
+            if (f.incident_type) {
+              chips.push(`<span class="px-2 py-0.5 rounded-full bg-slate-900 border border-slate-700 text-[11px] text-slate-200"><strong>Tipo:</strong> ${escapeHtml(String(f.incident_type))}</span>`);
+            }
+            if (f.involves_personal_data !== undefined) {
+              chips.push(`<span class="px-2 py-0.5 rounded-full bg-slate-900 border border-slate-700 text-[11px] text-slate-200"><strong>Datos Personales:</strong> ${f.involves_personal_data ? "Sí" : "No"}</span>`);
+            }
+
+            formMutationHtml = `
+              <div class="form-mutation-card my-3 p-3.5 bg-blue-950/40 border border-blue-800/80 rounded-xl space-y-2.5 shadow-sm">
+                <div class="flex items-center space-x-2 text-blue-300 font-semibold text-xs">
+                  <svg class="w-4 h-4 text-blue-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
+                  </svg>
+                  <span>Propuesta de Incidente para el Formulario</span>
+                </div>
+                ${fm.summary ? `<p class="text-xs text-slate-300 leading-relaxed">${escapeHtml(fm.summary)}</p>` : ""}
+                ${chips.length > 0 ? `<div class="flex flex-wrap gap-1.5 pt-0.5">${chips.join("")}</div>` : ""}
+                <div class="pt-1.5">
+                  <button
+                    type="button"
+                    class="btn-apply-draft-to-form w-full flex items-center justify-center space-x-2 px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-medium text-xs shadow-md shadow-blue-600/20 transition-all hover:scale-[1.01] active:scale-[0.99]"
+                  >
+                    <span>Ir al Formulario de Creación con este Borrador</span>
+                    <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+            `;
+          }
+
           msgDiv.innerHTML = `
             <div class="w-8 h-8 rounded-lg bg-blue-600/20 border border-blue-500/40 text-blue-400 flex items-center justify-center shrink-0 shadow">
               <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -989,6 +1074,7 @@ import {
               ${reasoningHtml}
               ${toolsHtml}
               <div class="text-slate-100 leading-relaxed whitespace-pre-wrap">${escapeHtml(node.text)}</div>
+              ${formMutationHtml}
               ${citationsHtml}
               
               <!-- Bottom Action Toolbar -->
@@ -1056,6 +1142,15 @@ import {
               traceStore.addTrace(node.trace, true);
               setViewMode("split");
             }
+          });
+
+          const applyDraftBtn = msgDiv.querySelector(".btn-apply-draft-to-form");
+          applyDraftBtn?.addEventListener("click", () => {
+            if (node.form_mutation?.fields) {
+              saveFormDraft(node.form_mutation.fields);
+            }
+            const activeSessionId = chatStore.getActiveSessionId();
+            window.location.href = `/new?session=${encodeURIComponent(activeSessionId)}`;
           });
 
           // Branch navigation handlers

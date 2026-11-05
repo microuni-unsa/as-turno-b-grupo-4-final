@@ -1,7 +1,9 @@
 import type {
+  ChatFormMutation,
   ChatPersona,
   ChatResponse,
   ChatTrace,
+  GuidedReporting,
 } from "@pims/types/cockpit.ts";
 
 export interface ChatMessageNode {
@@ -17,6 +19,8 @@ export interface ChatMessageNode {
   trace?: ChatTrace;
   error?: boolean;
   timestamp: string;
+  form_mutation?: ChatFormMutation;
+  formContext?: Partial<GuidedReporting>;
 }
 
 export interface ChatSession {
@@ -29,6 +33,7 @@ export interface ChatSession {
   nodes: Record<string, ChatMessageNode>;
   rootNodeIds: string[];
   activeLeafId: string | null;
+  draftSnapshot?: Partial<GuidedReporting>;
 }
 
 export interface ActiveMessageItem {
@@ -254,6 +259,10 @@ export class ChatStore {
     return session;
   }
 
+  getActiveSessionId(): string {
+    return this.getActiveSession().id;
+  }
+
   setActiveSession(sessionId: string): void {
     const exists = this.sessions.some((s) => s.id === sessionId);
     if (exists && this.activeSessionId !== sessionId) {
@@ -326,6 +335,7 @@ export class ChatStore {
     text: string,
     incidentCode?: string,
     persona?: ChatPersona,
+    formContext?: Partial<GuidedReporting>,
   ): ChatMessageNode {
     const session = this.getActiveSession();
     const nodeId = `msg-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
@@ -344,6 +354,7 @@ export class ChatStore {
       incidentCode,
       persona: persona || this.currentPersona,
       timestamp,
+      formContext,
     };
 
     session.nodes[nodeId] = node;
@@ -392,6 +403,7 @@ export class ChatStore {
       trace: response.trace,
       error,
       timestamp,
+      form_mutation: response.form_mutation,
     };
 
     session.nodes[nodeId] = node;
@@ -406,7 +418,11 @@ export class ChatStore {
     return node;
   }
 
-  editUserMessage(targetNodeId: string, newText: string): ChatMessageNode {
+  editUserMessage(
+    targetNodeId: string,
+    newText: string,
+    formContext?: Partial<GuidedReporting>,
+  ): ChatMessageNode {
     const session = this.getActiveSession();
     const targetNode = session.nodes[targetNodeId];
     if (targetNode?.sender !== "user") {
@@ -428,6 +444,7 @@ export class ChatStore {
       incidentCode: targetNode.incidentCode,
       persona: targetNode.persona,
       timestamp,
+      formContext: formContext ?? targetNode.formContext,
     };
 
     session.nodes[newNodeId] = newNode;
@@ -510,6 +527,8 @@ export class ChatStore {
     response?: ChatResponse;
     error?: boolean;
     timestamp: string;
+    form_mutation?: ChatFormMutation;
+    formContext?: Partial<GuidedReporting>;
   }> {
     return this.getActiveBranchMessages().map((item) => ({
       id: item.node.id,
@@ -519,6 +538,8 @@ export class ChatStore {
       response: item.node.response,
       error: item.node.error,
       timestamp: item.node.timestamp,
+      form_mutation: item.node.form_mutation,
+      formContext: item.node.formContext,
     }));
   }
 
