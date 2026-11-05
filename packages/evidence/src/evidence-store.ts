@@ -964,6 +964,24 @@ export class EvidenceStore {
     }));
   }
 
+  async listTimers(incidentCode: string): Promise<TimerRecord[]> {
+    const rows = await this.db
+      .select()
+      .from(timersTable)
+      .where(eq(timersTable.incident_code, incidentCode))
+      .orderBy(asc(timersTable.fire_at_utc));
+
+    return rows.map((r) => ({
+      timer_id: r.timer_id,
+      incident_code: r.incident_code,
+      timer_type: r.timer_type,
+      fire_at_utc: r.fire_at_utc.toISOString(),
+      payload: parseJsonObject(r.payload_json, "timers.payload_json"),
+      fired: r.fired,
+      cancelled_reason: r.cancelled_reason,
+    }));
+  }
+
   async appendToolLedger(
     entry: AuditTrailLedgerEntry & { incident_code: string },
   ): Promise<void> {

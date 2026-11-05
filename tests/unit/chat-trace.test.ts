@@ -60,6 +60,7 @@ describe("Cockpit Chat Trace and Reasoning", () => {
 
     const mockStore = {
       listActiveTimers: vi.fn().mockResolvedValue([]),
+      listTimers: vi.fn().mockResolvedValue([]),
       listRagRetrievals: vi.fn().mockResolvedValue([]),
       getAgentState: vi.fn().mockResolvedValue(null),
       getDraftPack: vi.fn().mockResolvedValue(null),
@@ -166,6 +167,7 @@ describe("Cockpit Chat Trace and Reasoning", () => {
 
     const mockStore = {
       listActiveTimers: vi.fn().mockResolvedValue([]),
+      listTimers: vi.fn().mockResolvedValue([]),
       listRagRetrievals: vi.fn().mockResolvedValue([]),
       getAgentState: vi.fn().mockResolvedValue(null),
       getDraftPack: vi.fn().mockResolvedValue(null),

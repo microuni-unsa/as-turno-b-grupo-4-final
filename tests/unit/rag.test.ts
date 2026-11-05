@@ -349,15 +349,33 @@ Notify the designated Incident Commander within 30 minutes.
     });
 
     it("raises RagNoEvidenceError when candidate scores fall below threshold", async () => {
-      const sqlStub = vi.fn().mockResolvedValue([]);
+      const sqlStub = Object.assign(
+        vi.fn().mockResolvedValue([{ chunk_id: "low1", similarity: 0.5 }]),
+        { unsafe: vi.fn().mockResolvedValue([]) },
+      );
       const indexer = new RagIndexer({
         modelProvider: dummyProvider,
         pgClient: sqlStub as unknown as postgres.Sql,
       });
-
-      vi.spyOn(dummyProvider, "embed").mockResolvedValueOnce({
+      vi.spyOn(dummyProvider, "embed").mockResolvedValue({
         vectors: [[0.1, 0.2, 0.3]],
       });
+      await indexer.indexCorpus(
+        [
+          {
+            chunk_id: "low1",
+            doc_id: "doc1",
+            article_or_clause: "art1",
+            lines: "1-10",
+            text: "[DOC:doc1 | CLAUSE:art1 | NORMATIVE:true]\nIrrelevant text",
+            normative: true,
+            header: "[DOC:doc1 | CLAUSE:art1 | NORMATIVE:true]",
+            token_count: 5,
+            sha256: "a".repeat(64),
+          },
+        ],
+        "v-low-score",
+      );
 
       vi.spyOn(dummyProvider, "rerank").mockResolvedValueOnce({
         ranked: [
@@ -366,7 +384,7 @@ Notify the designated Incident Commander within 30 minutes.
             doc_id: "doc1",
             article_or_clause: "art1",
             lines: "1-10",
-            text: "Irrelevant text",
+            text: "[DOC:doc1 | CLAUSE:art1 | NORMATIVE:true]\nIrrelevant text",
             normative: true,
             score: 0.2,
             rank: 1,
@@ -573,6 +591,138 @@ Notify the designated Incident Commander within 30 minutes.
       // Repeat identical query
       await ragService.query(queryText);
       expect(embedSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it("drops reranked chunk ids outside the candidate list and re-ranks survivors", async () => {
+      const sqlStub = Object.assign(
+        vi.fn().mockResolvedValue([
+          { chunk_id: "gdpr-full:0001", similarity: 0.9 },
+          { chunk_id: "gdpr-full:0002", similarity: 0.8 },
+        ]),
+        { unsafe: vi.fn().mockResolvedValue([]) },
+      );
+      const indexer = new RagIndexer({
+        modelProvider: dummyProvider,
+        pgClient: sqlStub as unknown as postgres.Sql,
+      });
+      vi.spyOn(dummyProvider, "embed").mockResolvedValue({
+        vectors: [
+          [0.5, 0.5],
+          [0.6, 0.6],
+        ],
+      });
+      const chunks = ["gdpr-full:0001", "gdpr-full:0002"].map((chunk_id) => ({
+        chunk_id,
+        doc_id: "gdpr-full",
+        article_or_clause: "section",
+        lines: "1-5",
+        text: `[DOC:gdpr-full | CLAUSE:section | NORMATIVE:true]\nBreach notification ${chunk_id}`,
+        normative: true,
+        header: "[DOC:gdpr-full | CLAUSE:section | NORMATIVE:true]",
+        token_count: 8,
+        sha256: "e".repeat(64),
+      }));
+      await indexer.indexCorpus(chunks, "v-rerank-filter");
+
+      vi.spyOn(dummyProvider, "embed").mockResolvedValue({
+        vectors: [[0.5, 0.5]],
+      });
+      const passageFor = (chunk_id: string) => {
+        const chunk = chunks.find((c) => c.chunk_id === chunk_id);
+        if (!chunk) {
+          throw new Error(`Missing fixture chunk ${chunk_id}`);
+        }
+        return chunk;
+      };
+      vi.spyOn(dummyProvider, "rerank").mockResolvedValue({
+        ranked: [
+          { ...passageFor("gdpr-full:0002"), score: 0.95, rank: 1 },
+          // Real chunk id, but not in this retrieval's candidate list.
+          {
+            chunk_id: "gdpr-full:0026",
+            doc_id: "gdpr-full",
+            article_or_clause: "section 26",
+            lines: "100-110",
+            text: "intruder",
+            normative: true,
+            score: 0.9,
+            rank: 2,
+          },
+          { ...passageFor("gdpr-full:0001"), score: 0.8, rank: 3 },
+        ],
+      });
+
+      const ragService = new RAGService({
+        modelProvider: dummyProvider,
+        indexer,
+        config: testRagConfig,
+      });
+      const result = await ragService.query("breach notification");
+      expect(result.passages.map((p) => p.chunk_id)).toEqual([
+        "gdpr-full:0002",
+        "gdpr-full:0001",
+      ]);
+      expect(result.passages.map((p) => p.rank)).toEqual([1, 2]);
+      expect(result.citations).toHaveLength(2);
+    });
+
+    it("fails closed when the reranker returns only unknown chunk ids", async () => {
+      const sqlStub = Object.assign(
+        vi
+          .fn()
+          .mockResolvedValue([{ chunk_id: "gdpr-full:0001", similarity: 0.9 }]),
+        { unsafe: vi.fn().mockResolvedValue([]) },
+      );
+      const indexer = new RagIndexer({
+        modelProvider: dummyProvider,
+        pgClient: sqlStub as unknown as postgres.Sql,
+      });
+      vi.spyOn(dummyProvider, "embed").mockResolvedValue({
+        vectors: [[0.5, 0.5]],
+      });
+      await indexer.indexCorpus(
+        [
+          {
+            chunk_id: "gdpr-full:0001",
+            doc_id: "gdpr-full",
+            article_or_clause: "section",
+            lines: "1-5",
+            text: "[DOC:gdpr-full | CLAUSE:section | NORMATIVE:true]\nBreach notification",
+            normative: true,
+            header: "[DOC:gdpr-full | CLAUSE:section | NORMATIVE:true]",
+            token_count: 8,
+            sha256: "f".repeat(64),
+          },
+        ],
+        "v-rerank-fail-closed",
+      );
+
+      vi.spyOn(dummyProvider, "embed").mockResolvedValue({
+        vectors: [[0.5, 0.5]],
+      });
+      vi.spyOn(dummyProvider, "rerank").mockResolvedValue({
+        ranked: [
+          {
+            chunk_id: "gdpr-full:0026",
+            doc_id: "gdpr-full",
+            article_or_clause: "section 26",
+            lines: "100-110",
+            text: "intruder",
+            normative: true,
+            score: 0.9,
+            rank: 1,
+          },
+        ],
+      });
+
+      const ragService = new RAGService({
+        modelProvider: dummyProvider,
+        indexer,
+        config: testRagConfig,
+      });
+      await expect(ragService.query("breach notification")).rejects.toThrow(
+        CitationFabricatedError,
+      );
     });
   });
 });

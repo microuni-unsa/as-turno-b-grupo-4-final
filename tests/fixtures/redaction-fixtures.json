@@ -40,6 +40,22 @@
     "expected_tokens": ["[CONTACTO]"]
   },
   {
+    "id": "phone_pe_spaced",
+    "description": "Peruvian mobile phone number with +51 prefix and spaced digit groups",
+    "input": "Su teléfono es +51 987 654 321, llamar en horario de oficina.",
+    "expected_redacted": "Su teléfono es [CONTACTO], llamar en horario de oficina.",
+    "expected_entities": ["PHONE_NUMBER"],
+    "expected_tokens": ["[CONTACTO]"]
+  },
+  {
+    "id": "phone_pe_landline",
+    "description": "Peruvian landline number with trunk prefix and separators",
+    "input": "Anexo de la oficina 01-2345678 para coordinaciones.",
+    "expected_redacted": "Anexo de la oficina [CONTACTO] para coordinaciones.",
+    "expected_entities": ["PHONE_NUMBER"],
+    "expected_tokens": ["[CONTACTO]"]
+  },
+  {
     "id": "lima_address",
     "description": "Lima Peru geographical location",
     "input": "Instalaciones en Lima Perú bajo monitoreo.",

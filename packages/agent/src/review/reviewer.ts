@@ -31,7 +31,7 @@ export const REVIEW_CHALLENGE_SYSTEM =
   "You review a breach notice pack for legal completeness, ungrounded claims, plain-language failures, and personal data leakage. Return one challenge per weakness with target, challenge, severity (low, medium, high), and the evidence a human reviewer must supply. Never invent facts absent from the pack; severity high blocks approval.";
 
 export const REVIEW_CHALLENGE_AUTHORITY_SYSTEM =
-  "You review an Article 33 supervisory-authority notification pack for legal completeness, ungrounded claims, and personal data leakage. The addressee is the supervisory authority, so do NOT reject for data-subject plain-language style. Return one challenge per weakness with target, challenge, severity (low, medium, high), and the evidence a human reviewer must supply. Never invent facts absent from the pack; severity high blocks approval.";
+  "You review an Article 33 supervisory-authority notification pack for legal completeness, ungrounded claims, and personal data leakage. The addressee is the supervisory authority, so do NOT reject for data-subject plain-language style. Scope is strictly the Article 33(3)(a)-(d) items present in body_text: nature/categories/approx counts of the breach, DPO contact, consequences, measures taken and proposed. Do NOT demand proof that data subjects were notified (that is Article 34, a separate pack); do NOT demand evidence beyond what an Article 33 notification must contain. A severity of high is allowed ONLY when you quote the exact pack sentence that is missing, contradictory, or ungrounded, and name which of the (a)-(d) items it violates. Return one challenge per weakness with target, challenge, severity (low, medium, high), and the evidence a human reviewer must supply. Never invent facts absent from the pack; severity high blocks approval.";
 
 export interface ReviewerDeps {
   modelClient: AgentModelClient;
@@ -258,7 +258,7 @@ export class NoticeReviewer {
           role: "user",
           content: JSON.stringify({
             pack_type: ctx.pack_type,
-            body_text: redactForPrompt(ctx.body_text),
+            body_text: await redactForPrompt(ctx.body_text),
             citations: ctx.citations,
             incident_code: ctx.incident_code,
           }),

@@ -235,13 +235,23 @@ export class DeadlineScheduler {
           breached.push(timer.incident_code);
         }
       } catch (error: unknown) {
-        await this.armRetry(
-          timer.incident_code,
-          timer.timer_id,
-          kind,
-          timer.payload,
-          now,
-        );
+        if (kind === "T_RETRY") {
+          // A failed retry must not arm another retry: that self-nests
+          // payloads and fires forever. Page once and stop the chain.
+          this.page({
+            incident_code: timer.incident_code,
+            kind,
+            reason: `RETRY_EXHAUSTED:${timer.timer_id}`,
+          });
+        } else {
+          await this.armRetry(
+            timer.incident_code,
+            timer.timer_id,
+            kind,
+            timer.payload,
+            now,
+          );
+        }
         if (firstError === null) {
           firstError = error;
         }

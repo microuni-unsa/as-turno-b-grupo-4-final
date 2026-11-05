@@ -200,6 +200,49 @@ import {
         const disabledAttr = canChangeIncident ? "" : "disabled title=\"Permiso 'change_incident' requerido (Modo solo lectura)\"";
         const disabledClasses = canChangeIncident ? "" : "opacity-50 cursor-not-allowed";
 
+        if (item.kind === "agent_blocked") {
+          return `
+          <div class="bg-rose-950/40 border border-rose-800/60 rounded-xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div class="space-y-1">
+              <div class="flex items-center space-x-2">
+                <span class="px-2 py-0.5 rounded text-xs font-bold font-mono bg-rose-950 text-rose-300 border border-rose-800">
+                  ${item.incident_code}
+                </span>
+                <span class="text-sm font-semibold text-rose-200">
+                  Agente bloqueado — requiere intervención
+                </span>
+              </div>
+              <p class="text-xs text-rose-300/80 font-mono">
+                ${item.blocked_reason || "UNKNOWN"}
+              </p>
+              <p class="text-xs text-slate-400">
+                El ciclo autónomo se detuvo con error y los reintentos no convergen. Revise el motivo, corrija la causa y el watcher retomará automáticamente.
+              </p>
+            </div>
+          </div>
+        `;
+        }
+
+        if (item.kind === "deadline_breached") {
+          return `
+          <div class="bg-amber-950/40 border border-amber-800/60 rounded-xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div class="space-y-1">
+              <div class="flex items-center space-x-2">
+                <span class="px-2 py-0.5 rounded text-xs font-bold font-mono bg-amber-950 text-amber-300 border border-amber-800">
+                  ${item.incident_code}
+                </span>
+                <span class="text-sm font-semibold text-amber-200">
+                  Plazo vencido sin notificación (${item.blocked_reason || "T72_AUTHORITY"})
+                </span>
+              </div>
+              <p class="text-xs text-slate-400">
+                El plazo legal expiró sin paquete emitido. El pack Art. 33 debe incluir motivos del retraso (Art. 33(1)). Priorice la aprobación en cuanto el borrador esté listo.
+              </p>
+            </div>
+          </div>
+        `;
+        }
+
         return `
           <div class="bg-slate-900 border border-slate-800 rounded-xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
             <div class="space-y-1">

@@ -78,8 +78,8 @@ describe("ChatStore Tree Branching & Multi-Session", () => {
       "¿Quién es el asignado?",
       "Asignado a Operador 1.",
     ]);
-    expect(branch[0].totalBranches).toBe(1);
-    expect(branch[0].branchIndex).toBe(0);
+    expect(branch[0]?.totalBranches).toBe(1);
+    expect(branch[0]?.branchIndex).toBe(0);
 
     // Edit userMsg1 -> forks branch at root!
     const userMsg1Edited = store.editUserMessage(
@@ -91,9 +91,9 @@ describe("ChatStore Tree Branching & Multi-Session", () => {
     branch = store.getActiveBranchMessages();
     // After edit, the active branch starts at userMsg1Edited (leaf is userMsg1Edited)
     expect(branch.length).toBe(1);
-    expect(branch[0].node.text).toBe("¿Cuál es la severidad de INC-001?");
-    expect(branch[0].totalBranches).toBe(2);
-    expect(branch[0].branchIndex).toBe(1);
+    expect(branch[0]?.node.text).toBe("¿Cuál es la severidad de INC-001?");
+    expect(branch[0]?.totalBranches).toBe(2);
+    expect(branch[0]?.branchIndex).toBe(1);
 
     // Assistant answers the edited question
     store.addAssistantResponse(
@@ -102,15 +102,15 @@ describe("ChatStore Tree Branching & Multi-Session", () => {
     );
     branch = store.getActiveBranchMessages();
     expect(branch.length).toBe(2);
-    expect(branch[1].node.text).toBe("La severidad es Alta.");
+    expect(branch[1]?.node.text).toBe("La severidad es Alta.");
 
     // Switch back to original branch at root
     store.switchBranch(userMsg1.id);
     branch = store.getActiveBranchMessages();
     expect(branch.length).toBe(4);
-    expect(branch[0].node.text).toBe("¿Cuál es el estado de INC-001?");
-    expect(branch[0].branchIndex).toBe(0);
-    expect(branch[0].totalBranches).toBe(2);
+    expect(branch[0]?.node.text).toBe("¿Cuál es el estado de INC-001?");
+    expect(branch[0]?.branchIndex).toBe(0);
+    expect(branch[0]?.totalBranches).toBe(2);
   });
 
   it("handles regenerating an assistant response creating sibling branches", () => {
@@ -122,8 +122,8 @@ describe("ChatStore Tree Branching & Multi-Session", () => {
 
     let branch = store.getActiveBranchMessages();
     expect(branch.length).toBe(2);
-    expect(branch[1].branchIndex).toBe(0);
-    expect(branch[1].totalBranches).toBe(1);
+    expect(branch[1]?.branchIndex).toBe(0);
+    expect(branch[1]?.totalBranches).toBe(1);
 
     // Regenerate response: add second assistant response under the same user message
     const resp2 = store.addAssistantResponse(
@@ -133,18 +133,18 @@ describe("ChatStore Tree Branching & Multi-Session", () => {
 
     branch = store.getActiveBranchMessages();
     expect(branch.length).toBe(2);
-    expect(branch[1].node.id).toBe(resp2.id);
-    expect(branch[1].node.text).toBe("Respuesta 2: El plazo legal es de 72h");
-    expect(branch[1].branchIndex).toBe(1);
-    expect(branch[1].totalBranches).toBe(2);
+    expect(branch[1]?.node.id).toBe(resp2.id);
+    expect(branch[1]?.node.text).toBe("Respuesta 2: El plazo legal es de 72h");
+    expect(branch[1]?.branchIndex).toBe(1);
+    expect(branch[1]?.totalBranches).toBe(2);
 
     // Switch back to first response
     store.switchBranch(resp1.id);
     branch = store.getActiveBranchMessages();
     expect(branch.length).toBe(2);
-    expect(branch[1].node.id).toBe(resp1.id);
-    expect(branch[1].node.text).toBe("Respuesta 1: 72 horas");
-    expect(branch[1].branchIndex).toBe(0);
-    expect(branch[1].totalBranches).toBe(2);
+    expect(branch[1]?.node.id).toBe(resp1.id);
+    expect(branch[1]?.node.text).toBe("Respuesta 1: 72 horas");
+    expect(branch[1]?.branchIndex).toBe(0);
+    expect(branch[1]?.totalBranches).toBe(2);
   });
 });

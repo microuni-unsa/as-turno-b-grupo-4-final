@@ -68,7 +68,7 @@ export class ChatStore {
         if (Array.isArray(parsed.sessions) && parsed.sessions.length > 0) {
           this.sessions = parsed.sessions;
           this.activeSessionId =
-            parsed.activeSessionId || parsed.sessions[0].id;
+            parsed.activeSessionId || parsed.sessions[0]?.id || "";
           this.currentPersona = parsed.persona || "auditor";
           return;
         }
@@ -185,8 +185,11 @@ export class ChatStore {
       session.nodes[nodeId] = node;
       if (lastId === null) {
         session.rootNodeIds.push(nodeId);
-      } else if (session.nodes[lastId]) {
-        session.nodes[lastId].childrenIds.push(nodeId);
+      } else {
+        const parentNode = session.nodes[lastId];
+        if (parentNode) {
+          parentNode.childrenIds.push(nodeId);
+        }
       }
       lastId = nodeId;
     }
@@ -241,7 +244,11 @@ export class ChatStore {
       if (this.sessions.length === 0) {
         this.initDefaultSession();
       }
-      session = this.sessions[0];
+      const first = this.sessions[0];
+      if (!first) {
+        throw new Error("ChatStore: failed to initialize active session");
+      }
+      session = first;
       this.activeSessionId = session.id;
     }
     return session;
@@ -281,8 +288,11 @@ export class ChatStore {
     if (this.sessions.length === 0) {
       this.initDefaultSession();
     } else if (this.activeSessionId === sessionId) {
-      this.activeSessionId = this.sessions[0].id;
-      this.currentPersona = this.sessions[0].persona;
+      const first = this.sessions[0];
+      if (first) {
+        this.activeSessionId = first.id;
+        this.currentPersona = first.persona;
+      }
     }
     this.saveToStorage();
   }
@@ -423,8 +433,11 @@ export class ChatStore {
     session.nodes[newNodeId] = newNode;
     if (targetNode.parentId === null) {
       session.rootNodeIds.push(newNodeId);
-    } else if (session.nodes[targetNode.parentId]) {
-      session.nodes[targetNode.parentId].childrenIds.push(newNodeId);
+    } else {
+      const parentNode = session.nodes[targetNode.parentId];
+      if (parentNode) {
+        parentNode.childrenIds.push(newNodeId);
+      }
     }
 
     session.activeLeafId = newNodeId;
@@ -439,9 +452,12 @@ export class ChatStore {
 
     // From this node, navigate downwards following the first/latest child until a leaf is found
     let currentId = nodeId;
-    while (session.nodes[currentId]?.childrenIds.length > 0) {
-      const children = session.nodes[currentId].childrenIds;
-      currentId = children[children.length - 1];
+    while ((session.nodes[currentId]?.childrenIds.length ?? 0) > 0) {
+      const children = session.nodes[currentId]?.childrenIds;
+      if (!children || children.length === 0) break;
+      const nextId = children[children.length - 1];
+      if (!nextId) break;
+      currentId = nextId;
     }
 
     session.activeLeafId = currentId;
@@ -457,7 +473,8 @@ export class ChatStore {
 
     // Build path from activeLeafId upwards to root
     const path: ChatMessageNode[] = [];
-    let current: ChatMessageNode | null = session.nodes[session.activeLeafId];
+    let current: ChatMessageNode | null =
+      session.nodes[session.activeLeafId] ?? null;
     while (current) {
       path.unshift(current);
       current = current.parentId

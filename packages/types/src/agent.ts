@@ -121,6 +121,8 @@ export const REVIEW_APPROVAL_KINDS = [
   "notice_approval",
   "recipient_required",
   "revision_required",
+  "agent_blocked",
+  "deadline_breached",
 ] as const;
 export const ReviewApprovalKindSchema = z.enum(REVIEW_APPROVAL_KINDS);
 export type ReviewApprovalKind = z.infer<typeof ReviewApprovalKindSchema>;

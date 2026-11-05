@@ -405,7 +405,9 @@ describe("Cockpit backend", { timeout: 240_000 }, () => {
     expect(okBody.trace).toBeDefined();
     expect(okBody.trace.wall_time_ms).toBeGreaterThan(0);
     expect(okBody.trace.spans.length).toBeGreaterThanOrEqual(4);
-    expect(okBody.trace.aggregates.some((a) => a.tool === "get_rag_citations")).toBe(true);
+    expect(
+      okBody.trace.aggregates.some((a) => a.tool === "get_rag_citations"),
+    ).toBe(true);
 
     chatMode = "fabricated";
     const fabricated = await app.request("/api/chat", {

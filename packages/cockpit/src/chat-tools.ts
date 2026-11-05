@@ -270,8 +270,65 @@ export async function checkPendingDecisions(
   const checks = await Promise.all(
     candidates.map(async (incident) => {
       const state = await loadWatcherState(store, incident.incident_code);
+      const out: PendingDecision[] = [];
+
+      // Breached deadlines stay visible: a fired T72/T_REVIEW_SLA with no
+      // sent pack is the highest-priority operator signal, not silence.
+      const [authRow, subjRow, timers] = await Promise.all([
+        store.getDraftPack(incident.incident_code, "authority"),
+        store.getDraftPack(incident.incident_code, "subject"),
+        store.listTimers(incident.incident_code),
+      ]);
+      const breached = timers.filter(
+        (timer) =>
+          (timer.timer_type === "T72_AUTHORITY" ||
+            timer.timer_type === "T_REVIEW_SLA") &&
+          timer.fired &&
+          timer.cancelled_reason === null,
+      );
+      const authoritySent = authRow !== null && authRow.state === "sent";
+      const subjectTerminal =
+        subjRow !== null &&
+        (subjRow.state === "sent" ||
+          subjRow.state === "exempted" ||
+          subjRow.state === "not_required");
+      const unmetBreach = breached.filter((timer) =>
+        timer.timer_type === "T72_AUTHORITY"
+          ? !authoritySent
+          : !subjectTerminal,
+      );
+      if (unmetBreach.length > 0) {
+        out.push({
+          incident_id: incident.id,
+          incident_code: incident.incident_code,
+          kind: "deadline_breached" as const,
+          pack_type: null,
+          approval_id: null,
+          blocked_reason: unmetBreach
+            .map((timer) => timer.timer_type)
+            .join(","),
+          actionable,
+        });
+      }
+
       if (state === null) {
-        return null;
+        return out.length > 0 ? out : null;
+      }
+
+      // A watcher parked in blocked stage is operator-actionable: the retry
+      // loop alone may never converge (e.g. deterministic model failure).
+      if (state.stage === "blocked") {
+        out.push({
+          incident_id: incident.id,
+          incident_code: incident.incident_code,
+          kind: "agent_blocked" as const,
+          pack_type: null,
+          approval_id: null,
+          blocked_reason:
+            state.last_error_code ?? state.blocked_reason ?? "UNKNOWN",
+          actionable,
+        });
+        return out;
       }
 
       if (state.blocked_reason === "NOTIFY_NO_RECIPIENTS") {
@@ -287,11 +344,7 @@ export async function checkPendingDecisions(
           },
         ];
       }
-
-      const [authRow, subjRow] = await Promise.all([
-        store.getDraftPack(incident.incident_code, "authority"),
-        store.getDraftPack(incident.incident_code, "subject"),
-      ]);
+      // authRow/subjRow already fetched above for the breach check.
 
       const draftPacks: Array<{
         pack_type: "authority" | "subject";
@@ -336,7 +389,7 @@ export async function checkPendingDecisions(
       }
 
       if (state.stage !== "awaiting_approval") {
-        return null;
+        return out.length > 0 ? out : null;
       }
 
       const approved = draftPacks.filter((pack) => pack.state === "approved");

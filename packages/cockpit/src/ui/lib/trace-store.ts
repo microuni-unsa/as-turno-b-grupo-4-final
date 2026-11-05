@@ -52,7 +52,8 @@ export class TraceStore {
 
     if (makeActive || this.activeTraceId === null) {
       this.activeTraceId = trace.id;
-      this.selectedSpanId = trace.spans.length > 0 ? trace.spans[0].id : null;
+      this.selectedSpanId =
+        trace.spans.length > 0 ? (trace.spans[0]?.id ?? null) : null;
     }
 
     this.notify();
@@ -64,7 +65,7 @@ export class TraceStore {
 
   getActiveTrace(): ChatTrace | null {
     if (!this.activeTraceId) {
-      return this.traces.length > 0 ? this.traces[0] : null;
+      return this.traces.length > 0 ? (this.traces[0] ?? null) : null;
     }
     return this.traces.find((t) => t.id === this.activeTraceId) ?? null;
   }
@@ -73,7 +74,8 @@ export class TraceStore {
     if (this.activeTraceId !== id) {
       this.activeTraceId = id;
       const t = this.getActiveTrace();
-      this.selectedSpanId = t && t.spans.length > 0 ? t.spans[0].id : null;
+      this.selectedSpanId =
+        t && t.spans.length > 0 ? (t.spans[0]?.id ?? null) : null;
       this.notify();
     }
   }

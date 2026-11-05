@@ -236,7 +236,28 @@ export class RAGService {
       query: userQuery,
       passages: candidatePassages,
     });
-    const topPassages = rerankRes.ranked.slice(0, this.rerankK);
+    // The rerank model occasionally returns chunk_ids outside the candidate
+    // list (real ids, wrong retrieval). Those entries carry no RRF/dense/BM25
+    // metadata, so they are dropped and the surviving order is re-ranked
+    // contiguously instead of failing the whole retrieval.
+    const candidateIds = new Set(candidatePassages.map((p) => p.chunk_id));
+    const knownRanked = rerankRes.ranked.filter((p) =>
+      candidateIds.has(p.chunk_id),
+    );
+    if (knownRanked.length === 0 && rerankRes.ranked.length > 0) {
+      throw new CitationFabricatedError(
+        rerankRes.ranked
+          .map((p) => p.chunk_id)
+          .filter((id) => !candidateIds.has(id))
+          .join(","),
+        `Reranker returned only chunk ids outside the candidate list: ${rerankRes.ranked.map((p) => p.chunk_id).join(",")}`,
+      );
+    }
+    const reranked = knownRanked.map((p, index) => ({
+      ...p,
+      rank: index + 1,
+    }));
+    const topPassages = reranked.slice(0, this.rerankK);
     const passedPassages = topPassages.filter((p) => p.score >= this.minScore);
     if (passedPassages.length === 0) {
       throw new RagNoEvidenceError(
