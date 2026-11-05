@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import type { EvidenceStore } from "@pims/evidence/evidence-store.ts";
 import { canonicalizeJson } from "@pims/types/canonical.ts";
-import { AUDIT_TRAIL_ALLOWED_ARG_KEYS } from "@pims/types/constants.ts";
+import { CONSTANTS } from "@pims/types/constants.ts";
 import {
   ArtifactIncompleteError,
   BundleAlreadySealedError,
@@ -18,11 +18,15 @@ import {
 } from "@pims/types/evidence.ts";
 import type { JsonObject } from "@pims/types/models.ts";
 
+export const BUNDLE_ATTACHMENT_NAME = CONSTANTS.BUNDLE_ATTACHMENT_NAME;
+
 const ALLOWED_TRAIL_ARG_KEYS: ReadonlySet<string> = new Set(
-  AUDIT_TRAIL_ALLOWED_ARG_KEYS,
+  CONSTANTS.AUDIT_TRAIL_ALLOWED_ARG_KEYS,
 );
 
 export class BundleSealer {
+  static readonly BUNDLE_ATTACHMENT_NAME = CONSTANTS.BUNDLE_ATTACHMENT_NAME;
+
   constructor(private readonly evidenceStore: EvidenceStore) {}
 
   async createManifest(
@@ -34,6 +38,9 @@ export class BundleSealer {
   ): Promise<EvidenceBundleManifest> {
     const stagedItems =
       await this.evidenceStore.listStagedAttachments(incidentCode);
+    if (!stagedItems) {
+      throw new ArtifactIncompleteError("evidence-bundle", "items");
+    }
 
     const manifestCandidate: EvidenceBundleManifest = {
       manifest: "evidence-bundle",
@@ -51,8 +58,14 @@ export class BundleSealer {
       EvidenceBundleManifestSchema.safeParse(manifestCandidate);
     if (!validation.success) {
       const issue = validation.error.issues[0];
-      const field = issue ? issue.path.join(".") : "manifest";
-      throw new ArtifactIncompleteError("evidence-bundle", field);
+      if (issue !== undefined && issue.path.length > 0) {
+        throw new ArtifactIncompleteError(
+          "evidence-bundle",
+          issue.path.join("."),
+        );
+      } else {
+        throw new ArtifactIncompleteError("evidence-bundle", "manifest");
+      }
     }
 
     await this.evidenceStore.saveBundleManifest(
@@ -67,14 +80,18 @@ export class BundleSealer {
     pimsAttachmentIds: number[],
   ): Promise<void> {
     const staged = await this.evidenceStore.listStagedAttachments(incidentCode);
+    if (!staged) {
+      throw new EvidenceNotFoundError("staged_attachments", incidentCode);
+    }
 
     for (const attachment of staged) {
       const pimsAttachmentId = attachment.pims_attachment_id;
       if (pimsAttachmentId === undefined) {
         throw new BundlePimsMismatchError(attachment.file_name);
-      }
-      if (!pimsAttachmentIds.includes(pimsAttachmentId)) {
+      } else if (!pimsAttachmentIds.includes(pimsAttachmentId)) {
         throw new BundlePimsMismatchError(attachment.file_name);
+      } else {
+        // Staged attachment reconciled with PIMS attachment id
       }
     }
   }
@@ -87,10 +104,10 @@ export class BundleSealer {
     const manifest = await this.evidenceStore.getBundleManifest(incidentCode);
     if (!manifest) {
       throw new EvidenceNotFoundError("bundle_manifest", incidentCode);
-    }
-
-    if (manifest.seal_sha256) {
+    } else if (manifest.seal_sha256) {
       throw new BundleAlreadySealedError();
+    } else if (!manifest.items) {
+      throw new ArtifactIncompleteError("evidence-bundle", "items");
     }
 
     const sealedAtUtc = new Date().toISOString();
@@ -132,15 +149,17 @@ export class BundleSealer {
     const manifest = await this.evidenceStore.getBundleManifest(incidentCode);
     if (!manifest) {
       throw new EvidenceNotFoundError("bundle_manifest", incidentCode);
-    }
-    if (manifest.seal_sha256 === null) {
+    } else if (manifest.seal_sha256 === null) {
       throw new ArtifactIncompleteError("evidence-bundle", "seal_sha256");
+    } else if (!manifest.items) {
+      throw new ArtifactIncompleteError("evidence-bundle", "items");
+    } else {
+      return {
+        manifest,
+        sealSha256: manifest.seal_sha256,
+        marker: `BUNDLE_SEALED:${manifest.seal_sha256}`,
+      };
     }
-    return {
-      manifest,
-      sealSha256: manifest.seal_sha256,
-      marker: `BUNDLE_SEALED:${manifest.seal_sha256}`,
-    };
   }
 
   async exportAuditTrail(
@@ -149,6 +168,9 @@ export class BundleSealer {
     timerLedger: JsonObject[],
   ): Promise<AuditTrailExport> {
     const rawToolLedger = await this.evidenceStore.listToolLedger(incidentCode);
+    if (!rawToolLedger) {
+      throw new EvidenceNotFoundError("tool_ledger", incidentCode);
+    }
 
     const redactedToolLedger = rawToolLedger.map((entry) => {
       const redactedArgs: JsonObject = {};
@@ -182,8 +204,11 @@ export class BundleSealer {
     const validation = AuditTrailExportSchema.safeParse(exportRecord);
     if (!validation.success) {
       const issue = validation.error.issues[0];
-      const field = issue ? issue.path.join(".") : "audit-trail";
-      throw new ArtifactIncompleteError("audit-trail", field);
+      if (issue !== undefined && issue.path.length > 0) {
+        throw new ArtifactIncompleteError("audit-trail", issue.path.join("."));
+      } else {
+        throw new ArtifactIncompleteError("audit-trail", "export");
+      }
     }
 
     return exportRecord;

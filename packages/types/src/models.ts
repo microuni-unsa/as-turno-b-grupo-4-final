@@ -1,7 +1,4 @@
-import {
-  MODEL_ROUTE_FAST,
-  MODEL_ROUTE_REASONING,
-} from "@pims/types/constants.ts";
+import { CONSTANTS } from "@pims/types/constants.ts";
 import { z } from "zod";
 
 export type JsonValue =
@@ -56,7 +53,10 @@ export const ChatJsonArgsSchema = z.object({
   json_schema: JsonObjectSchema.optional(),
   max_tokens: z.number().int().positive(),
   temperature: z.number().min(0).max(2),
-  route: z.enum([MODEL_ROUTE_FAST, MODEL_ROUTE_REASONING] as const),
+  route: z.enum([
+    CONSTANTS.MODEL_ROUTE_FAST,
+    CONSTANTS.MODEL_ROUTE_REASONING,
+  ] as const),
 });
 export type ChatJsonArgs = z.infer<typeof ChatJsonArgsSchema>;
 

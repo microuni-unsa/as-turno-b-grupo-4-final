@@ -1,6 +1,6 @@
 import type { EvidenceStore } from "@pims/evidence/evidence-store.ts";
 import type { PimsAdapter } from "@pims/pims-adapter";
-import { EVIDENCE_REFS_MAX_CHARS } from "@pims/types/constants.ts";
+import { CONSTANTS } from "@pims/types/constants.ts";
 import { PimsNotFoundError } from "@pims/types/errors.ts";
 import type { PimsIncident } from "@pims/types/pims.ts";
 
@@ -29,7 +29,7 @@ export async function appendEvidenceMarker(
   }
 
   const next = [...markers, token].join(";");
-  if (next.length <= EVIDENCE_REFS_MAX_CHARS) {
+  if (next.length <= CONSTANTS.EVIDENCE_REFS_MAX_CHARS) {
     return adapter.updateIncident(incident.id, { evidence_refs: next });
   }
 

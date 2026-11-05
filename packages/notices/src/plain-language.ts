@@ -4,7 +4,7 @@ import {
   PlainLanguageViolationError,
   SubjectCountForbiddenError,
 } from "@pims/types";
-import { PLAIN_LANGUAGE_MAX_WORDS } from "@pims/types/constants.ts";
+import { CONSTANTS } from "@pims/types/constants.ts";
 
 const NON_TERMINAL_ABBREVIATIONS = [
   "art",
@@ -120,7 +120,7 @@ export class PlainLanguageValidator {
     options?: PlainLanguageValidationOptions,
   ): void {
     const opts = PlainLanguageValidationOptionsSchema.parse(options ?? {});
-    const maxWords = opts.maxWords ?? PLAIN_LANGUAGE_MAX_WORDS;
+    const maxWords = opts.maxWords ?? CONSTANTS.PLAIN_LANGUAGE_MAX_WORDS;
 
     if (!opts.plainLanguageWaiver) {
       const sentences = PlainLanguageValidator.splitSentences(

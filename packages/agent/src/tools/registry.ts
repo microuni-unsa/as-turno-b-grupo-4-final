@@ -24,7 +24,7 @@ import {
   type ToolName,
 } from "@pims/types/agent.ts";
 import { canonicalizeJson } from "@pims/types/canonical.ts";
-import { PIMS_ACCESS_TOKEN_TTL_S } from "@pims/types/constants.ts";
+import { CONSTANTS } from "@pims/types/constants.ts";
 import {
   RoleToolDeniedError,
   ToolArgsInvalidError,
@@ -165,7 +165,7 @@ export class ToolRegistry {
   async bootstrapSession(): Promise<PimsLoginResult> {
     const login = await this.deps.adapter.login();
     const expiresAt = new Date(
-      this.deps.clock().getTime() + PIMS_ACCESS_TOKEN_TTL_S * 1000,
+      this.deps.clock().getTime() + CONSTANTS.PIMS_ACCESS_TOKEN_TTL_S * 1000,
     );
     return {
       access_expires_at_utc: expiresAt.toISOString(),

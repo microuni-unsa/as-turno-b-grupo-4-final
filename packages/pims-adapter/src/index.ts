@@ -1,11 +1,5 @@
 import { assertAttachmentMeta } from "@pims/types/attachments.ts";
-import {
-  DEFAULT_IDEMPOTENCY_KEY_PREFIX,
-  DEFAULT_PIMS_MAX_RETRIES,
-  DEFAULT_PIMS_TIMEOUT_MS,
-  DEFAULT_RETRY_BACKOFF_MS,
-  MAX_ATTACHMENT_SIZE_MB,
-} from "@pims/types/constants.ts";
+import { CONSTANTS } from "@pims/types/constants.ts";
 import {
   NotifyNoRecipientsError,
   PimsAuthFailedError,
@@ -21,6 +15,29 @@ import {
   PimsValidationError,
   RestoreFailedError,
 } from "@pims/types/errors.ts";
+
+export class PimsAuthError extends PimsAuthFailedError {
+  constructor(
+    message: string,
+    code = "AUTH:MISSING_TOKEN",
+    details?: Record<string, unknown>,
+  ) {
+    super(message, { code, ...(details ?? {}) });
+  }
+}
+
+function getRetryBackoff(attempt: number): number {
+  const backoffs = CONSTANTS.DEFAULT_RETRY_BACKOFF_MS;
+  const backoffIndex = attempt - 1;
+  if (backoffIndex >= 0 && backoffIndex < backoffs.length) {
+    const val = backoffs[backoffIndex];
+    if (val !== undefined) return val;
+  }
+  const lastVal = backoffs[backoffs.length - 1];
+  if (lastVal !== undefined) return lastVal;
+  return 1000;
+}
+
 import type {
   LoginResponse,
   PaginatedResult,
@@ -100,10 +117,18 @@ export class PimsAdapter {
   constructor(config: PimsAdapterConfig) {
     this.baseUrl = config.baseUrl.replace(/\/+$/, "");
     this.schema = config.schema;
-    this.timeoutMs = config.timeoutMs ?? DEFAULT_PIMS_TIMEOUT_MS;
-    this.maxRetries = config.maxRetries ?? DEFAULT_PIMS_MAX_RETRIES;
+    this.timeoutMs =
+      config.timeoutMs !== undefined
+        ? config.timeoutMs
+        : CONSTANTS.DEFAULT_PIMS_TIMEOUT_MS;
+    this.maxRetries =
+      config.maxRetries !== undefined
+        ? config.maxRetries
+        : CONSTANTS.DEFAULT_PIMS_MAX_RETRIES;
     this.idempotencyKeyPrefix =
-      config.idempotencyKeyPrefix ?? DEFAULT_IDEMPOTENCY_KEY_PREFIX;
+      config.idempotencyKeyPrefix !== undefined
+        ? config.idempotencyKeyPrefix
+        : CONSTANTS.DEFAULT_IDEMPOTENCY_KEY_PREFIX;
     this.extraHeaders = config.extraHeaders;
     this.cookies = config.cookies;
     this.onMutation = config.onMutation;
@@ -448,6 +473,11 @@ export class PimsAdapter {
       };
       if (this.accessToken) {
         headers.Authorization = `Bearer ${this.accessToken}`;
+      } else {
+        throw new PimsAuthError(
+          "Missing access token for authenticated request",
+          "AUTH:MISSING_TOKEN",
+        );
       }
 
       const response = await fetch(url, { method: "GET", headers });
@@ -461,9 +491,15 @@ export class PimsAdapter {
         );
       }
       if (!response.ok) {
+        let errorBody = "";
+        try {
+          errorBody = await response.text();
+        } catch (readErr: unknown) {
+          errorBody = `[Failed to read response body: ${readErr instanceof Error ? readErr.message : String(readErr)}]`;
+        }
         throw new PimsErrorShapeUnknownError(
           `Unexpected HTTP status ${response.status} downloading attachment`,
-          await response.text().catch(() => ""),
+          errorBody,
         );
       }
       const bytes = Buffer.from(await response.arrayBuffer());
@@ -520,7 +556,11 @@ export class PimsAdapter {
     overrides?: PimsRequestOverrides,
   ): Promise<PimsIncidentAttachment[]> {
     const byteLength = file instanceof Blob ? file.size : file.byteLength;
-    assertAttachmentMeta(fileName, byteLength, MAX_ATTACHMENT_SIZE_MB);
+    assertAttachmentMeta(
+      fileName,
+      byteLength,
+      CONSTANTS.MAX_ATTACHMENT_SIZE_MB,
+    );
 
     const formData = new FormData();
     const blob =
@@ -1010,7 +1050,14 @@ export class PimsAdapter {
         if (!this.accessToken) {
           await this.obtainToken();
         }
-        headers.Authorization = `Bearer ${this.accessToken}`;
+        if (this.accessToken) {
+          headers.Authorization = `Bearer ${this.accessToken}`;
+        } else {
+          throw new PimsAuthError(
+            "Missing access token for authenticated request",
+            "AUTH:MISSING_TOKEN",
+          );
+        }
       }
 
       let idempotencyKey = options.idempotencyKey;
@@ -1045,9 +1092,7 @@ export class PimsAdapter {
         clearTimeout(timer);
       } catch (_err: unknown) {
         if (attempt <= this.maxRetries) {
-          const backoff =
-            DEFAULT_RETRY_BACKOFF_MS[attempt - 1] ??
-            DEFAULT_RETRY_BACKOFF_MS[DEFAULT_RETRY_BACKOFF_MS.length - 1];
+          const backoff = getRetryBackoff(attempt);
           await new Promise((r) => setTimeout(r, backoff));
           observe(0, "PIMS_UNAVAILABLE");
           return this.request<T>(method, endpoint, {
@@ -1067,18 +1112,51 @@ export class PimsAdapter {
             "Authentication credentials rejected by PIMS",
           );
         }
-        const rawBody = await response.text().catch(() => "");
-        let parsedBody: Record<string, unknown> = {};
+        let rawBody = "";
         try {
-          parsedBody = rawBody ? JSON.parse(rawBody) : {};
-        } catch {
-          parsedBody = {};
+          rawBody = await response.text();
+        } catch (readErr: unknown) {
+          throw new PimsErrorShapeUnknownError(
+            "Failed to read 401 response body from PIMS",
+            readErr instanceof Error ? readErr.message : String(readErr),
+          );
         }
 
-        if (
-          parsedBody.detail === "bad_authorization_header" ||
-          rawBody.includes("bad_authorization_header")
-        ) {
+        if (rawBody.includes("bad_authorization_header")) {
+          throw new PimsClientBugError(
+            "PIMS client bug: bad_authorization_header received",
+            { rawBody },
+          );
+        }
+
+        let parsedBody: Record<string, unknown> = {};
+        if (rawBody.trim().length > 0) {
+          try {
+            const parsed = JSON.parse(rawBody);
+            if (
+              typeof parsed === "object" &&
+              parsed !== null &&
+              !Array.isArray(parsed)
+            ) {
+              parsedBody = parsed as Record<string, unknown>;
+            } else {
+              throw new PimsErrorShapeUnknownError(
+                "PIMS 401 response is not a JSON object",
+                rawBody,
+              );
+            }
+          } catch (jsonErr: unknown) {
+            if (jsonErr instanceof PimsErrorShapeUnknownError) {
+              throw jsonErr;
+            }
+            throw new PimsErrorShapeUnknownError(
+              "Failed to parse PIMS 401 JSON response",
+              rawBody,
+            );
+          }
+        }
+
+        if (parsedBody.detail === "bad_authorization_header") {
           throw new PimsClientBugError(
             "PIMS client bug: bad_authorization_header received",
             { rawBody },
@@ -1103,9 +1181,7 @@ export class PimsAdapter {
 
       if (response.status === 429) {
         if (attempt <= 3) {
-          const backoff =
-            DEFAULT_RETRY_BACKOFF_MS[attempt - 1] ??
-            DEFAULT_RETRY_BACKOFF_MS[DEFAULT_RETRY_BACKOFF_MS.length - 1];
+          const backoff = getRetryBackoff(attempt);
           await new Promise((r) => setTimeout(r, backoff));
           observe(429, "PIMS_THROTTLED");
           return this.request<T>(method, endpoint, {
@@ -1118,12 +1194,15 @@ export class PimsAdapter {
       }
 
       if (response.status >= 500) {
-        const rawError = await response.text().catch(() => "");
+        let rawError = "";
+        try {
+          rawError = await response.text();
+        } catch (readErr: unknown) {
+          rawError = `[Failed to read response body: ${readErr instanceof Error ? readErr.message : String(readErr)}]`;
+        }
         console.error(`PIMS HTTP ${response.status} at ${endpoint}:`, rawError);
         if (attempt <= this.maxRetries) {
-          const backoff =
-            DEFAULT_RETRY_BACKOFF_MS[attempt - 1] ??
-            DEFAULT_RETRY_BACKOFF_MS[DEFAULT_RETRY_BACKOFF_MS.length - 1];
+          const backoff = getRetryBackoff(attempt);
           await new Promise((r) => setTimeout(r, backoff));
           observe(response.status, "PIMS_UNAVAILABLE");
           return this.request<T>(method, endpoint, {
@@ -1238,8 +1317,15 @@ export class PimsAdapter {
       try {
         await this.refreshToken();
         return true;
-      } catch {
+      } catch (refreshError: unknown) {
+        console.error(
+          "PIMS token refresh failed during reAuthenticate:",
+          refreshError instanceof Error
+            ? refreshError.message
+            : String(refreshError),
+        );
         this.refreshTokenVal = null;
+        this.accessToken = null;
       }
     }
 

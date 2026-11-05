@@ -5,7 +5,7 @@ import { SessionRegistry } from "@pims/cockpit/auth.ts";
 import { type AgentEvent, WatcherStateSchema } from "@pims/types/agent.ts";
 import { canonicalizeJson } from "@pims/types/canonical.ts";
 import type { CockpitSession } from "@pims/types/cockpit.ts";
-import { BUNDLE_ATTACHMENT_NAME } from "@pims/types/constants.ts";
+import { CONSTANTS } from "@pims/types/constants.ts";
 import {
   type IntegrationHarness,
   intakeFixture,
@@ -161,8 +161,8 @@ describe("Autonomous watcher daemon lifecycle", { timeout: 240_000 }, () => {
     const attachments = await adapter.getIncidentAttachments(incidentId);
     const bundleAttachments = attachments.filter(
       (attachment) =>
-        attachment.file_name === BUNDLE_ATTACHMENT_NAME ||
-        attachment.original_name === BUNDLE_ATTACHMENT_NAME,
+        attachment.file_name === CONSTANTS.BUNDLE_ATTACHMENT_NAME ||
+        attachment.original_name === CONSTANTS.BUNDLE_ATTACHMENT_NAME,
     );
     expect(bundleAttachments).toHaveLength(1);
 
@@ -190,8 +190,8 @@ describe("Autonomous watcher daemon lifecycle", { timeout: 240_000 }, () => {
     expect(
       afterRerun.filter(
         (attachment) =>
-          attachment.file_name === BUNDLE_ATTACHMENT_NAME ||
-          attachment.original_name === BUNDLE_ATTACHMENT_NAME,
+          attachment.file_name === CONSTANTS.BUNDLE_ATTACHMENT_NAME ||
+          attachment.original_name === CONSTANTS.BUNDLE_ATTACHMENT_NAME,
       ),
     ).toHaveLength(1);
   });

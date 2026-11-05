@@ -16,7 +16,7 @@ import {
   ProsecutorResultSchema,
   ReviewResultSchema,
 } from "@pims/types/agent.ts";
-import { MODEL_ROUTE_REASONING } from "@pims/types/constants.ts";
+import { CONSTANTS } from "@pims/types/constants.ts";
 import {
   CitationFabricatedError,
   CitationInvalidError,
@@ -295,14 +295,14 @@ export class NoticeReviewer {
       },
       max_tokens: 2500,
       temperature: this.deps.config.TEMP_REASONING,
-      route: MODEL_ROUTE_REASONING,
+      route: CONSTANTS.MODEL_ROUTE_REASONING,
     });
     const parsedProsecutor = ProsecutorResultSchema.safeParse(
       challengeResponse.content,
     );
     if (!parsedProsecutor.success) {
       throw new ModelSchemaViolationError(
-        MODEL_ROUTE_REASONING,
+        CONSTANTS.MODEL_ROUTE_REASONING,
         `Review challenge returned invalid shape: ${parsedProsecutor.error.message}`,
       );
     }

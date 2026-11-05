@@ -1,5 +1,5 @@
 import type { DedupeDecision } from "@pims/types/agent.ts";
-import { DEDUPE_MAX_CANDIDATES } from "@pims/types/constants.ts";
+import { CONSTANTS } from "@pims/types/constants.ts";
 import type { DedupeIndexRecord } from "@pims/types/evidence.ts";
 import type { PimsIncident } from "@pims/types/pims.ts";
 
@@ -137,7 +137,7 @@ export function findDedupeDecision(input: DedupeDecisionInput): DedupeDecision {
   }
 
   liveScored.sort((left, right) => right.trigram - left.trigram);
-  const liveCandidates = liveScored.slice(0, DEDUPE_MAX_CANDIDATES);
+  const liveCandidates = liveScored.slice(0, CONSTANTS.DEDUPE_MAX_CANDIDATES);
 
   const liveMatch = liveCandidates[0];
   if (liveMatch !== undefined) {

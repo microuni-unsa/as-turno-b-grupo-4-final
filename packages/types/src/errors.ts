@@ -1,4 +1,4 @@
-import { PLAIN_LANGUAGE_MAX_WORDS } from "@pims/types/constants.ts";
+import { CONSTANTS } from "@pims/types/constants.ts";
 import type { JsonObject } from "@pims/types/models.ts";
 
 export type PimsErrorDetails = JsonObject | undefined;
@@ -488,7 +488,7 @@ export class PlainLanguageViolationError extends PimsBaseError {
   constructor(
     sentenceIndex: number,
     wordCount: number,
-    maxWords: number = PLAIN_LANGUAGE_MAX_WORDS,
+    maxWords: number = CONSTANTS.PLAIN_LANGUAGE_MAX_WORDS,
     details?: PimsErrorDetails,
   ) {
     super(
@@ -535,6 +535,15 @@ export class EvidenceStoreEncryptionError extends PimsBaseError {
     details?: PimsErrorDetails,
   ) {
     super(message, "EVIDENCE_STORE_ENCRYPTION_ERROR", details);
+  }
+}
+
+export class EvidenceDecryptionError extends EvidenceStoreEncryptionError {
+  constructor(
+    message = "Decryption failed or authentication tag mismatch",
+    details?: PimsErrorDetails,
+  ) {
+    super(message, details);
   }
 }
 

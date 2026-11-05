@@ -18,12 +18,7 @@ import {
   countApproxTokens,
   slugifyStem,
 } from "@pims/rag/loaders/text-utils.ts";
-import {
-  DEFAULT_CHUNK_MAX_TOKENS,
-  DEFAULT_CHUNK_OVERLAP,
-  DEFAULT_CORPUS_DIR,
-  formatCorpusHeader,
-} from "@pims/types/constants.ts";
+import { CONSTANTS } from "@pims/types/constants.ts";
 import { RagIndexError } from "@pims/types/errors.ts";
 import type {
   CorpusChunk,
@@ -31,6 +26,14 @@ import type {
   LoadedCorpus,
 } from "@pims/types/rag.ts";
 import { ChunkingOptionsSchema } from "@pims/types/rag.ts";
+
+function formatCorpusHeader(
+  docId: string,
+  clause: string,
+  normative: boolean,
+): string {
+  return `${CONSTANTS.CORPUS_HEADER_PREFIX}${docId} | CLAUSE:${clause} | NORMATIVE:${normative}]`;
+}
 
 function createDefaultSectionLoaders(): SectionLoaderRegistry {
   const registry = new SectionLoaderRegistry();
@@ -65,11 +68,11 @@ export class CorpusLoader {
     this.projectRoot = options.projectRoot;
     this.source = options.source ?? {
       type: "local",
-      dirPath: DEFAULT_CORPUS_DIR,
+      dirPath: CONSTANTS.DEFAULT_CORPUS_DIR,
     };
     const chunking = ChunkingOptionsSchema.parse({
-      maxTokens: options.maxTokens ?? DEFAULT_CHUNK_MAX_TOKENS,
-      chunkOverlap: options.chunkOverlap ?? DEFAULT_CHUNK_OVERLAP,
+      maxTokens: options.maxTokens ?? CONSTANTS.DEFAULT_CHUNK_MAX_TOKENS,
+      chunkOverlap: options.chunkOverlap ?? CONSTANTS.DEFAULT_CHUNK_OVERLAP,
       defaultNormative: options.defaultNormative ?? true,
     });
     this.maxTokens = chunking.maxTokens;
@@ -159,7 +162,7 @@ export class CorpusLoader {
         const buf = fs.readFileSync(filePath);
         fileEntries.push({ filename: f, buffer: buf });
       }
-    } else {
+    } else if (this.source.type === "s3") {
       const region = this.source.region ?? process.env.AWS_REGION;
       if (region === undefined || region === "") {
         throw new RagIndexError(
@@ -222,6 +225,11 @@ export class CorpusLoader {
           buffer: Buffer.from(bytes),
         });
       }
+    } else {
+      const unknownSource = this.source as { type?: unknown };
+      throw new RagIndexError(
+        `Unknown corpus source type: ${String(unknownSource.type)}`,
+      );
     }
 
     const fileHashes: string[] = [];

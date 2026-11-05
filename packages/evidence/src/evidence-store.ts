@@ -31,6 +31,7 @@ import {
   parseStorageSegment,
 } from "@pims/types/attachments.ts";
 import { canonicalizeJson } from "@pims/types/canonical.ts";
+import { CONSTANTS } from "@pims/types/constants.ts";
 import {
   AttachmentHashMismatchError,
   EvidenceNotFoundError,
@@ -88,6 +89,9 @@ import {
 } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
+
+const DEFAULT_DB_POOL_SIZE = 10;
+const MS_PER_SECOND = 1000;
 
 function parseJsonObject(value: unknown, field: string): JsonObject {
   const parsed = JsonObjectSchema.safeParse(value);
@@ -158,7 +162,7 @@ export class EvidenceStore {
 
     if (typeof optionsOrTarget === "string") {
       this.ownsSql = true;
-      this.sql = postgres(optionsOrTarget, { max: 10 });
+      this.sql = postgres(optionsOrTarget, { max: DEFAULT_DB_POOL_SIZE });
       if (!keyHexArg) {
         throw new EvidenceStoreEncryptionError("keyHex is required");
       }
@@ -179,7 +183,7 @@ export class EvidenceStore {
         this.sql = opts.sql;
       } else if (opts.connectionUri) {
         this.ownsSql = true;
-        this.sql = postgres(opts.connectionUri, { max: 10 });
+        this.sql = postgres(opts.connectionUri, { max: DEFAULT_DB_POOL_SIZE });
       } else {
         throw new EvidenceStoreEncryptionError(
           "Either connectionUri or sql must be provided to EvidenceStore",
@@ -257,9 +261,6 @@ export class EvidenceStore {
         embedding_vector JSONB NOT NULL,
         is_deleted BOOLEAN NOT NULL DEFAULT FALSE
       );
-
-      ALTER TABLE evidence.dedupe_index
-        ADD COLUMN IF NOT EXISTS pims_incident_id INTEGER;
 
       CREATE TABLE IF NOT EXISTS evidence.risk_queue (
         id SERIAL PRIMARY KEY,
@@ -366,11 +367,17 @@ export class EvidenceStore {
           "Invalid forensic scan result",
           { issues: zodIssuesToDetails(parsedScan.error) },
         );
+      } else {
+        scan = parsedScan.data;
       }
-      scan = parsedScan.data;
+    } else {
+      scan = null;
     }
 
-    const sha256 = crypto.createHash("sha256").update(fileBytes).digest("hex");
+    const sha256 = crypto
+      .createHash(CONSTANTS.EVIDENCE_HASH)
+      .update(fileBytes)
+      .digest("hex");
     const encryptedFile = encryptPayload(fileBytes, this.keyHex);
 
     const absoluteStoragePath = path.join(
@@ -384,7 +391,7 @@ export class EvidenceStore {
         ? null
         : encryptPayload(JSON.stringify(scan), this.keyHex).toString("base64");
 
-    const piiTags = scan?.visual_pii ?? [];
+    const piiTags = scan !== null ? [...scan.visual_pii] : [];
     const now = new Date();
 
     try {
@@ -397,7 +404,8 @@ export class EvidenceStore {
         pii_tags: piiTags,
         forensic_scan_encrypted: forensicScanEncrypted,
         storage_path: path.relative(this.baseStorageDir, absoluteStoragePath),
-        pims_attachment_id: pimsAttachmentId ?? null,
+        pims_attachment_id:
+          pimsAttachmentId !== undefined ? pimsAttachmentId : null,
         uploader,
         created_at: now,
       });
@@ -441,35 +449,41 @@ export class EvidenceStore {
 
     if (rows.length === 0 || !rows[0]) {
       throw new EvidenceNotFoundError("staged_attachment", safeFileName);
-    }
+    } else {
+      const row = rows[0];
+      const storagePath = resolveInsideRoot(
+        this.baseStorageDir,
+        row.storage_path,
+      );
 
-    const row = rows[0];
-    const storagePath = resolveInsideRoot(
-      this.baseStorageDir,
-      row.storage_path,
-    );
-
-    let encrypted: Buffer;
-    try {
-      encrypted = await fs.promises.readFile(storagePath);
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-        throw new EvidenceNotFoundError("storage_file", storagePath);
+      let encrypted: Buffer;
+      try {
+        encrypted = await fs.promises.readFile(storagePath);
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+          throw new EvidenceNotFoundError("storage_file", storagePath);
+        } else {
+          throw error;
+        }
       }
-      throw error;
+
+      const decrypted = decryptPayload(encrypted, this.keyHex);
+
+      const computedSha256 = crypto
+        .createHash(CONSTANTS.EVIDENCE_HASH)
+        .update(decrypted)
+        .digest("hex");
+      if (
+        !crypto.timingSafeEqual(
+          Buffer.from(computedSha256, "utf8"),
+          Buffer.from(row.sha256, "utf8"),
+        )
+      ) {
+        throw new AttachmentHashMismatchError();
+      } else {
+        return decrypted;
+      }
     }
-
-    const decrypted = decryptPayload(encrypted, this.keyHex);
-
-    const computedSha256 = crypto
-      .createHash("sha256")
-      .update(decrypted)
-      .digest("hex");
-    if (computedSha256 !== row.sha256) {
-      throw new AttachmentHashMismatchError();
-    }
-
-    return decrypted;
   }
 
   async listStagedAttachments(
@@ -495,8 +509,11 @@ export class EvidenceStore {
           throw new EvidenceStoreWriteError("Invalid encrypted forensic scan", {
             issues: zodIssuesToDetails(parsedScan.error),
           });
+        } else {
+          scan = parsedScan.data;
         }
-        scan = parsedScan.data;
+      } else {
+        scan = null;
       }
 
       return {
@@ -642,7 +659,7 @@ export class EvidenceStore {
         { issues: zodIssuesToDetails(parsedState.error) },
       );
     }
-    if (!/^[0-9a-f]{64}$/.test(contentSha256)) {
+    if (!CONSTANTS.SHA256_HEX_REGEX.test(contentSha256)) {
       throw new PimsValidationError(
         "draft_pack.content_sha256",
         "contentSha256 must be a lowercase SHA-256 hex digest",
@@ -669,6 +686,10 @@ export class EvidenceStore {
       this.keyHex,
     ).toString("base64");
     const now = new Date();
+    const effectiveApprovalId =
+      reviewApprovalId !== undefined && reviewApprovalId !== null
+        ? reviewApprovalId
+        : null;
 
     const existing = await this.db
       .select()
@@ -690,48 +711,48 @@ export class EvidenceStore {
         .set({
           payload_encrypted: encryptedPayload,
           content_sha256: contentSha256,
-          review_approval_id: reviewApprovalId ?? null,
+          review_approval_id: effectiveApprovalId,
           state: parsedState.data,
           updated_at: now,
         })
         .where(eq(draftPacksTable.id, rowId));
       return rowId;
+    } else {
+      const latestAnyState = await this.db
+        .select()
+        .from(draftPacksTable)
+        .where(
+          and(
+            eq(draftPacksTable.incident_code, incidentCode),
+            eq(draftPacksTable.pack_type, packType),
+          ),
+        )
+        .orderBy(desc(draftPacksTable.version))
+        .limit(1);
+
+      const nextVersion = latestAnyState[0] ? latestAnyState[0].version + 1 : 1;
+
+      const inserted = await this.db
+        .insert(draftPacksTable)
+        .values({
+          incident_code: incidentCode,
+          pack_type: packType,
+          version: nextVersion,
+          payload_encrypted: encryptedPayload,
+          content_sha256: contentSha256,
+          review_approval_id: effectiveApprovalId,
+          state: parsedState.data,
+          created_at: now,
+          updated_at: now,
+        })
+        .returning({ id: draftPacksTable.id });
+
+      const insertedId = inserted[0]?.id;
+      if (insertedId === undefined) {
+        throw new EvidenceStoreWriteError("Draft pack insert returned no id");
+      }
+      return insertedId;
     }
-
-    const latestAnyState = await this.db
-      .select()
-      .from(draftPacksTable)
-      .where(
-        and(
-          eq(draftPacksTable.incident_code, incidentCode),
-          eq(draftPacksTable.pack_type, packType),
-        ),
-      )
-      .orderBy(desc(draftPacksTable.version))
-      .limit(1);
-
-    const nextVersion = latestAnyState[0] ? latestAnyState[0].version + 1 : 1;
-
-    const inserted = await this.db
-      .insert(draftPacksTable)
-      .values({
-        incident_code: incidentCode,
-        pack_type: packType,
-        version: nextVersion,
-        payload_encrypted: encryptedPayload,
-        content_sha256: contentSha256,
-        review_approval_id: reviewApprovalId ?? null,
-        state: parsedState.data,
-        created_at: now,
-        updated_at: now,
-      })
-      .returning({ id: draftPacksTable.id });
-
-    const insertedId = inserted[0]?.id;
-    if (insertedId === undefined) {
-      throw new EvidenceStoreWriteError("Draft pack insert returned no id");
-    }
-    return insertedId;
   }
 
   async getDraftPack(
@@ -758,29 +779,29 @@ export class EvidenceStore {
 
     if (rows.length === 0 || !rows[0]) {
       return null;
-    }
+    } else {
+      const row = rows[0];
+      const decryptedBuf = decryptPayload(
+        Buffer.from(row.payload_encrypted, "base64"),
+        this.keyHex,
+      );
+      const parsedPayload = JsonValueSchema.safeParse(
+        parseDecryptedJson(decryptedBuf.toString("utf8"), "draft_pack.payload"),
+      );
+      if (!parsedPayload.success) {
+        throw new EvidenceStoreWriteError("Invalid draft pack payload", {
+          issues: zodIssuesToDetails(parsedPayload.error),
+        });
+      }
 
-    const row = rows[0];
-    const decryptedBuf = decryptPayload(
-      Buffer.from(row.payload_encrypted, "base64"),
-      this.keyHex,
-    );
-    const parsedPayload = JsonValueSchema.safeParse(
-      parseDecryptedJson(decryptedBuf.toString("utf8"), "draft_pack.payload"),
-    );
-    if (!parsedPayload.success) {
-      throw new EvidenceStoreWriteError("Invalid draft pack payload", {
-        issues: zodIssuesToDetails(parsedPayload.error),
-      });
+      return {
+        id: row.id,
+        payload: parsedPayload.data,
+        contentSha256: row.content_sha256,
+        reviewApprovalId: row.review_approval_id,
+        state: row.state,
+      };
     }
-
-    return {
-      id: row.id,
-      payload: parsedPayload.data,
-      contentSha256: row.content_sha256,
-      reviewApprovalId: row.review_approval_id,
-      state: row.state,
-    };
   }
 
   async setDraftPackState(
@@ -833,7 +854,7 @@ export class EvidenceStore {
     ttlSeconds: number,
   ): Promise<boolean> {
     const now = new Date();
-    const expiresAt = new Date(now.getTime() + ttlSeconds * 1000);
+    const expiresAt = new Date(now.getTime() + ttlSeconds * MS_PER_SECOND);
 
     const acquired = await this.db
       .insert(leasesTable)
@@ -866,10 +887,12 @@ export class EvidenceStore {
       const holder = holderRows[0]?.holder_id;
       if (holder === undefined) {
         throw new EvidenceStoreWriteError("Lease conflict without a row");
+      } else {
+        throw new LeaseHeldError(holder);
       }
-      throw new LeaseHeldError(holder);
+    } else {
+      return true;
     }
-    return true;
   }
 
   async renewLease(
@@ -878,7 +901,7 @@ export class EvidenceStore {
     ttlSeconds: number,
   ): Promise<boolean> {
     const now = new Date();
-    const expiresAt = new Date(now.getTime() + ttlSeconds * 1000);
+    const expiresAt = new Date(now.getTime() + ttlSeconds * MS_PER_SECOND);
     const updated = await this.db
       .update(leasesTable)
       .set({ expires_at: expiresAt })
@@ -893,8 +916,9 @@ export class EvidenceStore {
 
     if (updated.length === 0) {
       throw new LeaseLostError(incidentCode);
+    } else {
+      return true;
     }
-    return true;
   }
 
   async releaseLease(incidentCode: string, holderId: string): Promise<boolean> {
@@ -910,11 +934,17 @@ export class EvidenceStore {
 
     if (released.length === 0) {
       throw new LeaseLostError(incidentCode);
+    } else {
+      return true;
     }
-    return true;
   }
 
   async armTimer(record: TimerRecord): Promise<void> {
+    const cancelledReason =
+      record.cancelled_reason !== undefined && record.cancelled_reason !== null
+        ? record.cancelled_reason
+        : null;
+
     await this.db
       .insert(timersTable)
       .values({
@@ -924,7 +954,7 @@ export class EvidenceStore {
         fire_at_utc: new Date(record.fire_at_utc),
         payload_json: record.payload,
         fired: record.fired,
-        cancelled_reason: record.cancelled_reason ?? null,
+        cancelled_reason: cancelledReason,
       })
       .onConflictDoUpdate({
         target: timersTable.timer_id,
@@ -934,7 +964,7 @@ export class EvidenceStore {
           fire_at_utc: new Date(record.fire_at_utc),
           payload_json: record.payload,
           fired: record.fired,
-          cancelled_reason: record.cancelled_reason ?? null,
+          cancelled_reason: cancelledReason,
         },
       });
   }
@@ -953,6 +983,8 @@ export class EvidenceStore {
     ];
     if (incidentCode) {
       conditions.push(eq(timersTable.incident_code, incidentCode));
+    } else {
+      // Query applies to all incidents without restriction
     }
 
     const rows = await this.db
@@ -1113,18 +1145,18 @@ export class EvidenceStore {
 
     if (rows.length === 0 || !rows[0]) {
       return null;
+    } else {
+      const r = rows[0];
+      return {
+        incident_code: r.incident_code,
+        pims_incident_id: r.pims_incident_id,
+        title_normalized: r.title_normalized,
+        incident_date: r.incident_date,
+        system_or_url: r.system_or_url,
+        embedding_vector: r.embedding_vector,
+        is_deleted: r.is_deleted,
+      };
     }
-
-    const r = rows[0];
-    return {
-      incident_code: r.incident_code,
-      pims_incident_id: r.pims_incident_id,
-      title_normalized: r.title_normalized,
-      incident_date: r.incident_date,
-      system_or_url: r.system_or_url,
-      embedding_vector: r.embedding_vector,
-      is_deleted: r.is_deleted,
-    };
   }
 
   async saveBundleManifest(
@@ -1143,7 +1175,17 @@ export class EvidenceStore {
       this.keyHex,
     ).toString("base64");
     const now = new Date();
-    const effectiveSeal = sealSha256 ?? parsed.data.seal_sha256 ?? null;
+    let effectiveSeal: string | null = null;
+    if (sealSha256 !== undefined && sealSha256 !== null) {
+      effectiveSeal = sealSha256;
+    } else if (
+      parsed.data.seal_sha256 !== undefined &&
+      parsed.data.seal_sha256 !== null
+    ) {
+      effectiveSeal = parsed.data.seal_sha256;
+    } else {
+      effectiveSeal = null;
+    }
     const sealedAt = parsed.data.sealed_at_utc
       ? new Date(parsed.data.sealed_at_utc)
       : null;
@@ -1178,25 +1220,25 @@ export class EvidenceStore {
 
     if (rows.length === 0 || !rows[0]) {
       return null;
+    } else {
+      const row = rows[0];
+      const decryptedBuf = decryptPayload(
+        Buffer.from(row.manifest_json_encrypted, "base64"),
+        this.keyHex,
+      );
+      const parsed = EvidenceBundleManifestSchema.safeParse(
+        parseDecryptedJson(
+          decryptedBuf.toString("utf8"),
+          "bundle_manifest.manifest",
+        ),
+      );
+      if (!parsed.success) {
+        throw new EvidenceStoreWriteError("Invalid evidence bundle manifest", {
+          issues: zodIssuesToDetails(parsed.error),
+        });
+      }
+      return parsed.data;
     }
-
-    const row = rows[0];
-    const decryptedBuf = decryptPayload(
-      Buffer.from(row.manifest_json_encrypted, "base64"),
-      this.keyHex,
-    );
-    const parsed = EvidenceBundleManifestSchema.safeParse(
-      parseDecryptedJson(
-        decryptedBuf.toString("utf8"),
-        "bundle_manifest.manifest",
-      ),
-    );
-    if (!parsed.success) {
-      throw new EvidenceStoreWriteError("Invalid evidence bundle manifest", {
-        issues: zodIssuesToDetails(parsed.error),
-      });
-    }
-    return parsed.data;
   }
 
   async pruneRetention(
@@ -1238,6 +1280,7 @@ export class EvidenceStore {
         await this.db
           .delete(stagedAttachmentsTable)
           .where(eq(stagedAttachmentsTable.id, att.id));
+      } else {
       }
     }
 
@@ -1330,15 +1373,15 @@ export class EvidenceStore {
 
     if (rows.length === 0 || !rows[0]) {
       return null;
+    } else {
+      const parsed = RootCauseSchema.safeParse(rows[0].analysis_json);
+      if (!parsed.success) {
+        throw new EvidenceStoreWriteError("Invalid stored root cause", {
+          issues: zodIssuesToDetails(parsed.error),
+        });
+      }
+      return parsed.data;
     }
-
-    const parsed = RootCauseSchema.safeParse(rows[0].analysis_json);
-    if (!parsed.success) {
-      throw new EvidenceStoreWriteError("Invalid stored root cause", {
-        issues: zodIssuesToDetails(parsed.error),
-      });
-    }
-    return parsed.data;
   }
 
   async getAgentState(key: string): Promise<JsonValue | null> {
@@ -1350,15 +1393,15 @@ export class EvidenceStore {
 
     if (rows.length === 0 || !rows[0]) {
       return null;
+    } else {
+      const parsed = JsonValueSchema.safeParse(rows[0].value);
+      if (!parsed.success) {
+        throw new EvidenceStoreWriteError(`Invalid agent state: ${key}`, {
+          issues: zodIssuesToDetails(parsed.error),
+        });
+      }
+      return parsed.data;
     }
-
-    const parsed = JsonValueSchema.safeParse(rows[0].value);
-    if (!parsed.success) {
-      throw new EvidenceStoreWriteError(`Invalid agent state: ${key}`, {
-        issues: zodIssuesToDetails(parsed.error),
-      });
-    }
-    return parsed.data;
   }
 
   async setAgentState(key: string, value: JsonValue): Promise<void> {
@@ -1418,8 +1461,9 @@ export class EvidenceStore {
 
     if (rows.length === 0 || !rows[0]) {
       return null;
+    } else {
+      return this.toReviewApprovalRow(rows[0]);
     }
-    return this.toReviewApprovalRow(rows[0]);
   }
 
   async consumeReviewApproval(
@@ -1451,16 +1495,19 @@ export class EvidenceStore {
       if (existingRow !== undefined) {
         if (existingRow.consumed_at_utc !== null) {
           throw new ReviewApprovalReusedError();
+        } else {
+          throw new ReviewApprovalInvalidError(
+            `Review approval content hash mismatch: ${approvalId}`,
+          );
         }
+      } else {
         throw new ReviewApprovalInvalidError(
-          `Review approval content hash mismatch: ${approvalId}`,
+          `Unknown review approval: ${approvalId}`,
         );
       }
-      throw new ReviewApprovalInvalidError(
-        `Unknown review approval: ${approvalId}`,
-      );
+    } else {
+      return this.toReviewApprovalRow(row);
     }
-    return this.toReviewApprovalRow(row);
   }
 
   async revokeReviewApprovals(
@@ -1470,6 +1517,8 @@ export class EvidenceStore {
     const conditions = [eq(reviewApprovalsTable.incident_code, incidentCode)];
     if (packType !== undefined) {
       conditions.push(eq(reviewApprovalsTable.pack_type, packType));
+    } else {
+      // Revoke all pack types for the incident
     }
 
     const deleted = await this.db
@@ -1516,7 +1565,11 @@ export class EvidenceStore {
   }
 
   async markTimerFired(timerId: string, firedAt: Date): Promise<void> {
-    void firedAt;
+    if (!firedAt || Number.isNaN(firedAt.getTime())) {
+      throw new EvidenceStoreWriteError(
+        `Invalid firedAt timestamp for timer ${timerId}`,
+      );
+    }
     const updated = await this.db
       .update(timersTable)
       .set({ fired: true })
@@ -1525,6 +1578,8 @@ export class EvidenceStore {
 
     if (updated.length === 0) {
       throw new SchedulerUnknownTimerError(timerId);
+    } else {
+      return;
     }
   }
 
@@ -1649,41 +1704,48 @@ export class EvidenceStore {
   async deleteIndicatorSpool(ids: number[]): Promise<number> {
     if (ids.length === 0) {
       return 0;
+    } else {
+      const deleted = await this.db
+        .delete(indicatorSpoolTable)
+        .where(inArray(indicatorSpoolTable.id, ids))
+        .returning({ id: indicatorSpoolTable.id });
+      return deleted.length;
     }
-    const deleted = await this.db
-      .delete(indicatorSpoolTable)
-      .where(inArray(indicatorSpoolTable.id, ids))
-      .returning({ id: indicatorSpoolTable.id });
-    return deleted.length;
   }
 
   async countIndicatorSpool(): Promise<number> {
     const rows = await this.db
       .select({ count: sql<number>`count(*)::int` })
       .from(indicatorSpoolTable);
-    return rows[0]?.count ?? 0;
+    const firstRow = rows[0];
+    if (firstRow === undefined) {
+      throw new EvidenceStoreWriteError("Failed to count indicator spool rows");
+    } else {
+      return firstRow.count;
+    }
   }
 
   async dropOldestIndicatorSpool(count: number): Promise<number> {
     if (count <= 0) {
       return 0;
-    }
-    const rows = await this.db
-      .select({ id: indicatorSpoolTable.id })
-      .from(indicatorSpoolTable)
-      .orderBy(asc(indicatorSpoolTable.id))
-      .limit(count);
+    } else {
+      const rows = await this.db
+        .select({ id: indicatorSpoolTable.id })
+        .from(indicatorSpoolTable)
+        .orderBy(asc(indicatorSpoolTable.id))
+        .limit(count);
 
-    const ids = rows.map((row) => row.id);
-    if (ids.length === 0) {
-      return 0;
+      const ids = rows.map((row) => row.id);
+      if (ids.length === 0) {
+        return 0;
+      } else {
+        const deleted = await this.db
+          .delete(indicatorSpoolTable)
+          .where(inArray(indicatorSpoolTable.id, ids))
+          .returning({ id: indicatorSpoolTable.id });
+        return deleted.length;
+      }
     }
-
-    const deleted = await this.db
-      .delete(indicatorSpoolTable)
-      .where(inArray(indicatorSpoolTable.id, ids))
-      .returning({ id: indicatorSpoolTable.id });
-    return deleted.length;
   }
 
   async listDedupeIndex(): Promise<DedupeIndexRecord[]> {
@@ -1766,30 +1828,32 @@ export class EvidenceStore {
 
     if (rows.length === 0 || !rows[0]) {
       return null;
-    }
-
-    const row = rows[0];
-    const parsed = ToolLedgerRecordSchema.safeParse({
-      id: row.id,
-      incident_code: row.incident_code,
-      at_utc: row.at_utc.toISOString(),
-      role: row.role,
-      tool: row.tool,
-      args_redacted: row.args_redacted,
-      result_ref: row.result_ref,
-      idempotency_key: row.idempotency_key,
-    });
-    if (!parsed.success) {
-      throw new EvidenceStoreWriteError("Invalid tool ledger row", {
-        issues: zodIssuesToDetails(parsed.error),
+    } else {
+      const row = rows[0];
+      const parsed = ToolLedgerRecordSchema.safeParse({
+        id: row.id,
+        incident_code: row.incident_code,
+        at_utc: row.at_utc.toISOString(),
+        role: row.role,
+        tool: row.tool,
+        args_redacted: row.args_redacted,
+        result_ref: row.result_ref,
+        idempotency_key: row.idempotency_key,
       });
+      if (!parsed.success) {
+        throw new EvidenceStoreWriteError("Invalid tool ledger row", {
+          issues: zodIssuesToDetails(parsed.error),
+        });
+      }
+      return parsed.data;
     }
-    return parsed.data;
   }
 
   async close(): Promise<void> {
     if (this.ownsSql) {
       await this.sql.end();
+    } else {
+      // Instance does not own SQL connection pool; lifecycle managed externally
     }
   }
 }

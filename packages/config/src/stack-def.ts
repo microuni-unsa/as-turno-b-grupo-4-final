@@ -69,6 +69,8 @@ export function createStack(options?: CreateStackOptions): StackHandle {
     });
     envTemplates.PRESIDIO_URL =
       "http://{{host:presidio}}:{{port:presidio:3000}}";
+  } else {
+    delete envTemplates.PRESIDIO_URL;
   }
 
   builder.env(envTemplates);

@@ -64,15 +64,7 @@ import {
 } from "@pims/types/agent.ts";
 import { assertAttachmentMeta } from "@pims/types/attachments.ts";
 import { canonicalizeJson } from "@pims/types/canonical.ts";
-import {
-  BUNDLE_ATTACHMENT_NAME,
-  CONFORMAL_ALPHA,
-  CONFORMAL_MIN_SAMPLES,
-  MODEL_ROUTE_EMBEDDINGS,
-  MODEL_ROUTE_FAST,
-  MODEL_ROUTE_REASONING,
-  PERU_ADVISORY_H,
-} from "@pims/types/constants.ts";
+import { CONSTANTS } from "@pims/types/constants.ts";
 import {
   ArtifactIncompleteError,
   BundleAlreadySealedError,
@@ -577,7 +569,7 @@ export class IncidentOrchestrator {
     const vector = response.vectors[0];
     if (vector === undefined) {
       throw new ModelUnavailableError(
-        MODEL_ROUTE_EMBEDDINGS,
+        CONSTANTS.MODEL_ROUTE_EMBEDDINGS,
         "Dedupe embedding returned no vector",
       );
     }
@@ -646,7 +638,7 @@ export class IncidentOrchestrator {
       await this.armTimer(
         "T_PERU_ADVISORY",
         incident,
-        new Date(awareness.getTime() + PERU_ADVISORY_H * 3_600_000),
+        new Date(awareness.getTime() + CONSTANTS.PERU_ADVISORY_H * 3_600_000),
       ),
     );
     if (channel === "processor_notice") {
@@ -730,7 +722,7 @@ export class IncidentOrchestrator {
       await this.armTimer(
         "T_PERU_ADVISORY",
         incident,
-        new Date(awareness.getTime() + PERU_ADVISORY_H * 3_600_000),
+        new Date(awareness.getTime() + CONSTANTS.PERU_ADVISORY_H * 3_600_000),
       );
     }
   }
@@ -741,7 +733,7 @@ export class IncidentOrchestrator {
     this.announceRole(incident.incident_code, "triage");
 
     const response = await this.deps.modelClient.chat_json({
-      route: MODEL_ROUTE_FAST,
+      route: CONSTANTS.MODEL_ROUTE_FAST,
       system: TRIAGE_SYSTEM,
       messages: [
         {
@@ -770,7 +762,7 @@ export class IncidentOrchestrator {
     const parsed = TriageModelSchema.safeParse(response.content);
     if (!parsed.success) {
       throw new ModelSchemaViolationError(
-        MODEL_ROUTE_FAST,
+        CONSTANTS.MODEL_ROUTE_FAST,
         `Triage output violated the classification schema: ${parsed.error.message}`,
       );
     }
@@ -782,7 +774,7 @@ export class IncidentOrchestrator {
     );
     if (!(probabilitySum > 0)) {
       throw new ModelSchemaViolationError(
-        MODEL_ROUTE_FAST,
+        CONSTANTS.MODEL_ROUTE_FAST,
         "Triage candidate probabilities sum to zero",
       );
     }
@@ -798,7 +790,7 @@ export class IncidentOrchestrator {
     );
     if (predicted === undefined) {
       throw new ModelSchemaViolationError(
-        MODEL_ROUTE_FAST,
+        CONSTANTS.MODEL_ROUTE_FAST,
         "Predicted incident_type missing from candidate probabilities",
       );
     }
@@ -904,7 +896,7 @@ export class IncidentOrchestrator {
     const nonconformity = 1 - predictedProbability;
     const samples = await this.deps.evidenceStore.listTriageCalibration();
 
-    if (samples.length < CONFORMAL_MIN_SAMPLES) {
+    if (samples.length < CONSTANTS.CONFORMAL_MIN_SAMPLES) {
       return {
         conformal_set: probabilities.map((candidate) => candidate.type),
         nonconformity_score: nonconformity,
@@ -917,7 +909,7 @@ export class IncidentOrchestrator {
       .sort((a, b) => a - b);
     const rank = Math.min(
       scores.length - 1,
-      Math.ceil((samples.length + 1) * (1 - CONFORMAL_ALPHA)) - 1,
+      Math.ceil((samples.length + 1) * (1 - CONSTANTS.CONFORMAL_ALPHA)) - 1,
     );
     const threshold = scores[rank];
     if (threshold === undefined) {
@@ -976,7 +968,7 @@ export class IncidentOrchestrator {
       const history = await this.deps.adapter.getIncidentHistory(incident.id);
 
       const containment = await this.deps.modelClient.chat_json({
-        route: MODEL_ROUTE_REASONING,
+        route: CONSTANTS.MODEL_ROUTE_REASONING,
         system: CONTAINMENT_SYSTEM,
         messages: [
           {
@@ -1004,7 +996,7 @@ export class IncidentOrchestrator {
       );
       if (!containmentParsed.success) {
         throw new ModelSchemaViolationError(
-          MODEL_ROUTE_REASONING,
+          CONSTANTS.MODEL_ROUTE_REASONING,
           `Containment plan violated its schema: ${containmentParsed.error.message}`,
         );
       }
@@ -1038,7 +1030,7 @@ export class IncidentOrchestrator {
       );
       const gateCitations = gateRag.citations;
       const gate = await this.deps.modelClient.chat_json({
-        route: MODEL_ROUTE_FAST,
+        route: CONSTANTS.MODEL_ROUTE_FAST,
         system: B3_12_SYSTEM,
         messages: [
           {
@@ -1067,7 +1059,7 @@ export class IncidentOrchestrator {
       const gateParsed = GateModelSchema.safeParse(gate.content);
       if (!gateParsed.success) {
         throw new ModelSchemaViolationError(
-          MODEL_ROUTE_FAST,
+          CONSTANTS.MODEL_ROUTE_FAST,
           `Breach review gate violated its schema: ${gateParsed.error.message}`,
         );
       }
@@ -1172,7 +1164,7 @@ export class IncidentOrchestrator {
             }),
           },
         ],
-        route: MODEL_ROUTE_REASONING,
+        route: CONSTANTS.MODEL_ROUTE_REASONING,
         json_schema: rootCauseJsonSchema(),
         max_tokens: 3000,
         temperature: this.deps.config.TEMP_REASONING,
@@ -1180,7 +1172,7 @@ export class IncidentOrchestrator {
       const rootCauseParsed = RootCauseSchema.safeParse(rootCauseRaw.content);
       if (!rootCauseParsed.success) {
         throw new ModelSchemaViolationError(
-          MODEL_ROUTE_REASONING,
+          CONSTANTS.MODEL_ROUTE_REASONING,
           `Root cause output violated its schema: ${rootCauseParsed.error.message}`,
         );
       }
@@ -1345,7 +1337,7 @@ export class IncidentOrchestrator {
               }),
             },
           ],
-          route: MODEL_ROUTE_REASONING,
+          route: CONSTANTS.MODEL_ROUTE_REASONING,
           json_schema: riskCatalogJsonSchema(),
           max_tokens: 500,
           temperature: this.deps.config.TEMP_REASONING,
@@ -1353,7 +1345,7 @@ export class IncidentOrchestrator {
         const codesParsed = RiskCatalogCodesSchema.safeParse(codesRaw.content);
         if (!codesParsed.success) {
           throw new ModelSchemaViolationError(
-            MODEL_ROUTE_REASONING,
+            CONSTANTS.MODEL_ROUTE_REASONING,
             `Risk catalog output violated its schema: ${codesParsed.error.message}`,
           );
         }
@@ -1429,7 +1421,7 @@ export class IncidentOrchestrator {
 
       if (current.incident_type === "HE") {
         const training = await this.deps.modelClient.chat_json({
-          route: MODEL_ROUTE_FAST,
+          route: CONSTANTS.MODEL_ROUTE_FAST,
           system: TRAINING_SYSTEM,
           messages: [
             {
@@ -1447,7 +1439,7 @@ export class IncidentOrchestrator {
         const trainingParsed = TrainingModelSchema.safeParse(training.content);
         if (!trainingParsed.success) {
           throw new ModelSchemaViolationError(
-            MODEL_ROUTE_FAST,
+            CONSTANTS.MODEL_ROUTE_FAST,
             `Training recommendation violated its schema: ${trainingParsed.error.message}`,
           );
         }
@@ -2264,14 +2256,14 @@ export class IncidentOrchestrator {
       );
       const bundleAttachment = currentAttachments.find(
         (attachment) =>
-          attachment.file_name === BUNDLE_ATTACHMENT_NAME ||
-          attachment.original_name === BUNDLE_ATTACHMENT_NAME,
+          attachment.file_name === CONSTANTS.BUNDLE_ATTACHMENT_NAME ||
+          attachment.original_name === CONSTANTS.BUNDLE_ATTACHMENT_NAME,
       );
       if (bundleAttachment === undefined) {
         await this.deps.evidenceStore.replaceStagedAttachment(
           this.deps.config.PIMS_SCHEMA,
           code,
-          BUNDLE_ATTACHMENT_NAME,
+          CONSTANTS.BUNDLE_ATTACHMENT_NAME,
           bundleBytes,
           "text/plain",
           "monitor",
@@ -2282,14 +2274,14 @@ export class IncidentOrchestrator {
           {
             incident_id: incident.id,
             bytes_ref: bundleSha,
-            file_name: BUNDLE_ATTACHMENT_NAME,
+            file_name: CONSTANTS.BUNDLE_ATTACHMENT_NAME,
             mime: "text/plain",
           },
           { incidentId: incident.id, incidentCode: code },
         );
         await this.appendMarker(
           refreshed,
-          `file:${BUNDLE_ATTACHMENT_NAME}:${bundleSha.slice(0, 8)}`,
+          `file:${CONSTANTS.BUNDLE_ATTACHMENT_NAME}:${bundleSha.slice(0, 8)}`,
         );
       } else {
         const downloaded = await this.deps.adapter.downloadAttachment(
@@ -2297,7 +2289,7 @@ export class IncidentOrchestrator {
           { incidentCode: code },
         );
         if (sha256HexBytes(downloaded) !== bundleSha) {
-          throw new BundlePimsMismatchError(BUNDLE_ATTACHMENT_NAME);
+          throw new BundlePimsMismatchError(CONSTANTS.BUNDLE_ATTACHMENT_NAME);
         }
       }
 

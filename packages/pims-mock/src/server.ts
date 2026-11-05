@@ -1,4 +1,3 @@
-import { serve } from "@hono/node-server";
 import type { MockDatabaseClient } from "@pims/pims-mock/db/client.ts";
 import {
   authUser,
@@ -23,7 +22,6 @@ import {
   riskCatalogs,
 } from "@pims/pims-mock/fixtures.ts";
 import {
-  EVENT_TYPE_LABELS,
   EventTypeSchema,
   PimsAuditCreateSchema,
   PimsAuditUpdateSchema,
@@ -33,16 +31,13 @@ import {
   PimsRiskEvaluationCreateSchema,
 } from "@pims/types";
 import { assertAttachmentMeta } from "@pims/types/attachments.ts";
-import {
-  MAX_ATTACHMENT_SIZE_MB,
-  PIMS_PERMISSION_MODULES,
-} from "@pims/types/constants.ts";
+import { CONSTANTS } from "@pims/types/constants.ts";
 import {
   AttachmentRejectedError,
   PathEscapeError,
 } from "@pims/types/errors.ts";
 import { and, desc, eq, sql } from "drizzle-orm";
-import { Hono } from "hono";
+import { type Context, Hono } from "hono";
 import { cors } from "hono/cors";
 import type { z } from "zod";
 
@@ -60,6 +55,20 @@ function formatDrfErrors(error: z.ZodError): Record<string, string[]> {
     }
   }
   return res;
+}
+
+async function parseJsonBody<T = Record<string, unknown>>(
+  c: Context,
+): Promise<{ ok: true; data: T } | { ok: false; response: Response }> {
+  try {
+    const data = (await c.req.json()) as T;
+    return { ok: true, data };
+  } catch {
+    return {
+      ok: false,
+      response: c.json({ error: "Invalid JSON payload" }, 400),
+    };
+  }
 }
 
 export interface PimsServerOptions {
@@ -166,7 +175,7 @@ export function buildPimsApp(
         id: h.id,
         event_type: h.event_type,
         event_type_label: parsedEventType.success
-          ? EVENT_TYPE_LABELS[parsedEventType.data]
+          ? CONSTANTS.EVENT_TYPE_LABELS[parsedEventType.data]
           : h.event_type,
         changed_at: h.changed_at ? new Date(h.changed_at).toISOString() : "",
         actor: h.actor,
@@ -241,7 +250,7 @@ export function buildPimsApp(
         file_name: att.file_name,
         original_name: att.file_name,
         file_size: 1024,
-        content_type: "application/octet-stream",
+        content_type: CONSTANTS.MIME_APPLICATION_OCTET_STREAM,
         uploaded_at: att.uploaded_at
           ? new Date(att.uploaded_at).toISOString()
           : "",
@@ -284,7 +293,11 @@ export function buildPimsApp(
     }
 
     const schemaHeader = c.req.header("X-PIMS-Schema");
-    if (schemaHeader && schemaHeader !== "unsa" && schemaHeader !== "demo") {
+    if (
+      schemaHeader &&
+      schemaHeader !== CONSTANTS.DEFAULT_PIMS_SCHEMA &&
+      schemaHeader !== "demo"
+    ) {
       return c.json({ detail: "Esquema no autorizado o no encontrado." }, 403);
     }
 
@@ -292,7 +305,14 @@ export function buildPimsApp(
   });
 
   app.post("/business/login/", async (c) => {
-    const body = await c.req.json().catch(() => ({}));
+    const parsedBody = await parseJsonBody<{
+      username?: unknown;
+      password?: unknown;
+    }>(c);
+    if (!parsedBody.ok) {
+      return parsedBody.response;
+    }
+    const body = parsedBody.data;
     if (!body.username || !body.password) {
       return c.json({ detail: "Credenciales incompletas." }, 400);
     }
@@ -325,11 +345,11 @@ export function buildPimsApp(
     ).toString("base64url");
     const jwtClaims = {
       token_type: "access",
-      exp: nowSeconds + 3600,
+      exp: nowSeconds + CONSTANTS.PIMS_ACCESS_TOKEN_TTL_S,
       iat: nowSeconds,
       jti: crypto.randomUUID(),
       user_id: String(user.id),
-      schema: "unsa",
+      schema: CONSTANTS.DEFAULT_PIMS_SCHEMA,
       platform_role: profile?.is_platform_admin ? "Administrador" : null,
       is_platform_admin: profile?.is_platform_admin ?? false,
     };
@@ -348,7 +368,7 @@ export function buildPimsApp(
         is_platform_admin: profile?.is_platform_admin ?? false,
         must_change_password: profile?.must_change_password ?? false,
         platform_role: profile?.is_platform_admin ? "Administrador" : null,
-        permissions: PIMS_PERMISSION_MODULES.map((modulo) => ({
+        permissions: CONSTANTS.PIMS_PERMISSION_MODULES.map((modulo) => ({
           modulo,
           ver: true,
           crear: true,
@@ -361,7 +381,11 @@ export function buildPimsApp(
   });
 
   app.post("/business/token/refresh/", async (c) => {
-    const body = await c.req.json().catch(() => ({}));
+    const parsedBody = await parseJsonBody<{ refresh?: unknown }>(c);
+    if (!parsedBody.ok) {
+      return parsedBody.response;
+    }
+    const body = parsedBody.data;
     if (!body.refresh) {
       return c.json({ detail: "El token de refresco es requerido." }, 400);
     }
@@ -374,11 +398,11 @@ export function buildPimsApp(
     const clients = await db
       .select()
       .from(customerClient)
-      .where(eq(customerClient.schema_name, "unsa"));
+      .where(eq(customerClient.schema_name, CONSTANTS.DEFAULT_PIMS_SCHEMA));
     const client = clients[0];
     return c.json({
       name: client?.name ?? "UNSA",
-      schema_name: client?.schema_name ?? "unsa",
+      schema_name: client?.schema_name ?? CONSTANTS.DEFAULT_PIMS_SCHEMA,
     });
   });
 
@@ -443,8 +467,10 @@ export function buildPimsApp(
     const results = [];
     for (const row of filtered) {
       const inc = await getFullIncident(row.id);
-      if (inc) {
+      if (inc !== null) {
         results.push(inc);
+      } else {
+        throw new Error(`Incident ${row.id} could not be resolved`);
       }
     }
 
@@ -457,7 +483,11 @@ export function buildPimsApp(
   });
 
   app.post("/api/incidents/", async (c) => {
-    const body = await c.req.json().catch(() => ({}));
+    const parsedBody = await parseJsonBody<Record<string, unknown>>(c);
+    if (!parsedBody.ok) {
+      return parsedBody.response;
+    }
+    const body = parsedBody.data;
 
     const parsed = PimsIncidentCreateSchema.safeParse(body);
     if (!parsed.success) {
@@ -513,7 +543,7 @@ export function buildPimsApp(
         detection_date: body.detection_date ?? null,
         detection_time: body.detection_time ?? null,
         incident_type: String(body.incident_type),
-        status: String(body.status),
+        status: String(body.status ?? CONSTANTS.INCIDENT_STATUS_OPEN),
         severity: body.severity ?? null,
         impact: body.impact ?? null,
         title: String(body.title),
@@ -542,7 +572,7 @@ export function buildPimsApp(
         created_by_id: 1,
         updated_by_id: 1,
         is_deleted: false,
-      })
+      } as typeof coreIncident.$inferInsert)
       .returning();
 
     const newInc = inserted[0];
@@ -582,7 +612,11 @@ export function buildPimsApp(
   });
 
   app.get("/api/incidents/:id/", async (c) => {
-    const id = Number.parseInt(c.req.param("id"), 10);
+    const rawId = c.req.param("id");
+    const id = Number.parseInt(rawId, 10);
+    if (Number.isNaN(id)) {
+      return c.json({ detail: "No Incident matches the given query." }, 404);
+    }
     const full = await getFullIncident(id);
     if (!full) {
       return c.json({ detail: "No Incident matches the given query." }, 404);
@@ -591,13 +625,21 @@ export function buildPimsApp(
   });
 
   app.patch("/api/incidents/:id/", async (c) => {
-    const id = Number.parseInt(c.req.param("id"), 10);
+    const rawId = c.req.param("id");
+    const id = Number.parseInt(rawId, 10);
+    if (Number.isNaN(id)) {
+      return c.json({ detail: "No Incident matches the given query." }, 404);
+    }
     const existing = await getIncidentRow(id, { includeDeleted: true });
     if (!existing) {
       return c.json({ detail: "No Incident matches the given query." }, 404);
     }
 
-    const body = await c.req.json().catch(() => ({}));
+    const parsedBody = await parseJsonBody(c);
+    if (!parsedBody.ok) {
+      return parsedBody.response;
+    }
+    const body = parsedBody.data;
     const parsed = PimsIncidentUpdateSchema.safeParse(body);
     if (!parsed.success) {
       return c.json(formatDrfErrors(parsed.error), 400);
@@ -715,7 +757,11 @@ export function buildPimsApp(
   });
 
   app.delete("/api/incidents/:id/", async (c) => {
-    const id = Number.parseInt(c.req.param("id"), 10);
+    const rawId = c.req.param("id");
+    const id = Number.parseInt(rawId, 10);
+    if (Number.isNaN(id)) {
+      return c.json({ detail: "No Incident matches the given query." }, 404);
+    }
     const existing = await getFullIncident(id);
     if (!existing) {
       return c.json({ detail: "No Incident matches the given query." }, 404);
@@ -728,7 +774,15 @@ export function buildPimsApp(
   });
 
   app.get("/api/incidents/:id/history/", async (c) => {
-    const id = Number.parseInt(c.req.param("id"), 10);
+    const rawId = c.req.param("id");
+    const id = Number.parseInt(rawId, 10);
+    if (Number.isNaN(id)) {
+      return c.json({ detail: "No Incident matches the given query." }, 404);
+    }
+    const existing = await getFullIncident(id);
+    if (!existing) {
+      return c.json({ detail: "No Incident matches the given query." }, 404);
+    }
     const historyRows = await db
       .select({
         id: coreIncidentHistory.id,
@@ -759,7 +813,7 @@ export function buildPimsApp(
         return {
           ...h,
           event_type_label: parsedEventType.success
-            ? EVENT_TYPE_LABELS[parsedEventType.data]
+            ? CONSTANTS.EVENT_TYPE_LABELS[parsedEventType.data]
             : h.event_type,
           changed_at: h.changed_at.toISOString(),
         };
@@ -768,7 +822,15 @@ export function buildPimsApp(
   });
 
   app.get("/api/incidents/:id/attachments/", async (c) => {
-    const id = Number.parseInt(c.req.param("id"), 10);
+    const rawId = c.req.param("id");
+    const id = Number.parseInt(rawId, 10);
+    if (Number.isNaN(id)) {
+      return c.json({ detail: "No Incident matches the given query." }, 404);
+    }
+    const existing = await getFullIncident(id);
+    if (!existing) {
+      return c.json({ detail: "No Incident matches the given query." }, 404);
+    }
     const attachments = await db
       .select({
         id: coreIncidentAttachment.id,
@@ -795,7 +857,7 @@ export function buildPimsApp(
         file_name: a.file_name,
         original_name: a.file_name,
         file_size: 1024,
-        content_type: "application/octet-stream",
+        content_type: CONSTANTS.MIME_APPLICATION_OCTET_STREAM,
         uploaded_at: a.uploaded_at.toISOString(),
         uploaded_by: a.uploaded_by_id,
         uploaded_by_name: a.uploaded_by_name ?? "admin",
@@ -804,7 +866,11 @@ export function buildPimsApp(
   });
 
   app.post("/api/incidents/:id/attachments/", async (c) => {
-    const id = Number.parseInt(c.req.param("id"), 10);
+    const rawId = c.req.param("id");
+    const id = Number.parseInt(rawId, 10);
+    if (Number.isNaN(id)) {
+      return c.json({ detail: "No Incident matches the given query." }, 404);
+    }
     const existing = await getFullIncident(id);
     if (!existing) {
       return c.json({ detail: "No Incident matches the given query." }, 404);
@@ -817,7 +883,11 @@ export function buildPimsApp(
     }
 
     try {
-      assertAttachmentMeta(file.name, file.size, MAX_ATTACHMENT_SIZE_MB);
+      assertAttachmentMeta(
+        file.name,
+        file.size,
+        CONSTANTS.MAX_ATTACHMENT_SIZE_MB,
+      );
     } catch (error) {
       if (
         error instanceof AttachmentRejectedError ||
@@ -854,7 +924,7 @@ export function buildPimsApp(
         file_name: a.file_name,
         original_name: a.file_name,
         file_size: 1024,
-        content_type: "application/octet-stream",
+        content_type: CONSTANTS.MIME_APPLICATION_OCTET_STREAM,
         uploaded_at: a.uploaded_at.toISOString(),
         uploaded_by: a.uploaded_by_id,
         uploaded_by_name: "admin",
@@ -871,12 +941,16 @@ export function buildPimsApp(
       return c.json({ detail: "Attachment file not found." }, 404);
     }
     return c.body(new Uint8Array(bytes), 200, {
-      "Content-Type": "application/octet-stream",
+      "Content-Type": CONSTANTS.MIME_APPLICATION_OCTET_STREAM,
     });
   });
 
   app.post("/api/incidents/:id/notify/", async (c) => {
-    const id = Number.parseInt(c.req.param("id"), 10);
+    const rawId = c.req.param("id");
+    const id = Number.parseInt(rawId, 10);
+    if (Number.isNaN(id)) {
+      return c.json({ detail: "No Incident matches the given query." }, 404);
+    }
     const existing = await getFullIncident(id);
     if (!existing) {
       return c.json({ detail: "No Incident matches the given query." }, 404);
@@ -932,7 +1006,11 @@ export function buildPimsApp(
   });
 
   app.post("/api/incident-recipients/", async (c) => {
-    const body = await c.req.json().catch(() => ({}));
+    const parsedBody = await parseJsonBody<Record<string, unknown>>(c);
+    if (!parsedBody.ok) {
+      return parsedBody.response;
+    }
+    const body = parsedBody.data;
     const parsed = PimsIncidentRecipientCreateSchema.safeParse(body);
     if (!parsed.success) {
       return c.json(formatDrfErrors(parsed.error), 400);
@@ -978,7 +1056,14 @@ export function buildPimsApp(
   });
 
   app.delete("/api/incident-recipients/:id/", async (c) => {
-    const id = Number.parseInt(c.req.param("id"), 10);
+    const rawId = c.req.param("id");
+    const id = Number.parseInt(rawId, 10);
+    if (Number.isNaN(id)) {
+      return c.json(
+        { detail: "No IncidentRecipient matches the given query." },
+        404,
+      );
+    }
     const existing = await db
       .select()
       .from(coreIncidentRecipient)
@@ -1063,7 +1148,11 @@ export function buildPimsApp(
   });
 
   app.post("/api/audits/", async (c) => {
-    const body = await c.req.json().catch(() => ({}));
+    const parsedBody = await parseJsonBody(c);
+    if (!parsedBody.ok) {
+      return parsedBody.response;
+    }
+    const body = parsedBody.data;
     const parsed = PimsAuditCreateSchema.safeParse(body);
     if (!parsed.success) {
       return c.json(formatDrfErrors(parsed.error), 400);
@@ -1099,7 +1188,7 @@ export function buildPimsApp(
         created_by_id: 1,
         updated_by_id: 1,
         is_deleted: false,
-      })
+      } as typeof coreAudit.$inferInsert)
       .returning();
 
     const newAudit = inserted[0];
@@ -1146,7 +1235,11 @@ export function buildPimsApp(
       return c.json({ detail: "No Audit matches the given query." }, 404);
     }
 
-    const body = await c.req.json().catch(() => ({}));
+    const parsedBody = await parseJsonBody(c);
+    if (!parsedBody.ok) {
+      return parsedBody.response;
+    }
+    const body = parsedBody.data;
     const parsed = PimsAuditUpdateSchema.safeParse(body);
     if (!parsed.success) {
       return c.json(formatDrfErrors(parsed.error), 400);
@@ -1160,7 +1253,9 @@ export function buildPimsApp(
       }
       for (let i = 0; i < parsed.data.findings.length; i++) {
         const f = parsed.data.findings[i];
-        if (!f) continue;
+        if (!f) {
+          throw new Error("Invalid audit finding payload: item is undefined");
+        }
         const insertedF = await db
           .insert(coreAuditFinding)
           .values({
@@ -1172,18 +1267,26 @@ export function buildPimsApp(
           })
           .returning();
 
-        const findingId = insertedF[0]?.id;
-        if (findingId && Array.isArray(f.actions)) {
+        const newFinding = insertedF[0];
+        if (!newFinding) {
+          throw new Error("Failed to insert audit finding");
+        }
+        const findingId = newFinding.id;
+        if (Array.isArray(f.actions)) {
           for (let j = 0; j < f.actions.length; j++) {
             const a = f.actions[j];
-            if (!a) continue;
+            if (!a) {
+              throw new Error(
+                "Invalid audit action payload: item is undefined",
+              );
+            }
             await db.insert(coreAuditActionPlan).values({
               finding_id: findingId,
               action_plan: String(a.description || a.action_plan || ""),
               responsible: a.responsible,
               due_date: a.due_date,
               status: a.status,
-              progress: a.progress ?? 0,
+              progress: a.progress !== undefined ? a.progress : 0,
               position: j + 1,
             });
           }
@@ -1270,7 +1373,11 @@ export function buildPimsApp(
   });
 
   app.post("/api/risk-evaluations/", async (c) => {
-    const body = await c.req.json().catch(() => ({}));
+    const parsedBody = await parseJsonBody<Record<string, unknown>>(c);
+    if (!parsedBody.ok) {
+      return parsedBody.response;
+    }
+    const body = parsedBody.data;
     if (!Array.isArray(body.assets) || body.assets.length === 0) {
       return c.json({ assets: ["Este campo es requerido."] }, 400);
     }
@@ -1304,7 +1411,11 @@ export function buildPimsApp(
       const m = lastRisks[0].risk_code.match(/R-(\d+)/);
       if (m?.[1]) {
         nextNum = Number.parseInt(m[1], 10) + 1;
+      } else {
+        nextNum = 1;
       }
+    } else {
+      nextNum = 1;
     }
     const riskCode = `R-${String(nextNum).padStart(3, "0")}`;
 
@@ -1342,17 +1453,19 @@ export function buildPimsApp(
       return c.json({ detail: "Error creando evaluación de riesgo" }, 500);
     }
 
-    for (const item of body.assets) {
-      const assetId = typeof item === "number" ? item : item.asset;
-      if (assetId) {
-        await db
-          .insert(coreRiskEvaluationAsset)
-          .values({
-            evaluation_id: newRisk.id,
-            asset_id: assetId,
-          })
-          .onConflictDoNothing();
+    for (const item of body.assets as Array<number | { asset?: number }>) {
+      const assetId =
+        typeof item === "number" ? item : (item as { asset?: number })?.asset;
+      if (!assetId) {
+        return c.json({ assets: ["Identificador de activo inválido."] }, 400);
       }
+      await db
+        .insert(coreRiskEvaluationAsset)
+        .values({
+          evaluation_id: newRisk.id,
+          asset_id: assetId,
+        })
+        .onConflictDoNothing();
     }
 
     return c.json(
@@ -1454,43 +1567,20 @@ export async function createPimsTestServer(
   const app = buildPimsApp(dbClient, options);
   const port = options?.port ?? 0;
 
-  if (typeof Bun !== "undefined" && typeof Bun.serve === "function") {
-    const server = Bun.serve({
-      fetch: app.fetch,
-      port,
-    });
-    const boundPort = server.port;
-    if (typeof boundPort !== "number") {
-      throw new Error("PIMS test server failed to bind to a valid TCP port");
-    }
-    const serverUrl = `http://localhost:${boundPort}`;
-    return {
-      port: boundPort,
-      url: serverUrl,
-      stop: async () => {
-        server.stop(true);
-      },
-    };
-  }
-
-  return new Promise((resolve) => {
-    const server = serve(
-      {
-        fetch: app.fetch,
-        port,
-      },
-      (info) => {
-        const serverUrl = `http://localhost:${info.port}`;
-        resolve({
-          port: info.port,
-          url: serverUrl,
-          stop: async () => {
-            await new Promise<void>((res, rej) => {
-              server.close((err) => (err ? rej(err) : res()));
-            });
-          },
-        });
-      },
-    );
+  const server = Bun.serve({
+    fetch: app.fetch,
+    port,
   });
+  const boundPort = server.port;
+  if (typeof boundPort !== "number") {
+    throw new Error("PIMS test server failed to bind to a valid TCP port");
+  }
+  const serverUrl = `http://localhost:${boundPort}`;
+  return {
+    port: boundPort,
+    url: serverUrl,
+    stop: async () => {
+      server.stop(true);
+    },
+  };
 }

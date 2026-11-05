@@ -1,12 +1,39 @@
 import { defineSchema } from "@microx-technologies/microenv";
 import { z } from "@pims/config/zod-microenv.ts";
+import { CONSTANTS } from "@pims/types/constants.ts";
 
 const booleanSchema = (defaultValue = false) =>
-  z.preprocess(
-    (v: unknown) =>
-      typeof v === "string" ? v.toLowerCase() === "true" : Boolean(v),
-    z.boolean().default(defaultValue),
-  );
+  z.preprocess((v: unknown) => {
+    if (typeof v === "boolean") {
+      return v;
+    }
+    if (typeof v === "string") {
+      const trimmed = v.trim().toLowerCase();
+      if (trimmed === "true") {
+        return true;
+      }
+      if (trimmed === "false") {
+        return false;
+      }
+      return v;
+    }
+    return v;
+  }, z.boolean().default(defaultValue));
+
+const numberSchema = (defaultValue: number) =>
+  z.preprocess((v: unknown) => {
+    if (typeof v === "number" && !Number.isNaN(v)) {
+      return v;
+    }
+    if (typeof v === "string" && v.trim() !== "") {
+      const parsed = Number(v);
+      if (!Number.isNaN(parsed)) {
+        return parsed;
+      }
+      return v;
+    }
+    return v;
+  }, z.number().default(defaultValue));
 
 export const schema = defineSchema({
   // --- Model Provider & API Credentials ---
@@ -25,44 +52,50 @@ export const schema = defineSchema({
   PIMS_SCHEMA: z.string().min(1),
   PIMS_USERNAME: z.string().min(1),
   PIMS_PASSWORD: z.string().min(1),
-  PIMS_TIMEOUT_MS: z.coerce.number().default(15000),
-  PIMS_MAX_RETRIES: z.coerce.number().default(3),
+  PIMS_TIMEOUT_MS: numberSchema(CONSTANTS.DEFAULT_PIMS_TIMEOUT_MS),
+  PIMS_MAX_RETRIES: numberSchema(CONSTANTS.DEFAULT_PIMS_MAX_RETRIES),
   PIMS_PAGE_SIZE: z.string().default("50/100"),
-  IDEMPOTENCY_KEY_PREFIX: z.string().default("pims_idemp_"),
+  IDEMPOTENCY_KEY_PREFIX: z
+    .string()
+    .default(CONSTANTS.DEFAULT_IDEMPOTENCY_KEY_PREFIX),
 
   // --- Autonomous Watcher Daemon & Compliance Gates ---
   AUTO_NOTIFY: booleanSchema(false),
-  PHASE_DUE_HOURS: z.coerce.number().default(24),
+  PHASE_DUE_HOURS: numberSchema(CONSTANTS.DEFAULT_PHASE_DUE_HOURS),
   REVIEW_CHALLENGE_BLOCKING: booleanSchema(true),
-  WATCHER_POLL_INTERVAL_MS: z.coerce.number().default(5000),
+  WATCHER_POLL_INTERVAL_MS: numberSchema(
+    CONSTANTS.DEFAULT_WATCHER_POLL_INTERVAL_MS,
+  ),
 
   // --- Evidence Store, HMAC & Security Invariants ---
   EVIDENCE_HASH: z.literal("sha256").default("sha256"),
-  EVIDENCE_KEY_ENV: z.string().default("EVIDENCE_KEY"),
+  EVIDENCE_KEY_ENV: z.string().default(CONSTANTS.EVIDENCE_KEY_ENV),
   EVIDENCE_KEY: z.string().min(1),
   EVIDENCE_DB_URL: z.string().min(1),
-  WEBHOOK_INGEST_SECRET_ENV: z.string().default("WEBHOOK_INGEST_SECRET"),
+  WEBHOOK_INGEST_SECRET_ENV: z
+    .string()
+    .default(CONSTANTS.WEBHOOK_INGEST_SECRET_ENV),
   WEBHOOK_INGEST_SECRET: z.string().min(1),
   LOG_PII: z.literal("false").default("false"),
 
   // --- Deploy & Data Directory Settings ---
-  DEPLOY_PORT: z.coerce.number().default(3000),
-  DEPLOY_DATA_DIR: z.string().default(".evidence_blobs"),
+  DEPLOY_PORT: numberSchema(CONSTANTS.DEPLOY_PORT),
+  DEPLOY_DATA_DIR: z.string().default(CONSTANTS.DEPLOY_DATA_DIR),
 
   // --- Dual-Modal RAG Subsystem ---
-  RAG_CORPUS_DIR: z.string().default("corpus"),
-  RAG_TOP_K: z.coerce.number().default(8),
-  RAG_RERANK_K: z.coerce.number().default(4),
-  RAG_MIN_SCORE: z.coerce.number().default(0.35),
-  RAG_TIMEOUT_MS: z.coerce.number().default(3000),
+  RAG_CORPUS_DIR: z.string().default(CONSTANTS.DEFAULT_CORPUS_DIR),
+  RAG_TOP_K: numberSchema(CONSTANTS.DEFAULT_RAG_TOP_K),
+  RAG_RERANK_K: numberSchema(CONSTANTS.DEFAULT_RAG_RERANK_K),
+  RAG_MIN_SCORE: numberSchema(CONSTANTS.DEFAULT_RAG_MIN_SCORE),
+  RAG_TIMEOUT_MS: numberSchema(CONSTANTS.DEFAULT_RAG_TIMEOUT_MS),
 
   // --- Guided Creation & PII Redaction ---
-  PRESIDIO_URL: z.string().url().default("http://127.0.0.1:3001"),
-  PRESIDIO_IMAGE: z.string().default("presidio-analyzer:2.2.x-es"),
-  PRESIDIO_MODEL: z.string().default("es_core_news_md"),
-  PRESIDIO_TIMEOUT_MS: z.coerce.number().default(1500),
-  PRESIDIO_MIN_SCORE: z.coerce.number().default(0.5),
-  FORM_NARRATIVE_MAX_CHARS: z.coerce.number().default(4000),
+  PRESIDIO_URL: z.string().url().default(CONSTANTS.PRESIDIO_URL),
+  PRESIDIO_IMAGE: z.string().default(CONSTANTS.PRESIDIO_IMAGE),
+  PRESIDIO_MODEL: z.string().default(CONSTANTS.PRESIDIO_MODEL),
+  PRESIDIO_TIMEOUT_MS: numberSchema(CONSTANTS.PRESIDIO_TIMEOUT_MS),
+  PRESIDIO_MIN_SCORE: numberSchema(CONSTANTS.PRESIDIO_MIN_SCORE),
+  FORM_NARRATIVE_MAX_CHARS: numberSchema(CONSTANTS.FORM_NARRATIVE_MAX_CHARS),
 });
 
 export type AppSchema = typeof schema;

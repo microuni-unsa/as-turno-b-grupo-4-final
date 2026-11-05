@@ -1,6 +1,6 @@
 import net from "node:net";
 import type { PresidioClient } from "@pims/agent/llm/presidio-client.ts";
-import { PII_PHONE_REGIONS } from "@pims/types/constants.ts";
+import { CONSTANTS } from "@pims/types/constants.ts";
 import {
   PiiRedactionUnavailableError,
   PromptPiiBlockedError,
@@ -89,7 +89,7 @@ export function assertPromptSafe(
   const categories = new Set<PiiCategory>();
 
   // 1. Phone validation via formal libphonenumber-js
-  for (const region of PII_PHONE_REGIONS) {
+  for (const region of CONSTANTS.PII_PHONE_REGIONS) {
     try {
       for (const match of findPhoneNumbersInText(combined, region)) {
         if (match.number.isValid()) {

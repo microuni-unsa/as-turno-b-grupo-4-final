@@ -13,7 +13,7 @@ import {
   PimsNotFoundError,
   PimsValidationError,
 } from "@pims/types";
-import { PIMS_TEST_SEED_PASSWORD } from "@pims/types/constants.ts";
+import { CONSTANTS } from "@pims/types/constants.ts";
 import { PimsGateBlockedError } from "@pims/types/errors.ts";
 import type { PimsMutationRecord } from "@pims/types/pims.ts";
 import {
@@ -67,7 +67,7 @@ describe("PIMS Client Adapter & Reverse-Engineered DRF API Integration Suite", (
       baseUrl: serverInstance.url,
       schema: "unsa",
       username: "admin",
-      password: PIMS_TEST_SEED_PASSWORD,
+      password: CONSTANTS.PIMS_TEST_SEED_PASSWORD,
       timeoutMs: 15000,
     });
   }, 120_000);
@@ -563,7 +563,7 @@ describe("PIMS Client Adapter & Reverse-Engineered DRF API Integration Suite", (
           baseUrl: mergeServer.url,
           schema: "unsa",
           username: "admin",
-          password: PIMS_TEST_SEED_PASSWORD,
+          password: CONSTANTS.PIMS_TEST_SEED_PASSWORD,
         });
         mergeAdapter.nestedActionMode = "merge";
 
@@ -652,7 +652,7 @@ describe("PIMS Client Adapter & Reverse-Engineered DRF API Integration Suite", (
         baseUrl: serverInstance.url,
         schema: "unsa",
         username: "admin",
-        password: PIMS_TEST_SEED_PASSWORD,
+        password: CONSTANTS.PIMS_TEST_SEED_PASSWORD,
         timeoutMs: 15000,
         onMutation: (record) => {
           records.push(record);
@@ -668,7 +668,7 @@ describe("PIMS Client Adapter & Reverse-Engineered DRF API Integration Suite", (
         "username",
       ]);
       expect(JSON.stringify(loginRecord)).not.toContain(
-        PIMS_TEST_SEED_PASSWORD,
+        CONSTANTS.PIMS_TEST_SEED_PASSWORD,
       );
 
       const incident = await observed.createIncident({

@@ -1,13 +1,6 @@
 import type { AgentConfig } from "@pims/config";
 import type { RagIndexer } from "@pims/rag/indexer.ts";
-import {
-  MODEL_ROUTE_RAG,
-  RAG_BM25_K,
-  RAG_DENSE_K,
-  RRF_K,
-  RRF_WEIGHT_BM25,
-  RRF_WEIGHT_DENSE,
-} from "@pims/types/constants.ts";
+import { CONSTANTS } from "@pims/types/constants.ts";
 import {
   CitationFabricatedError,
   CitationInvalidError,
@@ -63,7 +56,7 @@ export class RAGService {
   private calculateRRF(
     denseRankings: string[],
     bm25Rankings: string[],
-    k = RRF_K,
+    k = CONSTANTS.RRF_K,
   ): Map<string, number> {
     const rrfScores = new Map<string, number>();
     const addRank = (list: string[], weight = 1.0) => {
@@ -74,8 +67,8 @@ export class RAGService {
         rrfScores.set(id, current + weight / (k + (r + 1)));
       }
     };
-    addRank(denseRankings, RRF_WEIGHT_DENSE);
-    addRank(bm25Rankings, RRF_WEIGHT_BM25);
+    addRank(denseRankings, CONSTANTS.RRF_WEIGHT_DENSE);
+    addRank(bm25Rankings, CONSTANTS.RRF_WEIGHT_BM25);
     return rrfScores;
   }
 
@@ -107,7 +100,7 @@ export class RAGService {
         text: chunk.text,
         normative: chunk.normative,
       },
-      chunk,
+      chunk: structuredClone(chunk),
     };
   }
 
@@ -164,7 +157,7 @@ export class RAGService {
 
     if (Date.now() - startTime > this.timeoutMs) {
       throw new ModelUnavailableError(
-        MODEL_ROUTE_RAG,
+        CONSTANTS.MODEL_ROUTE_RAG,
         `RAG retrieval timeout after ${this.timeoutMs}ms`,
       );
     }
@@ -175,7 +168,7 @@ export class RAGService {
       const computed = embRes.vectors[0];
       if (!computed) {
         throw new ModelUnavailableError(
-          MODEL_ROUTE_RAG,
+          CONSTANTS.MODEL_ROUTE_RAG,
           "Failed to compute query vector for dense retrieval",
         );
       }
@@ -184,19 +177,24 @@ export class RAGService {
         const firstKey = this.queryEmbeddingCache.keys().next().value;
         if (firstKey !== undefined) {
           this.queryEmbeddingCache.delete(firstKey);
+        } else {
+          this.queryEmbeddingCache.clear();
         }
       }
       this.queryEmbeddingCache.set(userQuery, qVec);
     }
 
-    const pgvectorHits = await this.indexer.searchPgvector(qVec, RAG_DENSE_K);
+    const pgvectorHits = await this.indexer.searchPgvector(
+      qVec,
+      CONSTANTS.RAG_DENSE_K,
+    );
     const denseRankings = pgvectorHits.map((h) => h.chunk_id);
     const denseMetadata = new Map<string, { score: number; rank: number }>();
     pgvectorHits.forEach((hit, index) => {
       denseMetadata.set(hit.chunk_id, { score: hit.score, rank: index + 1 });
     });
 
-    const bm25Hits = this.indexer.searchBM25(userQuery, RAG_BM25_K);
+    const bm25Hits = this.indexer.searchBM25(userQuery, CONSTANTS.RAG_BM25_K);
     const bm25Rankings = bm25Hits.map((h) => h.chunk_id);
     const bm25Metadata = new Map<string, { score: number; rank: number }>();
     bm25Hits.forEach((hit, index) => {

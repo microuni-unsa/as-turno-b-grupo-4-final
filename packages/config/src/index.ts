@@ -1,17 +1,4 @@
-import {
-  DEFAULT_AUTO_NOTIFY,
-  DEFAULT_CORPUS_DIR,
-  DEFAULT_IDEMPOTENCY_KEY_PREFIX,
-  DEFAULT_MODEL_LOGPROBS,
-  DEFAULT_PHASE_DUE_HOURS,
-  DEFAULT_PIMS_BASE_URL,
-  DEFAULT_PIMS_MAX_RETRIES,
-  DEFAULT_PIMS_SCHEMA,
-  DEFAULT_PIMS_TIMEOUT_MS,
-  DEFAULT_REVIEW_CHALLENGE_BLOCKING,
-  DEFAULT_WATCHER_POLL_INTERVAL_MS,
-  MAX_ATTACHMENT_SIZE_MB,
-} from "@pims/types/constants.ts";
+import { CONSTANTS } from "@pims/types/constants.ts";
 import { ConfigError } from "@pims/types/errors.ts";
 import { z } from "zod";
 
@@ -236,7 +223,10 @@ export function loadConfig(
     );
   }
 
-  const pimsBaseUrl = env.PIMS_BASE_URL ?? DEFAULT_PIMS_BASE_URL;
+  const pimsBaseUrl =
+    env.PIMS_BASE_URL !== undefined && env.PIMS_BASE_URL !== ""
+      ? env.PIMS_BASE_URL
+      : CONSTANTS.DEFAULT_PIMS_BASE_URL;
   try {
     new URL(pimsBaseUrl);
   } catch {
@@ -246,7 +236,10 @@ export function loadConfig(
     );
   }
 
-  const pimsSchema = env.PIMS_SCHEMA ?? DEFAULT_PIMS_SCHEMA;
+  const pimsSchema =
+    env.PIMS_SCHEMA !== undefined && env.PIMS_SCHEMA !== ""
+      ? env.PIMS_SCHEMA
+      : CONSTANTS.DEFAULT_PIMS_SCHEMA;
 
   const usernameRaw = env.PIMS_USERNAME?.trim();
   const passwordRaw = env.PIMS_PASSWORD;
@@ -260,23 +253,28 @@ export function loadConfig(
     );
   }
 
-  let jurisdictionDeadlines: JurisdictionDeadlines;
   const rawJurisdiction =
-    env.JURISDICTION_DEADLINES_JSON ??
-    '{"EU_GDPR":{"authority_h":72,"processor_to_controller":"without_undue_delay"},"PE_PDP":{"authority_h":"48_unverified"}}';
+    env.JURISDICTION_DEADLINES_JSON !== undefined &&
+    env.JURISDICTION_DEADLINES_JSON !== ""
+      ? env.JURISDICTION_DEADLINES_JSON
+      : CONSTANTS.JURISDICTION_DEADLINES_JSON;
+  let rawParsed: unknown;
   try {
-    const rawParsed = JSON.parse(rawJurisdiction);
-    const valid = JurisdictionDeadlinesSchema.safeParse(rawParsed);
-    if (!valid.success) {
-      throw new Error();
-    }
-    jurisdictionDeadlines = valid.data;
+    rawParsed = JSON.parse(rawJurisdiction);
   } catch {
     throw new ConfigError(
       "JURISDICTION_DEADLINES_JSON must be valid JSON matching deadline schema",
       "CONFIG_TYPE:JURISDICTION_DEADLINES_JSON",
     );
   }
+  const valid = JurisdictionDeadlinesSchema.safeParse(rawParsed);
+  if (!valid.success) {
+    throw new ConfigError(
+      `JURISDICTION_DEADLINES_JSON must match deadline schema: ${valid.error.message}`,
+      "CONFIG_TYPE:JURISDICTION_DEADLINES_JSON",
+    );
+  }
+  const jurisdictionDeadlines = valid.data;
 
   if (!env.REASONING_MODEL) {
     throw new ConfigError(
@@ -324,7 +322,10 @@ export function loadConfig(
     env,
   );
 
-  const evidenceKeyEnv = env.EVIDENCE_KEY_ENV ?? "EVIDENCE_KEY";
+  const evidenceKeyEnv =
+    env.EVIDENCE_KEY_ENV !== undefined && env.EVIDENCE_KEY_ENV !== ""
+      ? env.EVIDENCE_KEY_ENV
+      : CONSTANTS.EVIDENCE_KEY_ENV;
   if (!env[evidenceKeyEnv]) {
     throw new ConfigError(
       `Referenced EVIDENCE_KEY_ENV (${evidenceKeyEnv}) is missing or empty`,
@@ -361,12 +362,13 @@ export function loadConfig(
   }
   const modelLogprobs =
     modelLogprobsRaw === undefined
-      ? DEFAULT_MODEL_LOGPROBS
+      ? CONSTANTS.DEFAULT_MODEL_LOGPROBS
       : modelLogprobsRaw === "true";
 
-  const phaseDueHours = env.PHASE_DUE_HOURS
-    ? Number.parseInt(env.PHASE_DUE_HOURS, 10)
-    : DEFAULT_PHASE_DUE_HOURS;
+  const phaseDueHours =
+    env.PHASE_DUE_HOURS !== undefined && env.PHASE_DUE_HOURS !== ""
+      ? Number.parseInt(env.PHASE_DUE_HOURS, 10)
+      : CONSTANTS.DEFAULT_PHASE_DUE_HOURS;
   if (!Number.isInteger(phaseDueHours) || phaseDueHours <= 0) {
     throw new ConfigError(
       "PHASE_DUE_HOURS must be a positive integer",
@@ -387,7 +389,7 @@ export function loadConfig(
   }
   const reviewChallengeBlocking =
     reviewChallengeBlockingRaw === undefined
-      ? DEFAULT_REVIEW_CHALLENGE_BLOCKING
+      ? CONSTANTS.DEFAULT_REVIEW_CHALLENGE_BLOCKING
       : reviewChallengeBlockingRaw === "true";
 
   const autoNotifyRaw = env.AUTO_NOTIFY;
@@ -403,11 +405,12 @@ export function loadConfig(
   }
   const autoNotify =
     autoNotifyRaw === undefined
-      ? DEFAULT_AUTO_NOTIFY
+      ? CONSTANTS.DEFAULT_AUTO_NOTIFY
       : autoNotifyRaw === "true";
 
   const watcherPollRaw = env.WATCHER_POLL_INTERVAL_MS;
-  let watcherPollIntervalMs: number = DEFAULT_WATCHER_POLL_INTERVAL_MS;
+  let watcherPollIntervalMs: number =
+    CONSTANTS.DEFAULT_WATCHER_POLL_INTERVAL_MS;
   if (watcherPollRaw !== undefined) {
     const parsed = Number(watcherPollRaw);
     if (!Number.isInteger(parsed) || parsed <= 0) {
@@ -422,10 +425,13 @@ export function loadConfig(
   const ragCorpusDirRaw = env.RAG_CORPUS_DIR?.trim();
   const ragCorpusDir =
     ragCorpusDirRaw === undefined || ragCorpusDirRaw === ""
-      ? DEFAULT_CORPUS_DIR
+      ? CONSTANTS.DEFAULT_CORPUS_DIR
       : ragCorpusDirRaw;
 
-  const subjectNoticePolicy = env.SUBJECT_NOTICE_POLICY ?? "high_risk_only";
+  const subjectNoticePolicy =
+    env.SUBJECT_NOTICE_POLICY !== undefined && env.SUBJECT_NOTICE_POLICY !== ""
+      ? env.SUBJECT_NOTICE_POLICY
+      : "high_risk_only";
   if (subjectNoticePolicy !== "high_risk_only") {
     throw new ConfigError(
       `Invalid SUBJECT_NOTICE_POLICY: ${subjectNoticePolicy}`,
@@ -433,23 +439,27 @@ export function loadConfig(
     );
   }
 
-  const attachmentMaxMb = env.ATTACHMENT_MAX_MB
-    ? Number.parseInt(env.ATTACHMENT_MAX_MB, 10)
-    : MAX_ATTACHMENT_SIZE_MB;
+  const attachmentMaxMb =
+    env.ATTACHMENT_MAX_MB !== undefined && env.ATTACHMENT_MAX_MB !== ""
+      ? Number.parseInt(env.ATTACHMENT_MAX_MB, 10)
+      : CONSTANTS.MAX_ATTACHMENT_SIZE_MB;
   if (Number.isNaN(attachmentMaxMb)) {
     throw new ConfigError(
       "ATTACHMENT_MAX_MB must be an integer",
       "CONFIG_TYPE:ATTACHMENT_MAX_MB",
     );
   }
-  if (attachmentMaxMb > MAX_ATTACHMENT_SIZE_MB) {
+  if (attachmentMaxMb > CONSTANTS.MAX_ATTACHMENT_SIZE_MB) {
     throw new ConfigError(
-      `ATTACHMENT_MAX_MB (${attachmentMaxMb}) exceeds PIMS maximum of ${MAX_ATTACHMENT_SIZE_MB} MB`,
+      `ATTACHMENT_MAX_MB (${attachmentMaxMb}) exceeds PIMS maximum of ${CONSTANTS.MAX_ATTACHMENT_SIZE_MB} MB`,
       "CONFIG_REJECTED:ATTACHMENT_MAX_MB",
     );
   }
 
-  const evidenceHash = env.EVIDENCE_HASH ?? "sha256";
+  const evidenceHash =
+    env.EVIDENCE_HASH !== undefined && env.EVIDENCE_HASH !== ""
+      ? env.EVIDENCE_HASH
+      : CONSTANTS.EVIDENCE_HASH;
   if (evidenceHash !== "sha256") {
     throw new ConfigError(
       `Invalid EVIDENCE_HASH: ${evidenceHash}`,
@@ -457,9 +467,10 @@ export function loadConfig(
     );
   }
 
-  const pimsTimeoutMs = env.PIMS_TIMEOUT_MS
-    ? Number.parseInt(env.PIMS_TIMEOUT_MS, 10)
-    : DEFAULT_PIMS_TIMEOUT_MS;
+  const pimsTimeoutMs =
+    env.PIMS_TIMEOUT_MS !== undefined && env.PIMS_TIMEOUT_MS !== ""
+      ? Number.parseInt(env.PIMS_TIMEOUT_MS, 10)
+      : CONSTANTS.DEFAULT_PIMS_TIMEOUT_MS;
   if (Number.isNaN(pimsTimeoutMs)) {
     throw new ConfigError(
       "PIMS_TIMEOUT_MS must be an integer",
@@ -467,9 +478,10 @@ export function loadConfig(
     );
   }
 
-  const pimsMaxRetries = env.PIMS_MAX_RETRIES
-    ? Number.parseInt(env.PIMS_MAX_RETRIES, 10)
-    : DEFAULT_PIMS_MAX_RETRIES;
+  const pimsMaxRetries =
+    env.PIMS_MAX_RETRIES !== undefined && env.PIMS_MAX_RETRIES !== ""
+      ? Number.parseInt(env.PIMS_MAX_RETRIES, 10)
+      : CONSTANTS.DEFAULT_PIMS_MAX_RETRIES;
   if (Number.isNaN(pimsMaxRetries)) {
     throw new ConfigError(
       "PIMS_MAX_RETRIES must be an integer",
@@ -498,34 +510,53 @@ export function loadConfig(
 
   let assignees: string[] = [];
   if (env.ASSIGNEES) {
+    let parsedAssignees: unknown;
     try {
-      assignees = JSON.parse(env.ASSIGNEES);
-      if (!Array.isArray(assignees)) {
-        throw new Error();
-      }
+      parsedAssignees = JSON.parse(env.ASSIGNEES);
     } catch {
       throw new ConfigError(
         "ASSIGNEES must be a JSON array of strings",
         "CONFIG_TYPE:ASSIGNEES",
       );
     }
+    if (
+      !Array.isArray(parsedAssignees) ||
+      parsedAssignees.some((item) => typeof item !== "string")
+    ) {
+      throw new ConfigError(
+        "ASSIGNEES must be a JSON array of strings",
+        "CONFIG_TYPE:ASSIGNEES",
+      );
+    }
+    assignees = parsedAssignees;
   }
 
   const extraHeadersRaw = env.PIMS_EXTRA_HEADERS_JSON;
   if (extraHeadersRaw !== undefined && extraHeadersRaw.trim() !== "") {
+    let parsedHeaders: unknown;
     try {
-      const parsed = JSON.parse(extraHeadersRaw);
-      if (
-        typeof parsed !== "object" ||
-        parsed === null ||
-        Array.isArray(parsed)
-      ) {
-        throw new Error();
-      }
-      if (Object.values(parsed).some((value) => typeof value !== "string")) {
-        throw new Error();
-      }
+      parsedHeaders = JSON.parse(extraHeadersRaw);
     } catch {
+      throw new ConfigError(
+        "PIMS_EXTRA_HEADERS_JSON must be a valid JSON object string",
+        "CONFIG_TYPE:PIMS_EXTRA_HEADERS_JSON",
+      );
+    }
+    if (
+      typeof parsedHeaders !== "object" ||
+      parsedHeaders === null ||
+      Array.isArray(parsedHeaders)
+    ) {
+      throw new ConfigError(
+        "PIMS_EXTRA_HEADERS_JSON must be a valid JSON object string",
+        "CONFIG_TYPE:PIMS_EXTRA_HEADERS_JSON",
+      );
+    }
+    if (
+      Object.values(parsedHeaders as Record<string, unknown>).some(
+        (value) => typeof value !== "string",
+      )
+    ) {
       throw new ConfigError(
         "PIMS_EXTRA_HEADERS_JSON must be a valid JSON object string",
         "CONFIG_TYPE:PIMS_EXTRA_HEADERS_JSON",
@@ -535,19 +566,30 @@ export function loadConfig(
 
   const cookiesRaw = env.PIMS_COOKIES_JSON;
   if (cookiesRaw !== undefined && cookiesRaw.trim() !== "") {
+    let parsedCookies: unknown;
     try {
-      const parsed = JSON.parse(cookiesRaw);
-      if (
-        typeof parsed !== "object" ||
-        parsed === null ||
-        Array.isArray(parsed)
-      ) {
-        throw new Error();
-      }
-      if (Object.values(parsed).some((value) => typeof value !== "string")) {
-        throw new Error();
-      }
+      parsedCookies = JSON.parse(cookiesRaw);
     } catch {
+      throw new ConfigError(
+        "PIMS_COOKIES_JSON must be a valid JSON object string",
+        "CONFIG_TYPE:PIMS_COOKIES_JSON",
+      );
+    }
+    if (
+      typeof parsedCookies !== "object" ||
+      parsedCookies === null ||
+      Array.isArray(parsedCookies)
+    ) {
+      throw new ConfigError(
+        "PIMS_COOKIES_JSON must be a valid JSON object string",
+        "CONFIG_TYPE:PIMS_COOKIES_JSON",
+      );
+    }
+    if (
+      Object.values(parsedCookies as Record<string, unknown>).some(
+        (value) => typeof value !== "string",
+      )
+    ) {
       throw new ConfigError(
         "PIMS_COOKIES_JSON must be a valid JSON object string",
         "CONFIG_TYPE:PIMS_COOKIES_JSON",
@@ -555,7 +597,10 @@ export function loadConfig(
     }
   }
 
-  const presidioUrl = env.PRESIDIO_URL ?? "http://127.0.0.1:3001";
+  const presidioUrl =
+    env.PRESIDIO_URL !== undefined && env.PRESIDIO_URL !== ""
+      ? env.PRESIDIO_URL
+      : CONSTANTS.PRESIDIO_URL;
   try {
     new URL(presidioUrl);
   } catch {
@@ -565,11 +610,17 @@ export function loadConfig(
     );
   }
 
-  const presidioImage = env.PRESIDIO_IMAGE ?? "presidio-analyzer:2.2.x-es";
-  const presidioModel = env.PRESIDIO_MODEL ?? "es_core_news_md";
+  const presidioImage =
+    env.PRESIDIO_IMAGE !== undefined && env.PRESIDIO_IMAGE !== ""
+      ? env.PRESIDIO_IMAGE
+      : CONSTANTS.PRESIDIO_IMAGE;
+  const presidioModel =
+    env.PRESIDIO_MODEL !== undefined && env.PRESIDIO_MODEL !== ""
+      ? env.PRESIDIO_MODEL
+      : CONSTANTS.PRESIDIO_MODEL;
 
   const presidioTimeoutRaw = env.PRESIDIO_TIMEOUT_MS;
-  let presidioTimeoutMs = 1500;
+  let presidioTimeoutMs: number = CONSTANTS.PRESIDIO_TIMEOUT_MS;
   if (presidioTimeoutRaw !== undefined) {
     const parsed = Number(presidioTimeoutRaw);
     if (!Number.isInteger(parsed) || parsed <= 0) {
@@ -582,7 +633,7 @@ export function loadConfig(
   }
 
   const presidioMinScoreRaw = env.PRESIDIO_MIN_SCORE;
-  let presidioMinScore = 0.5;
+  let presidioMinScore: number = CONSTANTS.PRESIDIO_MIN_SCORE;
   if (presidioMinScoreRaw !== undefined) {
     const parsed = Number.parseFloat(presidioMinScoreRaw);
     if (Number.isNaN(parsed) || parsed < 0 || parsed > 1) {
@@ -595,7 +646,7 @@ export function loadConfig(
   }
 
   const formNarrativeMaxCharsRaw = env.FORM_NARRATIVE_MAX_CHARS;
-  let formNarrativeMaxChars = 4000;
+  let formNarrativeMaxChars: number = CONSTANTS.FORM_NARRATIVE_MAX_CHARS;
   if (formNarrativeMaxCharsRaw !== undefined) {
     const parsed = Number.parseInt(formNarrativeMaxCharsRaw, 10);
     if (Number.isNaN(parsed) || parsed <= 0) {
@@ -618,78 +669,116 @@ export function loadConfig(
     PIMS_EXTRA_HEADERS_JSON: extraHeadersRaw,
     PIMS_COOKIES_JSON: cookiesRaw,
     IDEMPOTENCY_KEY_PREFIX:
-      env.IDEMPOTENCY_KEY_PREFIX ?? DEFAULT_IDEMPOTENCY_KEY_PREFIX,
+      env.IDEMPOTENCY_KEY_PREFIX !== undefined &&
+      env.IDEMPOTENCY_KEY_PREFIX !== ""
+        ? env.IDEMPOTENCY_KEY_PREFIX
+        : CONSTANTS.DEFAULT_IDEMPOTENCY_KEY_PREFIX,
     JURISDICTION_DEADLINES_JSON: jurisdictionDeadlines,
     SUBJECT_NOTICE_POLICY: "high_risk_only",
-    HUMAN_VETO_WINDOW_MIN: env.HUMAN_VETO_WINDOW_MIN
-      ? Number.parseInt(env.HUMAN_VETO_WINDOW_MIN, 10)
-      : 0,
+    HUMAN_VETO_WINDOW_MIN:
+      env.HUMAN_VETO_WINDOW_MIN !== undefined &&
+      env.HUMAN_VETO_WINDOW_MIN !== ""
+        ? Number.parseInt(env.HUMAN_VETO_WINDOW_MIN, 10)
+        : CONSTANTS.HUMAN_VETO_WINDOW_MIN,
     ASSIGNEES: assignees,
     REASONING_MODEL: reasoningModel,
     FAST_MODEL: fastModel,
     VISION_MODEL: visionModel,
     EMBEDDINGS_MODEL: embeddingsModel,
     RERANKER_MODEL: rerankerModel,
-    TEMP_CLASSIFIER: env.TEMP_CLASSIFIER
-      ? Number.parseFloat(env.TEMP_CLASSIFIER)
-      : 0.0,
-    TEMP_REASONING: env.TEMP_REASONING
-      ? Number.parseFloat(env.TEMP_REASONING)
-      : 0.2,
-    MAX_REVIEW_CYCLES: env.MAX_REVIEW_CYCLES
-      ? Number.parseInt(env.MAX_REVIEW_CYCLES, 10)
-      : 3,
-    PLAIN_LANG_MAX_WORDS: env.PLAIN_LANG_MAX_WORDS
-      ? Number.parseInt(env.PLAIN_LANG_MAX_WORDS, 10)
-      : 25,
-    DEDUPE_TRIGRAM_THRESHOLD: env.DEDUPE_TRIGRAM_THRESHOLD
-      ? Number.parseFloat(env.DEDUPE_TRIGRAM_THRESHOLD)
-      : 0.85,
-    DEDUPE_COSINE_THRESHOLD: env.DEDUPE_COSINE_THRESHOLD
-      ? Number.parseFloat(env.DEDUPE_COSINE_THRESHOLD)
-      : 0.9,
-    SLA_PROCESSOR_H: env.SLA_PROCESSOR_H
-      ? Number.parseInt(env.SLA_PROCESSOR_H, 10)
-      : 1,
-    SLA_SUBJECT_H: env.SLA_SUBJECT_H
-      ? Number.parseInt(env.SLA_SUBJECT_H, 10)
-      : 4,
-    SLA_REVIEW_H: env.SLA_REVIEW_H ? Number.parseInt(env.SLA_REVIEW_H, 10) : 4,
-    CORRECTIVE_DEFAULT_DUE_DAYS: env.CORRECTIVE_DEFAULT_DUE_DAYS
-      ? Number.parseInt(env.CORRECTIVE_DEFAULT_DUE_DAYS, 10)
-      : 30,
-    CIRCUIT_BREAKER_FAILS: env.CIRCUIT_BREAKER_FAILS
-      ? Number.parseInt(env.CIRCUIT_BREAKER_FAILS, 10)
-      : 5,
-    CIRCUIT_BREAKER_WINDOW_S: env.CIRCUIT_BREAKER_WINDOW_S
-      ? Number.parseInt(env.CIRCUIT_BREAKER_WINDOW_S, 10)
-      : 60,
-    CIRCUIT_BREAKER_OPEN_S: env.CIRCUIT_BREAKER_OPEN_S
-      ? Number.parseInt(env.CIRCUIT_BREAKER_OPEN_S, 10)
-      : 300,
-    RAG_CORPUS_PATHS: env.RAG_CORPUS_PATHS
-      ? JSON.parse(env.RAG_CORPUS_PATHS)
-      : {},
+    TEMP_CLASSIFIER:
+      env.TEMP_CLASSIFIER !== undefined && env.TEMP_CLASSIFIER !== ""
+        ? Number.parseFloat(env.TEMP_CLASSIFIER)
+        : CONSTANTS.TEMP_CLASSIFIER,
+    TEMP_REASONING:
+      env.TEMP_REASONING !== undefined && env.TEMP_REASONING !== ""
+        ? Number.parseFloat(env.TEMP_REASONING)
+        : CONSTANTS.TEMP_REASONING,
+    MAX_REVIEW_CYCLES:
+      env.MAX_REVIEW_CYCLES !== undefined && env.MAX_REVIEW_CYCLES !== ""
+        ? Number.parseInt(env.MAX_REVIEW_CYCLES, 10)
+        : CONSTANTS.MAX_REVIEW_CYCLES,
+    PLAIN_LANG_MAX_WORDS:
+      env.PLAIN_LANG_MAX_WORDS !== undefined && env.PLAIN_LANG_MAX_WORDS !== ""
+        ? Number.parseInt(env.PLAIN_LANG_MAX_WORDS, 10)
+        : CONSTANTS.PLAIN_LANGUAGE_MAX_WORDS,
+    DEDUPE_TRIGRAM_THRESHOLD:
+      env.DEDUPE_TRIGRAM_THRESHOLD !== undefined &&
+      env.DEDUPE_TRIGRAM_THRESHOLD !== ""
+        ? Number.parseFloat(env.DEDUPE_TRIGRAM_THRESHOLD)
+        : CONSTANTS.DEDUPE_TRIGRAM_THRESHOLD,
+    DEDUPE_COSINE_THRESHOLD:
+      env.DEDUPE_COSINE_THRESHOLD !== undefined &&
+      env.DEDUPE_COSINE_THRESHOLD !== ""
+        ? Number.parseFloat(env.DEDUPE_COSINE_THRESHOLD)
+        : CONSTANTS.DEDUPE_COSINE_THRESHOLD,
+    SLA_PROCESSOR_H:
+      env.SLA_PROCESSOR_H !== undefined && env.SLA_PROCESSOR_H !== ""
+        ? Number.parseInt(env.SLA_PROCESSOR_H, 10)
+        : CONSTANTS.SLA_PROCESSOR_H,
+    SLA_SUBJECT_H:
+      env.SLA_SUBJECT_H !== undefined && env.SLA_SUBJECT_H !== ""
+        ? Number.parseInt(env.SLA_SUBJECT_H, 10)
+        : CONSTANTS.SLA_SUBJECT_H,
+    SLA_REVIEW_H:
+      env.SLA_REVIEW_H !== undefined && env.SLA_REVIEW_H !== ""
+        ? Number.parseInt(env.SLA_REVIEW_H, 10)
+        : CONSTANTS.SLA_REVIEW_H,
+    CORRECTIVE_DEFAULT_DUE_DAYS:
+      env.CORRECTIVE_DEFAULT_DUE_DAYS !== undefined &&
+      env.CORRECTIVE_DEFAULT_DUE_DAYS !== ""
+        ? Number.parseInt(env.CORRECTIVE_DEFAULT_DUE_DAYS, 10)
+        : CONSTANTS.CORRECTIVE_DEFAULT_DUE_DAYS,
+    CIRCUIT_BREAKER_FAILS:
+      env.CIRCUIT_BREAKER_FAILS !== undefined &&
+      env.CIRCUIT_BREAKER_FAILS !== ""
+        ? Number.parseInt(env.CIRCUIT_BREAKER_FAILS, 10)
+        : CONSTANTS.CIRCUIT_BREAKER_FAILS,
+    CIRCUIT_BREAKER_WINDOW_S:
+      env.CIRCUIT_BREAKER_WINDOW_S !== undefined &&
+      env.CIRCUIT_BREAKER_WINDOW_S !== ""
+        ? Number.parseInt(env.CIRCUIT_BREAKER_WINDOW_S, 10)
+        : CONSTANTS.CIRCUIT_BREAKER_WINDOW_S,
+    CIRCUIT_BREAKER_OPEN_S:
+      env.CIRCUIT_BREAKER_OPEN_S !== undefined &&
+      env.CIRCUIT_BREAKER_OPEN_S !== ""
+        ? Number.parseInt(env.CIRCUIT_BREAKER_OPEN_S, 10)
+        : CONSTANTS.CIRCUIT_BREAKER_OPEN_S,
+    RAG_CORPUS_PATHS:
+      env.RAG_CORPUS_PATHS !== undefined && env.RAG_CORPUS_PATHS !== ""
+        ? JSON.parse(env.RAG_CORPUS_PATHS)
+        : {},
     RAG_CORPUS_DIR: ragCorpusDir,
-    RAG_CHUNK_NORMATIVE: { size: 512, overlap: 64 },
-    RAG_CHUNK_OTHER: { size: 1024, overlap: 128 },
-    RAG_TOP_K: env.RAG_TOP_K ? Number.parseInt(env.RAG_TOP_K, 10) : 8,
-    RAG_RERANK_K: env.RAG_RERANK_K ? Number.parseInt(env.RAG_RERANK_K, 10) : 4,
-    RAG_MIN_SCORE: env.RAG_MIN_SCORE
-      ? Number.parseFloat(env.RAG_MIN_SCORE)
-      : 0.35,
-    RAG_TIMEOUT_MS: env.RAG_TIMEOUT_MS
-      ? Number.parseInt(env.RAG_TIMEOUT_MS, 10)
-      : 3000,
-    SCHEDULER_TICK_S: env.SCHEDULER_TICK_S
-      ? Number.parseInt(env.SCHEDULER_TICK_S, 10)
-      : 60,
-    SCHEDULER_JITTER_S: env.SCHEDULER_JITTER_S
-      ? Number.parseInt(env.SCHEDULER_JITTER_S, 10)
-      : 10,
-    SCHEDULER_MAX_TIMERS: env.SCHEDULER_MAX_TIMERS
-      ? Number.parseInt(env.SCHEDULER_MAX_TIMERS, 10)
-      : 10000,
+    RAG_CHUNK_NORMATIVE: CONSTANTS.RAG_CHUNK_NORMATIVE,
+    RAG_CHUNK_OTHER: CONSTANTS.RAG_CHUNK_OTHER,
+    RAG_TOP_K:
+      env.RAG_TOP_K !== undefined && env.RAG_TOP_K !== ""
+        ? Number.parseInt(env.RAG_TOP_K, 10)
+        : CONSTANTS.DEFAULT_RAG_TOP_K,
+    RAG_RERANK_K:
+      env.RAG_RERANK_K !== undefined && env.RAG_RERANK_K !== ""
+        ? Number.parseInt(env.RAG_RERANK_K, 10)
+        : CONSTANTS.DEFAULT_RAG_RERANK_K,
+    RAG_MIN_SCORE:
+      env.RAG_MIN_SCORE !== undefined && env.RAG_MIN_SCORE !== ""
+        ? Number.parseFloat(env.RAG_MIN_SCORE)
+        : CONSTANTS.DEFAULT_RAG_MIN_SCORE,
+    RAG_TIMEOUT_MS:
+      env.RAG_TIMEOUT_MS !== undefined && env.RAG_TIMEOUT_MS !== ""
+        ? Number.parseInt(env.RAG_TIMEOUT_MS, 10)
+        : CONSTANTS.DEFAULT_RAG_TIMEOUT_MS,
+    SCHEDULER_TICK_S:
+      env.SCHEDULER_TICK_S !== undefined && env.SCHEDULER_TICK_S !== ""
+        ? Number.parseInt(env.SCHEDULER_TICK_S, 10)
+        : CONSTANTS.SCHEDULER_TICK_S,
+    SCHEDULER_JITTER_S:
+      env.SCHEDULER_JITTER_S !== undefined && env.SCHEDULER_JITTER_S !== ""
+        ? Number.parseInt(env.SCHEDULER_JITTER_S, 10)
+        : CONSTANTS.SCHEDULER_JITTER_S,
+    SCHEDULER_MAX_TIMERS:
+      env.SCHEDULER_MAX_TIMERS !== undefined && env.SCHEDULER_MAX_TIMERS !== ""
+        ? Number.parseInt(env.SCHEDULER_MAX_TIMERS, 10)
+        : CONSTANTS.SCHEDULER_MAX_TIMERS,
     EVIDENCE_HASH: "sha256",
     EVIDENCE_KEY_ENV: evidenceKeyEnv,
     EVIDENCE_DB_URL: evidenceDbUrlRaw,
@@ -699,23 +788,39 @@ export function loadConfig(
     REVIEW_CHALLENGE_BLOCKING: reviewChallengeBlocking,
     WATCHER_POLL_INTERVAL_MS: watcherPollIntervalMs,
     WEBHOOK_INGEST_SECRET_ENV:
-      env.WEBHOOK_INGEST_SECRET_ENV ?? "WEBHOOK_INGEST_SECRET",
+      env.WEBHOOK_INGEST_SECRET_ENV !== undefined &&
+      env.WEBHOOK_INGEST_SECRET_ENV !== ""
+        ? env.WEBHOOK_INGEST_SECRET_ENV
+        : CONSTANTS.WEBHOOK_INGEST_SECRET_ENV,
     ATTACHMENT_MAX_MB: attachmentMaxMb,
-    RETENTION_NOTICE_YEARS: env.RETENTION_NOTICE_YEARS
-      ? Number.parseInt(env.RETENTION_NOTICE_YEARS, 10)
-      : 6,
+    RETENTION_NOTICE_YEARS:
+      env.RETENTION_NOTICE_YEARS !== undefined &&
+      env.RETENTION_NOTICE_YEARS !== ""
+        ? Number.parseInt(env.RETENTION_NOTICE_YEARS, 10)
+        : CONSTANTS.RETENTION_NOTICE_YEARS,
     INDICATOR_WEBHOOK_URL: env.INDICATOR_WEBHOOK_URL,
     INDICATOR_WEBHOOK_SECRET_ENV: env.INDICATOR_WEBHOOK_SECRET_ENV,
-    INDICATOR_SPOOL_MAX: env.INDICATOR_SPOOL_MAX
-      ? Number.parseInt(env.INDICATOR_SPOOL_MAX, 10)
-      : 10000,
+    INDICATOR_SPOOL_MAX:
+      env.INDICATOR_SPOOL_MAX !== undefined && env.INDICATOR_SPOOL_MAX !== ""
+        ? Number.parseInt(env.INDICATOR_SPOOL_MAX, 10)
+        : CONSTANTS.INDICATOR_SPOOL_MAX,
     LOG_PII: false,
-    LEASE_TTL_S: env.LEASE_TTL_S ? Number.parseInt(env.LEASE_TTL_S, 10) : 300,
-    LEASE_RENEW_S: env.LEASE_RENEW_S
-      ? Number.parseInt(env.LEASE_RENEW_S, 10)
-      : 60,
-    DEPLOY_PORT: env.DEPLOY_PORT ? Number.parseInt(env.DEPLOY_PORT, 10) : 8080,
-    DEPLOY_DATA_DIR: env.DEPLOY_DATA_DIR ?? "/app/data",
+    LEASE_TTL_S:
+      env.LEASE_TTL_S !== undefined && env.LEASE_TTL_S !== ""
+        ? Number.parseInt(env.LEASE_TTL_S, 10)
+        : CONSTANTS.LEASE_TTL_S,
+    LEASE_RENEW_S:
+      env.LEASE_RENEW_S !== undefined && env.LEASE_RENEW_S !== ""
+        ? Number.parseInt(env.LEASE_RENEW_S, 10)
+        : CONSTANTS.LEASE_RENEW_S,
+    DEPLOY_PORT:
+      env.DEPLOY_PORT !== undefined && env.DEPLOY_PORT !== ""
+        ? Number.parseInt(env.DEPLOY_PORT, 10)
+        : CONSTANTS.DEPLOY_PORT,
+    DEPLOY_DATA_DIR:
+      env.DEPLOY_DATA_DIR !== undefined && env.DEPLOY_DATA_DIR !== ""
+        ? env.DEPLOY_DATA_DIR
+        : CONSTANTS.DEPLOY_DATA_DIR,
     PRESIDIO_URL: presidioUrl,
     PRESIDIO_IMAGE: presidioImage,
     PRESIDIO_MODEL: presidioModel,
@@ -728,4 +833,4 @@ export function loadConfig(
 export * from "@pims/config/env-matrix.ts";
 export * from "@pims/config/env-schema.ts";
 export * from "@pims/config/stack-def.ts";
-export { CONSTANTS } from "@pims/types/constants.ts";
+export { CONSTANTS };

@@ -7,7 +7,7 @@ import type {
   SchedulerArmArgs,
   TimerKind,
 } from "@pims/types/agent.ts";
-import { DEFAULT_RETRY_BACKOFF_MS } from "@pims/types/constants.ts";
+import { CONSTANTS } from "@pims/types/constants.ts";
 import {
   PimsClientBugError,
   PimsValidationError,
@@ -281,7 +281,7 @@ export class DeadlineScheduler {
     if (existing !== undefined) {
       return;
     }
-    const backoffMs = DEFAULT_RETRY_BACKOFF_MS[0];
+    const backoffMs = CONSTANTS.DEFAULT_RETRY_BACKOFF_MS[0];
     const jittered = Math.round(backoffMs * (1 + this.random() * 0.1));
     const timerId = `timer:${incidentCode}:T_RETRY:${crypto.randomUUID()}`;
     await this.store.armTimer({

@@ -1,11 +1,4 @@
-import {
-  DEFAULT_EMBEDDING_DIM,
-  MODEL_ROUTE_RAG,
-  RAG_BM25_K,
-  RAG_DENSE_K,
-  RAG_EMBED_BATCH_SIZE,
-  RAG_EMBED_CONCURRENCY,
-} from "@pims/types/constants.ts";
+import { CONSTANTS } from "@pims/types/constants.ts";
 import {
   ModelUnavailableError,
   RagIndexError,
@@ -64,7 +57,7 @@ export class RagIndexer {
         normative boolean NOT NULL,
         header text NOT NULL,
         text text NOT NULL,
-        embedding vector(${DEFAULT_EMBEDDING_DIM})
+        embedding vector(${CONSTANTS.DEFAULT_EMBEDDING_DIM})
       );`);
     await this.pgClient.unsafe(`CREATE TABLE IF NOT EXISTS rag_corpus_metadata (
         key text PRIMARY KEY,
@@ -76,14 +69,14 @@ export class RagIndexer {
   async indexCorpus(
     chunks: CorpusChunk[],
     version: string,
-    batchSize = RAG_EMBED_BATCH_SIZE,
+    batchSize = CONSTANTS.RAG_EMBED_BATCH_SIZE,
   ): Promise<void> {
     if (this.isIngesting) {
       throw new RagIngestLockedError(
         "RAG ingestion is currently locked by an active process",
       );
     }
-    if (batchSize <= 0 || batchSize > RAG_EMBED_BATCH_SIZE) {
+    if (batchSize <= 0 || batchSize > CONSTANTS.RAG_EMBED_BATCH_SIZE) {
       throw new RagIndexError(`Invalid embed batch size: ${batchSize}`);
     }
 
@@ -127,7 +120,7 @@ export class RagIndexer {
           batches.push(chunks.slice(i, i + batchSize));
         }
 
-        const CONCURRENCY = RAG_EMBED_CONCURRENCY;
+        const CONCURRENCY = CONSTANTS.RAG_EMBED_CONCURRENCY;
         for (let i = 0; i < batches.length; i += CONCURRENCY) {
           const currentGroup = batches.slice(i, i + CONCURRENCY);
           await Promise.all(
@@ -148,7 +141,7 @@ export class RagIndexer {
                   `;
                 } else
                   throw new ModelUnavailableError(
-                    MODEL_ROUTE_RAG,
+                    CONSTANTS.MODEL_ROUTE_RAG,
                     "embed response missing vector for chunk",
                   );
               }
@@ -171,7 +164,7 @@ export class RagIndexer {
 
   searchBM25(
     query: string,
-    limit = RAG_BM25_K,
+    limit = CONSTANTS.RAG_BM25_K,
   ): Array<{ chunk_id: string; score: number }> {
     const results = this.miniSearch.search(query);
     return results.slice(0, limit).map((r) => ({
@@ -182,11 +175,11 @@ export class RagIndexer {
 
   async searchPgvector(
     vector: number[],
-    limit = RAG_DENSE_K,
+    limit = CONSTANTS.RAG_DENSE_K,
   ): Promise<Array<{ chunk_id: string; score: number }>> {
     if (!this.pgClient) {
       throw new ModelUnavailableError(
-        MODEL_ROUTE_RAG,
+        CONSTANTS.MODEL_ROUTE_RAG,
         "pgvector client is not configured",
       );
     }

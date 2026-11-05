@@ -9,7 +9,7 @@ import {
   type SkillName,
   type ToolName,
 } from "@pims/types/agent.ts";
-import { ROLE_PROMPT_VERSION } from "@pims/types/constants.ts";
+import { CONSTANTS } from "@pims/types/constants.ts";
 import {
   PimsClientBugError,
   RoleToolDeniedError,
@@ -202,7 +202,7 @@ function buildRoleDefinitions(): Record<AgentRole, RoleDefinition> {
     const systemPrompt = ROLE_PROMPTS[role];
     definitions[role] = {
       role,
-      prompt_version: ROLE_PROMPT_VERSION,
+      prompt_version: CONSTANTS.ROLE_PROMPT_VERSION,
       prompt_sha256: sha256Hex(systemPrompt),
       system_prompt: systemPrompt,
       autonomy: ROLE_AUTONOMY[role],

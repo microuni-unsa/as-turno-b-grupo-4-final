@@ -4,7 +4,7 @@ import {
   PimsGateBlockedError,
   PimsThrottledError,
 } from "@pims/types";
-import { PIMS_TEST_SEED_PASSWORD } from "@pims/types/constants.ts";
+import { CONSTANTS } from "@pims/types/constants.ts";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 describe("PIMS Adapter Unit & Resilience Suite", () => {
@@ -15,7 +15,7 @@ describe("PIMS Adapter Unit & Resilience Suite", () => {
       baseUrl: "https://mock.pims.test",
       schema: "unsa",
       username: "admin",
-      password: PIMS_TEST_SEED_PASSWORD,
+      password: CONSTANTS.PIMS_TEST_SEED_PASSWORD,
       timeoutMs: 5000,
       maxRetries: 2,
     });

@@ -1,9 +1,5 @@
 import path from "node:path";
-import {
-  ATTACHMENT_EXTENSIONS,
-  MAX_ATTACHMENT_SIZE_MB,
-  MAX_FILENAME_LENGTH,
-} from "@pims/types/constants.ts";
+import { CONSTANTS } from "@pims/types/constants.ts";
 import {
   AttachmentRejectedError,
   PathEscapeError,
@@ -11,10 +7,11 @@ import {
 import { zodIssuesToDetails } from "@pims/types/validation.ts";
 import { z } from "zod";
 
-export type AllowedAttachmentExtension = (typeof ATTACHMENT_EXTENSIONS)[number];
+export type AllowedAttachmentExtension =
+  (typeof CONSTANTS.ATTACHMENT_EXTENSIONS)[number];
 
 export const AttachmentMetaSchema = z.object({
-  fileName: z.string().min(1).max(MAX_FILENAME_LENGTH),
+  fileName: z.string().min(1).max(CONSTANTS.MAX_FILENAME_LENGTH),
   bytes: z.number().int().nonnegative(),
 });
 
@@ -48,7 +45,9 @@ export function parseAttachmentExtension(
 ): AllowedAttachmentExtension {
   const safeName = assertSafeFileName(fileName);
   const ext = path.extname(safeName).slice(1).toLowerCase();
-  if (!ATTACHMENT_EXTENSIONS.includes(ext as AllowedAttachmentExtension)) {
+  if (
+    !CONSTANTS.ATTACHMENT_EXTENSIONS.includes(ext as AllowedAttachmentExtension)
+  ) {
     throw new AttachmentRejectedError(`disallowed_extension:${ext}`);
   }
   return ext as AllowedAttachmentExtension;
@@ -57,7 +56,7 @@ export function parseAttachmentExtension(
 export function assertAttachmentMeta(
   fileName: string,
   bytes: number,
-  maxSizeMb: number = MAX_ATTACHMENT_SIZE_MB,
+  maxSizeMb: number = CONSTANTS.MAX_ATTACHMENT_SIZE_MB,
 ): AllowedAttachmentExtension {
   const meta = AttachmentMetaSchema.safeParse({ fileName, bytes });
   if (!meta.success) {

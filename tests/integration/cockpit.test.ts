@@ -1,7 +1,7 @@
 import { createCockpitApp } from "@pims/cockpit/app.ts";
 import { SessionRegistry } from "@pims/cockpit/auth.ts";
 import type { CockpitSession } from "@pims/types/cockpit.ts";
-import { PIMS_TEST_SEED_PASSWORD } from "@pims/types/constants.ts";
+import { CONSTANTS } from "@pims/types/constants.ts";
 import type { ChatJsonArgs, JsonObject } from "@pims/types/models.ts";
 import {
   type IntegrationHarness,
@@ -152,7 +152,7 @@ describe("Cockpit backend", { timeout: 240_000 }, () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         username: "admin",
-        password: PIMS_TEST_SEED_PASSWORD,
+        password: CONSTANTS.PIMS_TEST_SEED_PASSWORD,
       }),
     });
     expect(response.status).toBe(200);

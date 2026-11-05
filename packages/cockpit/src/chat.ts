@@ -26,7 +26,7 @@ import type {
   ChatTraceSpan,
   CockpitSession,
 } from "@pims/types/cockpit.ts";
-import { MODEL_ROUTE_REASONING } from "@pims/types/constants.ts";
+import { CONSTANTS } from "@pims/types/constants.ts";
 import {
   CitationFabricatedError,
   CockpitChatInvalidError,
@@ -412,10 +412,10 @@ export async function handleChat(
   const response = await instrumentSpan(
     "model_reasoning",
     "model",
-    { route: MODEL_ROUTE_REASONING, persona, max_tokens: 4096 },
+    { route: CONSTANTS.MODEL_ROUTE_REASONING, persona, max_tokens: 4096 },
     () =>
       deps.modelClient.chat_json({
-        route: MODEL_ROUTE_REASONING,
+        route: CONSTANTS.MODEL_ROUTE_REASONING,
         system: `${PERSONA_PROMPTS[persona]} ${RESPONSE_CONTRACT}`,
         messages: [{ role: "user", content: serializedContext }],
         max_tokens: 4096,

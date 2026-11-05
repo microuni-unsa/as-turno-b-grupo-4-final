@@ -13,7 +13,7 @@ import {
   GuidedReportingSchema,
   type PresidioRecognizerResult,
 } from "@pims/types/cockpit.ts";
-import { MODEL_ROUTE_FAST } from "@pims/types/constants.ts";
+import { CONSTANTS } from "@pims/types/constants.ts";
 import { FormNarrativeTooLongError } from "@pims/types/errors.ts";
 import type { JsonObject } from "@pims/types/models.ts";
 import {
@@ -644,7 +644,7 @@ export async function draftGuidedIncident(
   const today = formatTodayDate(now);
 
   const chatResponse = await deps.modelClient.chat_json({
-    route: MODEL_ROUTE_FAST,
+    route: CONSTANTS.MODEL_ROUTE_FAST,
     system: `${GUIDED_DRAFT_SYSTEM}\nPrompt SHA: GUIDED_DRAFT_v1.0`,
     messages: [
       {
@@ -1052,7 +1052,7 @@ export async function explainField(
 
   const explainPrompt = `Explain the regulatory significance (GDPR Art 33/34, ISO 27701) and instructions for the incident reporting field "${field}". Ground your explanation in the citations.`;
   const response = await deps.modelClient.chat_json({
-    route: MODEL_ROUTE_FAST,
+    route: CONSTANTS.MODEL_ROUTE_FAST,
     system: `You are an expert incident privacy officer. Answer in concise Spanish explaining the field. Prompt SHA: GUIDED_EXPLAIN_v1.0. Citations: ${ragResult.citations.join("; ")}`,
     messages: [{ role: "user", content: explainPrompt }],
     max_tokens: 1024,

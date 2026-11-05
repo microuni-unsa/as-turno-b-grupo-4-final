@@ -34,7 +34,7 @@ import {
 } from "@pims/pims-mock";
 import { RAGService, RagIndexer } from "@pims/rag";
 import type { AgentRole, ToolName } from "@pims/types/agent.ts";
-import { PIMS_TEST_SEED_PASSWORD } from "@pims/types/constants.ts";
+import { CONSTANTS } from "@pims/types/constants.ts";
 import type { TimerRecord } from "@pims/types/evidence.ts";
 import type { JsonObject } from "@pims/types/models.ts";
 import type { AuthorityNoticePack } from "@pims/types/notices.ts";
@@ -199,7 +199,7 @@ describe("Agent Tool Registry integration suite", {
       baseUrl: serverInstance.url,
       schema: "unsa",
       username: "admin",
-      password: PIMS_TEST_SEED_PASSWORD,
+      password: CONSTANTS.PIMS_TEST_SEED_PASSWORD,
       timeoutMs: 15_000,
     });
 

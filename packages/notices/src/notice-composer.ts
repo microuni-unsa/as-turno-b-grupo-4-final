@@ -17,10 +17,7 @@ import {
   SubjectNoticePackSchema,
   type SubjectNoticeState,
 } from "@pims/types";
-import {
-  HIGH_RISK_SUBJECT_THRESHOLD,
-  PLAIN_LANGUAGE_MAX_WORDS,
-} from "@pims/types/constants.ts";
+import { CONSTANTS } from "@pims/types/constants.ts";
 import {
   ArtifactIncompleteError,
   PimsValidationError,
@@ -64,8 +61,11 @@ export class NoticeComposer {
   private readonly maxWords: number;
 
   constructor(options: NoticeComposerOptions = {}) {
-    this.now = options.now ?? (() => new Date());
-    this.maxWords = options.maxWords ?? PLAIN_LANGUAGE_MAX_WORDS;
+    this.now = options.now !== undefined ? options.now : () => new Date();
+    this.maxWords =
+      options.maxWords !== undefined
+        ? options.maxWords
+        : CONSTANTS.PLAIN_LANGUAGE_MAX_WORDS;
   }
 
   composeAuthorityPack(
@@ -101,11 +101,13 @@ export class NoticeComposer {
       }
     }
 
+    const packId =
+      input.pack_id !== undefined ? input.pack_id : crypto.randomUUID();
     const pack: AuthorityNoticePack = {
       ...input,
       pack: "authority",
       jurisdiction: "EU_GDPR",
-      pack_id: input.pack_id ?? crypto.randomUUID(),
+      pack_id: packId,
     };
 
     return AuthorityNoticePackSchema.parse(pack);
@@ -134,7 +136,7 @@ export class NoticeComposer {
     }
     if (
       input.numAffectedSubjects !== null &&
-      input.numAffectedSubjects >= HIGH_RISK_SUBJECT_THRESHOLD
+      input.numAffectedSubjects >= CONSTANTS.HIGH_RISK_SUBJECT_THRESHOLD
     ) {
       triggers.push("num_affected_subjects>=100");
     }
@@ -164,10 +166,15 @@ export class NoticeComposer {
       );
     }
 
-    const evaluation = params.exemptionEvaluation ?? null;
-    const reviewApprovalId = params.reviewApprovalId ?? null;
-    const lang = params.lang ?? "es";
-    const packId = params.packId ?? crypto.randomUUID();
+    const evaluation =
+      params.exemptionEvaluation !== undefined
+        ? params.exemptionEvaluation
+        : null;
+    const reviewApprovalId =
+      params.reviewApprovalId !== undefined ? params.reviewApprovalId : null;
+    const lang = params.lang !== undefined ? params.lang : "es";
+    const packId =
+      params.packId !== undefined ? params.packId : crypto.randomUUID();
 
     if (!gate.verdict && evaluation?.kind === "exempted") {
       throw new ArtifactIncompleteError(
@@ -238,7 +245,7 @@ export class NoticeComposer {
       exemption = candidate;
       state = "exempted";
     } else {
-      state = params.state ?? "draft";
+      state = params.state !== undefined ? params.state : "draft";
       if (state === "exempted" || state === "not_required") {
         throw new ArtifactIncompleteError("subject", "state_inconsistent");
       }
@@ -249,9 +256,10 @@ export class NoticeComposer {
     }
 
     PlainLanguageValidator.validate(params.bodyPlain, {
-      ...params.waivers,
       locale: lang,
       maxWords: this.maxWords,
+      plainLanguageWaiver: params.waivers?.plainLanguageWaiver,
+      numericApprovals: params.waivers?.numericApprovals,
     });
 
     const pack: SubjectNoticePack = {

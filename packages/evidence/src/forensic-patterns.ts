@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 import net from "node:net";
-import { PII_PHONE_REGIONS } from "@pims/types/constants.ts";
+import { CONSTANTS } from "@pims/types/constants.ts";
 import { AttachmentRejectedError } from "@pims/types/errors.ts";
 import { findPhoneNumbersInText } from "libphonenumber-js";
 import { parse as parseDomain } from "tldts";
@@ -130,7 +130,7 @@ export function extractPii(text: string): string[] {
     ...collectAll(IPV6_CANDIDATE, text),
   ].filter((span) => net.isIP(span[0]) !== 0);
 
-  for (const region of PII_PHONE_REGIONS) {
+  for (const region of CONSTANTS.PII_PHONE_REGIONS) {
     for (const match of findPhoneNumbersInText(text, region)) {
       const overlapsIp = ipSpans.some(
         (span) =>

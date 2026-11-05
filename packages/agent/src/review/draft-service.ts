@@ -19,7 +19,7 @@ import type {
   NumericApproval,
   SubjectNoticePack,
 } from "@pims/types";
-import { MODEL_ROUTE_REASONING } from "@pims/types/constants.ts";
+import { CONSTANTS } from "@pims/types/constants.ts";
 import {
   ArtifactIncompleteError,
   ConfigError,
@@ -356,7 +356,7 @@ function parseResponse<T>(
   const parsed = schema.safeParse(content);
   if (!parsed.success) {
     throw new ModelSchemaViolationError(
-      MODEL_ROUTE_REASONING,
+      CONSTANTS.MODEL_ROUTE_REASONING,
       `Invalid ${artifact} draft response: ${parsed.error.message}`,
       { issues: zodIssuesToDetails(parsed.error) },
     );
@@ -440,7 +440,7 @@ export class NoticeDraftService {
       json_schema: AUTHORITY_JSON_SCHEMA,
       max_tokens: AUTHORITY_MAX_TOKENS,
       temperature: this.config.TEMP_REASONING,
-      route: MODEL_ROUTE_REASONING,
+      route: CONSTANTS.MODEL_ROUTE_REASONING,
     });
 
     const draft: AuthorityResponse = parseResponse(
@@ -626,7 +626,7 @@ export class NoticeDraftService {
       json_schema: SUBJECT_JSON_SCHEMA,
       max_tokens: SUBJECT_MAX_TOKENS,
       temperature: this.config.TEMP_REASONING,
-      route: MODEL_ROUTE_REASONING,
+      route: CONSTANTS.MODEL_ROUTE_REASONING,
     });
 
     const draft: SubjectResponse = parseResponse(
@@ -694,7 +694,7 @@ export class NoticeDraftService {
       json_schema: RESOLUTION_JSON_SCHEMA,
       max_tokens: RESOLUTION_MAX_TOKENS,
       temperature: this.config.TEMP_REASONING,
-      route: MODEL_ROUTE_REASONING,
+      route: CONSTANTS.MODEL_ROUTE_REASONING,
     });
 
     const draft: ResolutionResponse = parseResponse(

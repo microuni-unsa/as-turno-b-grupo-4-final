@@ -34,7 +34,7 @@ import {
   type IntakePayload,
   IntakePayloadSchema,
 } from "@pims/types/agent.ts";
-import { PIMS_TEST_SEED_PASSWORD } from "@pims/types/constants.ts";
+import { CONSTANTS } from "@pims/types/constants.ts";
 import type { IndicatorSpoolRecord } from "@pims/types/evidence.ts";
 import type { JsonObject, RankedPassage } from "@pims/types/models.ts";
 import {
@@ -154,7 +154,7 @@ describe("Phase 4 autonomous lifecycle loop (§6, §9, §14.2)", {
       baseUrl: server.url,
       schema: "unsa",
       username: "admin",
-      password: PIMS_TEST_SEED_PASSWORD,
+      password: CONSTANTS.PIMS_TEST_SEED_PASSWORD,
       timeoutMs: 15000,
     });
 
@@ -384,7 +384,7 @@ describe("Phase 4 autonomous lifecycle loop (§6, §9, §14.2)", {
       PIMS_BASE_URL: server.url,
       PIMS_SCHEMA: "unsa",
       PIMS_USERNAME: "admin",
-      PIMS_PASSWORD: PIMS_TEST_SEED_PASSWORD,
+      PIMS_PASSWORD: CONSTANTS.PIMS_TEST_SEED_PASSWORD,
       EVIDENCE_DB_URL: container.getConnectionUri(),
       OPENAI_API_KEY: "lifecycle-loop-test-key",
       REASONING_MODEL:

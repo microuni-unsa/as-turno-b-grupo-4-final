@@ -37,7 +37,7 @@ import {
   type IntakePayload,
   IntakePayloadSchema,
 } from "@pims/types/agent.ts";
-import { PIMS_TEST_SEED_PASSWORD } from "@pims/types/constants.ts";
+import { CONSTANTS } from "@pims/types/constants.ts";
 import type { JsonObject, RankedPassage } from "@pims/types/models.ts";
 import type { StartedPostgreSqlContainer } from "@testcontainers/postgresql";
 import {
@@ -141,7 +141,7 @@ export async function startIntegrationHarness(options?: {
     baseUrl: server.url,
     schema: "unsa",
     username: "admin",
-    password: PIMS_TEST_SEED_PASSWORD,
+    password: CONSTANTS.PIMS_TEST_SEED_PASSWORD,
     timeoutMs: 15000,
   });
 
@@ -378,7 +378,7 @@ export async function startIntegrationHarness(options?: {
     PIMS_BASE_URL: server.url,
     PIMS_SCHEMA: "unsa",
     PIMS_USERNAME: "admin",
-    PIMS_PASSWORD: PIMS_TEST_SEED_PASSWORD,
+    PIMS_PASSWORD: CONSTANTS.PIMS_TEST_SEED_PASSWORD,
     EVIDENCE_DB_URL: container.getConnectionUri(),
     OPENAI_API_KEY: "integration-test-key",
     REASONING_MODEL:

@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import type { AgentConfig } from "@pims/config";
 import type { PimsAdapter, PimsRequestOverrides } from "@pims/pims-adapter";
-import { AUDIT_TRAIL_ALLOWED_ARG_KEYS } from "@pims/types/constants.ts";
+import { CONSTANTS } from "@pims/types/constants.ts";
 import { HistoryGapError, PimsNotFoundError } from "@pims/types/errors.ts";
 import { type JsonObject, JsonObjectSchema } from "@pims/types/models.ts";
 import type {
@@ -12,7 +12,7 @@ import type {
 } from "@pims/types/pims.ts";
 
 const ALLOWED_LEDGER_KEYS: ReadonlySet<string> = new Set(
-  AUDIT_TRAIL_ALLOWED_ARG_KEYS,
+  CONSTANTS.AUDIT_TRAIL_ALLOWED_ARG_KEYS,
 );
 
 export function idempotencyKey(

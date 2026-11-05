@@ -1,13 +1,5 @@
 import type { ModelConfig } from "@pims/config";
-import {
-  DEFAULT_RAG_RERANK_K,
-  MAX_CHAT_MAX_TOKENS,
-  MODEL_ROUTE_EMBEDDINGS,
-  MODEL_ROUTE_FAST,
-  MODEL_ROUTE_OPENAI,
-  MODEL_ROUTE_RERANKER,
-  MODEL_ROUTE_VISION,
-} from "@pims/types/constants.ts";
+import { CONSTANTS } from "@pims/types/constants.ts";
 import {
   CitationFabricatedError,
   CitationInvalidError,
@@ -122,7 +114,7 @@ export class OpenAIModelProvider implements ModelProvider {
   constructor(options: OpenAIProviderOptions) {
     if (!options.apiKey || options.apiKey.trim() === "") {
       throw new ModelUnavailableError(
-        MODEL_ROUTE_OPENAI,
+        CONSTANTS.MODEL_ROUTE_OPENAI,
         "API key is missing or empty",
       );
     }
@@ -133,37 +125,37 @@ export class OpenAIModelProvider implements ModelProvider {
     });
     if (!validation.success) {
       throw new ModelUnavailableError(
-        MODEL_ROUTE_OPENAI,
+        CONSTANTS.MODEL_ROUTE_OPENAI,
         `Invalid provider options: ${validation.error.message}`,
       );
     }
     if (!options.reasoningConfig) {
       throw new ModelUnavailableError(
-        MODEL_ROUTE_OPENAI,
+        CONSTANTS.MODEL_ROUTE_OPENAI,
         "reasoningConfig is required",
       );
     }
     if (!options.fastConfig) {
       throw new ModelUnavailableError(
-        MODEL_ROUTE_OPENAI,
+        CONSTANTS.MODEL_ROUTE_OPENAI,
         "fastConfig is required",
       );
     }
     if (!options.visionConfig) {
       throw new ModelUnavailableError(
-        MODEL_ROUTE_OPENAI,
+        CONSTANTS.MODEL_ROUTE_OPENAI,
         "visionConfig is required",
       );
     }
     if (!options.embeddingsConfig) {
       throw new ModelUnavailableError(
-        MODEL_ROUTE_OPENAI,
+        CONSTANTS.MODEL_ROUTE_OPENAI,
         "embeddingsConfig is required",
       );
     }
     if (!options.rerankerConfig) {
       throw new ModelUnavailableError(
-        MODEL_ROUTE_OPENAI,
+        CONSTANTS.MODEL_ROUTE_OPENAI,
         "rerankerConfig is required",
       );
     }
@@ -175,7 +167,10 @@ export class OpenAIModelProvider implements ModelProvider {
     this.apiKey = options.apiKey;
     this.defaultBaseURL = options.baseURL;
     this.cohereApiKey = options.cohereApiKey;
-    this.requestLogprobs = options.requestLogprobs ?? true;
+    this.requestLogprobs =
+      options.requestLogprobs !== undefined
+        ? options.requestLogprobs
+        : CONSTANTS.DEFAULT_MODEL_LOGPROBS;
   }
 
   private resolveEndpoint(config: ModelConfig, route: string): string {
@@ -242,11 +237,13 @@ export class OpenAIModelProvider implements ModelProvider {
   async chat_json(args: ChatJsonArgs): Promise<ChatJsonResponse> {
     const route = args.route;
     const config =
-      route === MODEL_ROUTE_FAST ? this.fastConfig : this.reasoningConfig;
-    if (args.max_tokens > MAX_CHAT_MAX_TOKENS) {
+      route === CONSTANTS.MODEL_ROUTE_FAST
+        ? this.fastConfig
+        : this.reasoningConfig;
+    if (args.max_tokens > CONSTANTS.MAX_CHAT_MAX_TOKENS) {
       throw new ModelSchemaViolationError(
         route,
-        `max_tokens ${args.max_tokens} exceeds limit ${MAX_CHAT_MAX_TOKENS}`,
+        `max_tokens ${args.max_tokens} exceeds limit ${CONSTANTS.MAX_CHAT_MAX_TOKENS}`,
       );
     }
     const client = this.getClient(config, route);
@@ -359,19 +356,36 @@ export class OpenAIModelProvider implements ModelProvider {
   }
 
   async vision_json(args: VisionJsonArgs): Promise<VisionJsonResponse> {
-    const route = MODEL_ROUTE_VISION;
+    const route = CONSTANTS.MODEL_ROUTE_VISION;
     const config = this.visionConfig;
-    if (args.max_tokens > MAX_CHAT_MAX_TOKENS) {
+    if (args.max_tokens > CONSTANTS.MAX_CHAT_MAX_TOKENS) {
       throw new ModelSchemaViolationError(
         route,
-        `max_tokens ${args.max_tokens} exceeds limit ${MAX_CHAT_MAX_TOKENS}`,
+        `max_tokens ${args.max_tokens} exceeds limit ${CONSTANTS.MAX_CHAT_MAX_TOKENS}`,
       );
     }
     const client = this.getClient(config, route);
 
-    const imageUrl = args.image_or_pdf_ref.startsWith("data:")
-      ? args.image_or_pdf_ref
-      : `data:image/jpeg;base64,${args.image_or_pdf_ref}`;
+    let imageUrl: string;
+    if (args.image_or_pdf_ref.startsWith("data:")) {
+      imageUrl = args.image_or_pdf_ref;
+    } else if (
+      args.image_or_pdf_ref.startsWith("http://") ||
+      args.image_or_pdf_ref.startsWith("https://")
+    ) {
+      imageUrl = args.image_or_pdf_ref;
+    } else {
+      const trimmed = args.image_or_pdf_ref.trim();
+      const isBase64 =
+        trimmed.length > 0 && /^[A-Za-z0-9+/=_-]+$/.test(trimmed);
+      if (!isBase64) {
+        throw new ModelUnavailableError(
+          route,
+          "Invalid image_or_pdf_ref: must be a data URI, HTTP(S) URI, or valid base64 string",
+        );
+      }
+      imageUrl = `data:image/jpeg;base64,${trimmed}`;
+    }
 
     try {
       const response = await client.chat.completions.create({
@@ -419,7 +433,7 @@ export class OpenAIModelProvider implements ModelProvider {
   }
 
   async embed(args: EmbedArgs): Promise<EmbedResponse> {
-    const route = MODEL_ROUTE_EMBEDDINGS;
+    const route = CONSTANTS.MODEL_ROUTE_EMBEDDINGS;
     const config = this.embeddingsConfig;
     const client = this.getClient(config, route);
 
@@ -453,7 +467,7 @@ export class OpenAIModelProvider implements ModelProvider {
   }
 
   async rerank(args: RerankArgs): Promise<RerankResponse> {
-    const route = MODEL_ROUTE_RERANKER;
+    const route = CONSTANTS.MODEL_ROUTE_RERANKER;
     const config = this.rerankerConfig;
 
     if (args.passages.length === 0) {
@@ -484,7 +498,10 @@ export class OpenAIModelProvider implements ModelProvider {
         model: config.model,
         query: args.query,
         documents: args.passages.map((p) => p.text),
-        top_n: Math.min(args.passages.length, DEFAULT_RAG_RERANK_K * 2),
+        top_n: Math.min(
+          args.passages.length,
+          CONSTANTS.DEFAULT_RAG_RERANK_K * 2,
+        ),
       };
 
       try {

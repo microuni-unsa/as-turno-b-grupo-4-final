@@ -1,4 +1,4 @@
-import { SHA256_HEX_LENGTH } from "@pims/types/constants.ts";
+import { CONSTANTS } from "@pims/types/constants.ts";
 import {
   ACTION_TYPES,
   type AffectedDataType,
@@ -172,7 +172,7 @@ export type PlainLanguageValidationOptions = z.input<
 export const EncryptionProofAttestationSchema = z
   .object({
     incident_code: z.string().min(1),
-    source_file_sha256: z.string().length(SHA256_HEX_LENGTH),
+    source_file_sha256: z.string().length(CONSTANTS.SHA256_HEX_LENGTH),
     scope: z.enum(["encrypt_rest", "encrypt_transit"]),
     algorithm: z.string().min(1),
     key_management_ref: z.string().min(1),

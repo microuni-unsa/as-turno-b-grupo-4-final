@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 import { PimsAdapter } from "@pims/pims-adapter";
-import { BUNDLE_ATTACHMENT_NAME } from "@pims/types/constants.ts";
+import { CONSTANTS } from "@pims/types/constants.ts";
 import {
   AttachmentRejectedError,
   PimsValidationError,
@@ -90,7 +90,7 @@ describe("Live PIMS smoke (no daemon, watcher stopped)", () => {
       const uploaded = await adapter.uploadIncidentAttachment(
         created.id,
         Buffer.from(JSON.stringify({ smoke: true }), "utf8"),
-        BUNDLE_ATTACHMENT_NAME,
+        CONSTANTS.BUNDLE_ATTACHMENT_NAME,
       );
       expect(uploaded.length).toBeGreaterThan(0);
     } catch (error: unknown) {
@@ -100,7 +100,7 @@ describe("Live PIMS smoke (no daemon, watcher stopped)", () => {
       ) {
         jsonAttachmentAccepted = false;
         console.warn(
-          `ATTACHMENT_REJECTED:${error.code}:json; set BUNDLE_ATTACHMENT_NAME to bundle.json.txt`,
+          `ATTACHMENT_REJECTED:${error.code}:json; set CONSTANTS.BUNDLE_ATTACHMENT_NAME to bundle.json.txt`,
         );
       } else {
         throw error;
