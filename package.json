@@ -17,12 +17,12 @@
     "build:ui": "bun --filter @pims/cockpit build:ui",
     "start": "bun run packages/cockpit/src/server.ts",
     "build": "bun build packages/cockpit/src/server.ts --outdir dist --target bun --external cpu-features --external ssh2",
-    "dev": "microenv dev --def ./src/env-matrix.ts --stack ./src/stack-def.ts --preset dev --local",
+    "dev": "microenv dev --def ./packages/config/src/env-matrix.ts --stack ./packages/config/src/stack-def.ts --preset dev --local",
     "stack:dev": "bun run scripts/dev-stack.ts",
-    "env:check": "microenv check --def ./src/env-matrix.ts",
-    "env:diff": "microenv diff --def ./src/env-matrix.ts dev prod",
-    "env:materialize:dev": "microenv materialize --def ./src/env-matrix.ts --env dev --out .env --force",
-    "env:materialize:prod": "microenv materialize --def ./src/env-matrix.ts --env prod --out .env --force",
+    "env:check": "microenv check --def ./packages/config/src/env-matrix.ts",
+    "env:diff": "microenv diff --def ./packages/config/src/env-matrix.ts dev prod",
+    "env:materialize:dev": "microenv materialize --def ./packages/config/src/env-matrix.ts --env dev --out .env --force",
+    "env:materialize:prod": "microenv materialize --def ./packages/config/src/env-matrix.ts --env prod --out .env --force",
     "decrypt": "sops -d --output .env .enc.env"
   },
   "devDependencies": {
