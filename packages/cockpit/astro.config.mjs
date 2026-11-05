@@ -5,7 +5,7 @@ import { defineConfig } from "astro/config";
 // https://astro.build/config
 export default defineConfig({
   srcDir: "./src/ui",
-  outDir: "./dist/client",
+  outDir: "../../dist/client",
   server: {
     port: 4321,
   },

@@ -64,6 +64,7 @@ import {
 } from "@pims/types/errors.ts";
 import type { ExemptionEvaluationInput } from "@pims/types/notices.ts";
 import { Hono } from "hono";
+import { serveStatic } from "hono/bun";
 import { cors } from "hono/cors";
 import { streamSSE } from "hono/streaming";
 import { ZodError } from "zod";
@@ -934,6 +935,8 @@ export function createCockpitApp(deps: CockpitAppDeps): Hono<CockpitEnv> {
       readiness.ready ? 200 : 503,
     );
   });
+
+  app.use("/*", serveStatic({ root: "./dist/client" }));
 
   app.notFound((c) =>
     c.json(
