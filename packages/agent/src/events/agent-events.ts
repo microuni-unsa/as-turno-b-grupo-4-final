@@ -1,24 +1,25 @@
+import { EventEmitter } from "node:events";
 import type { AgentEvent } from "@pims/types/agent.ts";
 
 export type AgentEventListener = (event: AgentEvent) => void;
 
+const AGENT_EVENT = "agent_event";
+
 export class AgentEventEmitter {
-  private readonly listeners = new Set<AgentEventListener>();
+  private readonly emitter = new EventEmitter();
 
   emit(event: AgentEvent): void {
-    for (const listener of this.listeners) {
-      listener(event);
-    }
+    this.emitter.emit(AGENT_EVENT, event);
   }
 
   subscribe(listener: AgentEventListener): () => void {
-    this.listeners.add(listener);
+    this.emitter.on(AGENT_EVENT, listener);
     return () => {
-      this.listeners.delete(listener);
+      this.emitter.off(AGENT_EVENT, listener);
     };
   }
 
   get listenerCount(): number {
-    return this.listeners.size;
+    return this.emitter.listenerCount(AGENT_EVENT);
   }
 }

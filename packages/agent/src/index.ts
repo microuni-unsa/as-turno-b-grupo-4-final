@@ -31,6 +31,7 @@ import { NoticeComposer } from "@pims/notices/notice-composer.ts";
 import type { PimsAdapter } from "@pims/pims-adapter";
 import type { RAGService } from "@pims/rag";
 import type { PageAlert, ToolName } from "@pims/types/agent.ts";
+import { CONSTANTS } from "@pims/types/constants.ts";
 import { PimsClientBugError } from "@pims/types/errors.ts";
 import type { ModelProvider } from "@pims/types/models.ts";
 
@@ -96,28 +97,52 @@ function requireEffects(holder: {
     throw new PimsClientBugError(
       "DeadlineScheduler effects used before the orchestrator was wired",
     );
+  } else {
+    return holder.current;
   }
-  return holder.current;
 }
 
 export async function createAgent(
   deps: CreateAgentDeps,
   options?: CreateAgentOptions,
 ): Promise<Agent> {
-  const clock = deps.clock ?? (() => new Date());
+  let clock: () => Date;
+  if (deps.clock !== undefined) {
+    clock = deps.clock;
+  } else {
+    clock = () => new Date();
+  }
   const config = deps.config;
   const evidenceStore = deps.evidenceStore;
   const adapter = deps.adapter;
-  const bundleSealer = deps.bundleSealer ?? new BundleSealer(evidenceStore);
-  const composer = deps.composer ?? new NoticeComposer({ now: clock });
-  const exemptionEngine = deps.exemptionEngine ?? new ExemptionEngine();
-  const presidioClient =
-    deps.presidioClient ??
-    new PresidioClient({
+  let bundleSealer: BundleSealer;
+  if (deps.bundleSealer !== undefined) {
+    bundleSealer = deps.bundleSealer;
+  } else {
+    bundleSealer = new BundleSealer(evidenceStore);
+  }
+  let composer: NoticeComposer;
+  if (deps.composer !== undefined) {
+    composer = deps.composer;
+  } else {
+    composer = new NoticeComposer({ now: clock });
+  }
+  let exemptionEngine: ExemptionEngine;
+  if (deps.exemptionEngine !== undefined) {
+    exemptionEngine = deps.exemptionEngine;
+  } else {
+    exemptionEngine = new ExemptionEngine();
+  }
+  let presidioClient: PresidioClient;
+  if (deps.presidioClient !== undefined) {
+    presidioClient = deps.presidioClient;
+  } else {
+    presidioClient = new PresidioClient({
       baseUrl: config.PRESIDIO_URL,
       timeoutMs: config.PRESIDIO_TIMEOUT_MS,
       minScore: config.PRESIDIO_MIN_SCORE,
     });
+  }
   setGlobalPresidioClient(presidioClient);
   const modelClient = new AgentModelClient(deps.modelProvider, presidioClient);
 
@@ -134,13 +159,16 @@ export async function createAgent(
     fetchImpl: deps.fetchImpl,
   });
 
-  const page =
-    deps.page ??
-    ((alert: { incident_code: string; kind: string; reason: string }) => {
+  let page: (alert: PageAlert) => void;
+  if (deps.page !== undefined) {
+    page = deps.page;
+  } else {
+    page = (alert: { incident_code: string; kind: string; reason: string }) => {
       console.error(
-        `PAGE:${alert.kind}:${alert.incident_code}:${alert.reason}`,
+        `${CONSTANTS.PAGE_ALERT_PREFIX}${alert.kind}:${alert.incident_code}:${alert.reason}`,
       );
-    });
+    };
+  }
 
   const effectsHolder: { current: TimerEffects | null } = { current: null };
   const scheduler = new DeadlineScheduler({
@@ -231,9 +259,11 @@ export async function createAgent(
 
   if (options?.runProbes !== false) {
     const nestedAction = await adapter.probeNestedArrayMutationStrategy();
-    console.info(`NESTED_PROBE:${nestedAction}`);
+    console.info(`${CONSTANTS.PROBE_NESTED_PREFIX}${nestedAction}`);
     const nestedAudit = await adapter.probeAuditMutationStrategy();
-    console.info(`NESTED_PROBE:audit:${nestedAudit}`);
+    console.info(`${CONSTANTS.PROBE_AUDIT_PREFIX}${nestedAudit}`);
+  } else {
+    console.info(CONSTANTS.PROBES_SKIPPED);
   }
 
   return {

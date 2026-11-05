@@ -2,6 +2,7 @@ import {
   type PresidioRecognizerResult,
   PresidioRecognizerResultSchema,
 } from "@pims/types/cockpit.ts";
+import { CONSTANTS } from "@pims/types/constants.ts";
 import { PiiRedactionUnavailableError } from "@pims/types/errors.ts";
 import { z } from "zod";
 
@@ -26,7 +27,11 @@ export const ENTITY_TOKEN_MAP: Record<string, string> = {
 };
 
 export function tokenForEntity(entityType: string): string {
-  return ENTITY_TOKEN_MAP[entityType] ?? "[DESCRIPCION]";
+  const token = ENTITY_TOKEN_MAP[entityType];
+  if (token !== undefined) {
+    return token;
+  }
+  return "[DESCRIPCION]";
 }
 
 export class PresidioClient {
@@ -35,9 +40,18 @@ export class PresidioClient {
   readonly minScore: number;
 
   constructor(options: PresidioClientOptions) {
+    if (!options.baseUrl || options.baseUrl.trim().length === 0) {
+      throw new Error("Presidio baseUrl is required and cannot be empty");
+    }
     this.baseUrl = options.baseUrl.replace(/\/+$/, "");
-    this.timeoutMs = options.timeoutMs ?? 1500;
-    this.minScore = options.minScore ?? 0.5;
+    this.timeoutMs =
+      options.timeoutMs !== undefined
+        ? options.timeoutMs
+        : CONSTANTS.PRESIDIO_TIMEOUT_MS;
+    this.minScore =
+      options.minScore !== undefined
+        ? options.minScore
+        : CONSTANTS.PRESIDIO_MIN_SCORE;
   }
 
   async isHealthy(): Promise<boolean> {
@@ -72,8 +86,9 @@ export class PresidioClient {
       });
 
       if (!response.ok) {
+        const errorText = await response.text().catch(() => "");
         throw new Error(
-          `Presidio analyze returned HTTP ${response.status}: ${await response.text().catch(() => "")}`,
+          `Presidio analyze returned HTTP ${response.status}: ${errorText}`,
         );
       }
 

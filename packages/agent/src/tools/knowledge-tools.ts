@@ -26,11 +26,18 @@ export function createKnowledgeToolHandlers(
       const args = RagQueryArgsSchema.parse(rawArgs) as RagQueryArgs;
       const result = await deps.ragService.query(args.query, {
         normative_only: args.normative_only,
-        incident_code: ctx.incidentCode ?? undefined,
+        incident_code:
+          ctx.incidentCode !== null && ctx.incidentCode !== undefined
+            ? ctx.incidentCode
+            : undefined,
       });
 
-      const minScore = args.min_score ?? deps.config.RAG_MIN_SCORE;
-      const topK = args.top_k ?? deps.config.RAG_TOP_K;
+      const minScore =
+        args.min_score !== undefined
+          ? args.min_score
+          : deps.config.RAG_MIN_SCORE;
+      const topK =
+        args.top_k !== undefined ? args.top_k : deps.config.RAG_TOP_K;
       const passages = result.passages
         .filter((passage) => passage.score >= minScore)
         .slice(0, topK);

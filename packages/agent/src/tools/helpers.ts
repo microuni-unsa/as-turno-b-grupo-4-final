@@ -66,9 +66,14 @@ export async function assertPostHistory(
 ): Promise<PimsIncidentHistory> {
   const history = await adapter.getIncidentHistory(incidentId);
   const latest = latestHistoryRow(history);
-  if (latest === null || latest.event_type !== eventType) {
+  if (latest === null) {
     throw new HistoryGapError(
-      `Expected newest history row of ${incidentId} to be '${eventType}', observed '${latest?.event_type ?? "none"}'`,
+      `Expected newest history row of ${incidentId} to be '${eventType}', observed 'none'`,
+    );
+  }
+  if (latest.event_type !== eventType) {
+    throw new HistoryGapError(
+      `Expected newest history row of ${incidentId} to be '${eventType}', observed '${latest.event_type}'`,
     );
   }
   return latest;
@@ -84,7 +89,10 @@ export async function appendActionWithReadModifyWrite(
 }
 
 function normalizeAssetToken(value: string | null | undefined): string {
-  return (value ?? "").trim().toLowerCase();
+  if (value === null || value === undefined) {
+    return "";
+  }
+  return value.trim().toLowerCase();
 }
 
 export async function assetIdsForSystem(

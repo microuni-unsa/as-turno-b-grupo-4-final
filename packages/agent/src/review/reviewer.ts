@@ -90,7 +90,11 @@ export class NoticeReviewer {
           required_fix: "authority pack carries no citations",
         };
       }
-      const dpoName = (incident.dpo_contact_name ?? "").trim();
+      const rawDpoName = incident.dpo_contact_name;
+      const dpoName =
+        rawDpoName !== null && rawDpoName !== undefined
+          ? rawDpoName.trim()
+          : "";
       if (dpoName.length === 0) {
         return {
           judge: "reviewer",
@@ -98,7 +102,11 @@ export class NoticeReviewer {
           required_fix: "DPO contact name is missing",
         };
       }
-      const dpoEmail = (incident.dpo_contact_email ?? "").trim();
+      const rawDpoEmail = incident.dpo_contact_email;
+      const dpoEmail =
+        rawDpoEmail !== null && rawDpoEmail !== undefined
+          ? rawDpoEmail.trim()
+          : "";
       if (dpoEmail.length === 0) {
         return {
           judge: "reviewer",
@@ -107,9 +115,7 @@ export class NoticeReviewer {
         };
       }
       return null;
-    }
-
-    if (ctx.pack_type === "subject") {
+    } else if (ctx.pack_type === "subject") {
       if (body.length === 0) {
         return null;
       }
@@ -120,7 +126,11 @@ export class NoticeReviewer {
           required_fix: "subject pack carries no citations",
         };
       }
-      const dpoName = (incident.dpo_contact_name ?? "").trim();
+      const rawDpoName = incident.dpo_contact_name;
+      const dpoName =
+        rawDpoName !== null && rawDpoName !== undefined
+          ? rawDpoName.trim()
+          : "";
       if (dpoName.length === 0) {
         return {
           judge: "reviewer",
@@ -128,7 +138,11 @@ export class NoticeReviewer {
           required_fix: "DPO contact name is missing",
         };
       }
-      const dpoEmail = (incident.dpo_contact_email ?? "").trim();
+      const rawDpoEmail = incident.dpo_contact_email;
+      const dpoEmail =
+        rawDpoEmail !== null && rawDpoEmail !== undefined
+          ? rawDpoEmail.trim()
+          : "";
       if (dpoEmail.length === 0) {
         return {
           judge: "reviewer",
@@ -137,47 +151,53 @@ export class NoticeReviewer {
         };
       }
       return null;
-    }
-
-    const checklist = ctx.checklist;
-    if (checklist === null) {
-      return {
-        judge: "reviewer",
-        item: "bundle_sealed",
-        required_fix: "resolution review has no close checklist",
-      };
-    }
-    const counts = new Map<string, number>();
-    for (const item of checklist) {
-      counts.set(item, (counts.get(item) ?? 0) + 1);
-    }
-    for (const item of CLOSE_CHECKLIST_ITEMS) {
-      const count = counts.get(item) ?? 0;
-      if (count === 0) {
+    } else if (ctx.pack_type === "resolution") {
+      const checklist = ctx.checklist;
+      if (checklist === null || checklist === undefined) {
         return {
           judge: "reviewer",
-          item,
-          required_fix: `close checklist is missing ${item}`,
+          item: "bundle_sealed",
+          required_fix: "resolution review has no close checklist",
         };
       }
-      if (count > 1) {
-        return {
-          judge: "reviewer",
-          item,
-          required_fix: `close checklist repeats ${item}`,
-        };
+      const counts = new Map<string, number>();
+      for (const item of checklist) {
+        const existing = counts.get(item);
+        counts.set(item, existing !== undefined ? existing + 1 : 1);
       }
+      for (const item of CLOSE_CHECKLIST_ITEMS) {
+        const count = counts.get(item);
+        const actualCount = count !== undefined ? count : 0;
+        if (actualCount === 0) {
+          return {
+            judge: "reviewer",
+            item,
+            required_fix: `close checklist is missing ${item}`,
+          };
+        }
+        if (actualCount > 1) {
+          return {
+            judge: "reviewer",
+            item,
+            required_fix: `close checklist repeats ${item}`,
+          };
+        }
+      }
+      for (const item of checklist) {
+        if (!CLOSE_CHECKLIST_ITEMS.includes(item)) {
+          return {
+            judge: "reviewer",
+            item,
+            required_fix: `close checklist contains unknown item ${item}`,
+          };
+        }
+      }
+      return null;
+    } else {
+      throw new Error(
+        `Unexpected pack_type in legalCompletenessRejection: ${String((ctx as unknown as Record<string, unknown>).pack_type)}`,
+      );
     }
-    for (const item of checklist) {
-      if (!CLOSE_CHECKLIST_ITEMS.includes(item)) {
-        return {
-          judge: "reviewer",
-          item,
-          required_fix: `close checklist contains unknown item ${item}`,
-        };
-      }
-    }
-    return null;
   }
 
   private async run(
@@ -215,7 +235,10 @@ export class NoticeReviewer {
       try {
         PlainLanguageValidator.validate(ctx.body_text, {
           locale: "es",
-          maxWords: this.deps.config.PLAIN_LANG_MAX_WORDS,
+          maxWords:
+            this.deps.config.PLAIN_LANG_MAX_WORDS !== undefined
+              ? this.deps.config.PLAIN_LANG_MAX_WORDS
+              : CONSTANTS.PLAIN_LANGUAGE_MAX_WORDS,
           numericApprovals: ctx.numeric_approvals,
           ...(ctx.plain_language_waiver === null
             ? {}
@@ -308,10 +331,15 @@ export class NoticeReviewer {
     }
     const challenges = parsedProsecutor.data.challenges;
 
-    const highChallenge = this.deps.config.REVIEW_CHALLENGE_BLOCKING
+    const blockingEnabled =
+      this.deps.config.REVIEW_CHALLENGE_BLOCKING !== undefined
+        ? this.deps.config.REVIEW_CHALLENGE_BLOCKING
+        : CONSTANTS.DEFAULT_REVIEW_CHALLENGE_BLOCKING;
+
+    const highChallenge = blockingEnabled
       ? challenges.find((c) => c.severity === "high")
       : undefined;
-    if (highChallenge) {
+    if (highChallenge !== undefined) {
       return NoticeReviewer.reject(challenges, {
         judge: "reviewer",
         item: highChallenge.target,

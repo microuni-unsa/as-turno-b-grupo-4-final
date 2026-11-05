@@ -172,6 +172,12 @@ export class DeadlineScheduler {
 
     const timerId = `timer:${args.incident_code}:${args.kind}:${crypto.randomUUID()}`;
     const fireAt = new Date(args.fire_at_utc);
+    if (Number.isNaN(fireAt.getTime())) {
+      throw new PimsValidationError(
+        "fire_at_utc",
+        `Invalid timer schedule date: ${args.fire_at_utc}`,
+      );
+    }
     const now = this.clock();
     const isPastDue = fireAt.getTime() <= now.getTime();
 
@@ -357,6 +363,12 @@ export class DeadlineScheduler {
       case "T_RETRY": {
         await this.effects.retry(incidentCode, payload);
         return "satisfied";
+      }
+      default: {
+        const exhaustiveCheck: never = kind;
+        throw new PimsClientBugError(
+          `Unhandled timer kind: ${String(exhaustiveCheck)}`,
+        );
       }
     }
   }

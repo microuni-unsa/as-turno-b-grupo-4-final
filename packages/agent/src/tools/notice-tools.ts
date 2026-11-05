@@ -14,6 +14,7 @@ import {
   PimsNotFoundError,
   ReviewApprovalInvalidError,
   ReviewApprovalMissingError,
+  ToolExecutionError,
 } from "@pims/types/errors.ts";
 import type { JsonValue } from "@pims/types/models.ts";
 import {
@@ -49,7 +50,10 @@ function newestNotifiedRow(
     if (row.event_type !== "notified") {
       continue;
     }
-    const snapshot = row.recipients_snapshot ?? [];
+    const snapshot =
+      row.recipients_snapshot !== null && row.recipients_snapshot !== undefined
+        ? row.recipients_snapshot
+        : [];
     if (snapshot.length === 0) {
       continue;
     }
@@ -78,7 +82,11 @@ function alreadyDeliveredForPack(
   if (packType === "authority") {
     return incident.measure_reported_authorities === "Y" ? newest : null;
   }
-  const markers = (incident.evidence_refs ?? "")
+  const markers = (
+    incident.evidence_refs !== null && incident.evidence_refs !== undefined
+      ? incident.evidence_refs
+      : ""
+  )
     .split(";")
     .map((marker) => marker.trim());
   return markers.some((marker) => marker.startsWith("SUBJECT_NOTIFIED:"))
@@ -206,20 +214,30 @@ export function createNoticeToolHandlers(
             { measure_reported_authorities: "Y" },
             {
               incidentCode: code,
-              idempotencyKey: ctx.idempotencyKey ?? undefined,
+              idempotencyKey:
+                ctx.idempotencyKey !== null && ctx.idempotencyKey !== undefined
+                  ? ctx.idempotencyKey
+                  : undefined,
             },
           );
         }
         return toJsonObject({
           notified_at_utc: alreadySent.changed_at,
-          recipients_snapshot: alreadySent.recipients_snapshot ?? [],
+          recipients_snapshot:
+            alreadySent.recipients_snapshot !== null &&
+            alreadySent.recipients_snapshot !== undefined
+              ? alreadySent.recipients_snapshot
+              : [],
           history_id: alreadySent.id,
         });
       }
 
       await deps.adapter.notifyIncident(args.incident_id, {
         incidentCode: code,
-        idempotencyKey: ctx.idempotencyKey ?? undefined,
+        idempotencyKey:
+          ctx.idempotencyKey !== null && ctx.idempotencyKey !== undefined
+            ? ctx.idempotencyKey
+            : undefined,
       });
 
       const historyAfter = await deps.adapter.getIncidentHistory(
@@ -232,7 +250,11 @@ export function createNoticeToolHandlers(
           JSON.stringify(historyAfter),
         );
       }
-      const snapshot = notified.recipients_snapshot ?? [];
+      const snapshot =
+        notified.recipients_snapshot !== null &&
+        notified.recipients_snapshot !== undefined
+          ? notified.recipients_snapshot
+          : [];
       if (snapshot.length === 0) {
         throw new PimsErrorShapeUnknownError(
           "NOTIFY_UNCONFIRMED",
@@ -260,10 +282,13 @@ export function createNoticeToolHandlers(
           { measure_reported_authorities: "Y" },
           {
             incidentCode: code,
-            idempotencyKey: ctx.idempotencyKey ?? undefined,
+            idempotencyKey:
+              ctx.idempotencyKey !== null && ctx.idempotencyKey !== undefined
+                ? ctx.idempotencyKey
+                : undefined,
           },
         );
-      } else {
+      } else if (pack.packType === "subject") {
         const updated = await deps.adapter.getIncident(args.incident_id);
         await appendEvidenceMarker(
           deps.adapter,
@@ -272,6 +297,8 @@ export function createNoticeToolHandlers(
           `SUBJECT_NOTIFIED:${snapshot.length}:email`,
           schema,
         );
+      } else {
+        throw new ToolExecutionError("Invalid pack type");
       }
 
       return toJsonObject({

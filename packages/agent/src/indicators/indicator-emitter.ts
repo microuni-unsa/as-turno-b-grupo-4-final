@@ -10,11 +10,15 @@ import {
   type IndicatorEvent,
   IndicatorEventSchema,
 } from "@pims/types/agent.ts";
-import { ArtifactIncompleteError, ConfigError } from "@pims/types/errors.ts";
+import { CONSTANTS } from "@pims/types/constants.ts";
+import {
+  ArtifactIncompleteError,
+  ConfigError,
+  PimsUnavailableError,
+  PimsValidationError,
+} from "@pims/types/errors.ts";
 import type { JsonObject } from "@pims/types/models.ts";
 import type { PimsIncident } from "@pims/types/pims.ts";
-
-const HOUR_MS = 3_600_000;
 
 export interface IndicatorEmitterDeps {
   store: EvidenceStore;
@@ -33,7 +37,11 @@ export class IndicatorEmitter {
     this.store = deps.store;
     this.config = deps.config;
     this.clock = deps.clock;
-    this.fetchImpl = deps.fetchImpl ?? fetch;
+    if (deps.fetchImpl !== undefined) {
+      this.fetchImpl = deps.fetchImpl;
+    } else {
+      this.fetchImpl = fetch;
+    }
   }
 
   async emit(
@@ -47,8 +55,7 @@ export class IndicatorEmitter {
           "indicator:incident_closed",
           "mttd_hours",
         );
-      }
-      if (!Number.isFinite(parsed.attrs.mttr_hours)) {
+      } else if (!Number.isFinite(parsed.attrs.mttr_hours)) {
         throw new ArtifactIncompleteError(
           "indicator:incident_closed",
           "mttr_hours",
@@ -56,23 +63,26 @@ export class IndicatorEmitter {
       }
     }
 
-    const payload: JsonObject = JSON.parse(JSON.stringify(parsed));
+    const payload: JsonObject = structuredClone(
+      parsed,
+    ) as unknown as JsonObject;
 
     const url = this.config.INDICATOR_WEBHOOK_URL;
     if (url === undefined || url.trim() === "") {
       await this.spool(parsed.event, payload);
-      console.info("INDICATOR_SPOOL_ONLY");
+      console.info(CONSTANTS.INDICATOR_SPOOL_ONLY);
       return { spooled: true };
+    } else {
+      const secret = this.resolveSecret();
+      const body = JSON.stringify(parsed);
+      const delivered = await this.post(url, secret, body);
+      if (delivered) {
+        return { accepted: true };
+      } else {
+        await this.spool(parsed.event, payload);
+        return { spooled: true };
+      }
     }
-
-    const secret = this.resolveSecret();
-    const body = JSON.stringify(parsed);
-    const delivered = await this.post(url, secret, body);
-    if (delivered) {
-      return { accepted: true };
-    }
-    await this.spool(parsed.event, payload);
-    return { spooled: true };
   }
 
   async flush(): Promise<{ delivered: number; remaining: number }> {
@@ -80,23 +90,26 @@ export class IndicatorEmitter {
     const url = this.config.INDICATOR_WEBHOOK_URL;
     if (url === undefined || url.trim() === "") {
       return { delivered: 0, remaining: records.length };
-    }
-
-    const secret = this.resolveSecret();
-    const deliveredIds: number[] = [];
-    for (const record of records) {
-      const body = JSON.stringify(record.payload);
-      const delivered = await this.post(url, secret, body);
-      if (delivered) {
-        deliveredIds.push(record.id);
+    } else {
+      const secret = this.resolveSecret();
+      const deliveredIds: number[] = [];
+      const undeliveredIds: number[] = [];
+      for (const record of records) {
+        const body = JSON.stringify(record.payload);
+        const delivered = await this.post(url, secret, body);
+        if (delivered) {
+          deliveredIds.push(record.id);
+        } else {
+          undeliveredIds.push(record.id);
+        }
       }
-    }
 
-    await this.store.deleteIndicatorSpool(deliveredIds);
-    return {
-      delivered: deliveredIds.length,
-      remaining: records.length - deliveredIds.length,
-    };
+      await this.store.deleteIndicatorSpool(deliveredIds);
+      return {
+        delivered: deliveredIds.length,
+        remaining: records.length - deliveredIds.length,
+      };
+    }
   }
 
   async emitTransition(
@@ -110,15 +123,34 @@ export class IndicatorEmitter {
   ): Promise<{ accepted: true } | { spooled: true }> {
     const awareness = awarenessFromIncident(incident);
     const now = this.clock();
-    const occurrence = limaLocalToUtc(incident.incident_date, "00:00:00");
-    const mttd_hours = Math.max(
-      (awareness.getTime() - occurrence.getTime()) / HOUR_MS,
-      0,
+    const occurrence = limaLocalToUtc(
+      incident.incident_date,
+      CONSTANTS.START_OF_DAY_TIME,
     );
-    const mttr_hours = Math.max(
-      (now.getTime() - awareness.getTime()) / HOUR_MS,
-      0,
-    );
+    const mttdDiffMs = awareness.getTime() - occurrence.getTime();
+    if (mttdDiffMs < 0) {
+      throw new PimsValidationError(
+        "Invalid incident timeline: awareness timestamp precedes occurrence timestamp",
+        "TIMELINE:INVALID_MTTD",
+        {
+          awareness: awareness.toISOString(),
+          occurrence: occurrence.toISOString(),
+        },
+      );
+    }
+    const mttrDiffMs = now.getTime() - awareness.getTime();
+    if (mttrDiffMs < 0) {
+      throw new PimsValidationError(
+        "Invalid incident timeline: current timestamp precedes awareness timestamp",
+        "TIMELINE:INVALID_MTTR",
+        {
+          now: now.toISOString(),
+          awareness: awareness.toISOString(),
+        },
+      );
+    }
+    const mttd_hours = mttdDiffMs / CONSTANTS.MS_PER_HOUR;
+    const mttr_hours = mttrDiffMs / CONSTANTS.MS_PER_HOUR;
 
     const parsed = IndicatorEventSchema.parse({
       event: event.event,
@@ -159,26 +191,34 @@ export class IndicatorEmitter {
       const response = await this.fetchImpl(url, {
         method: "POST",
         headers: {
-          "Content-Type": "application/json",
+          "Content-Type": CONSTANTS.MIME_APPLICATION_JSON,
           "X-PIMS-Signature": `sha256=${hmac}`,
         },
         body,
       });
-      return response.ok;
+      if (response.ok) {
+        return true;
+      } else {
+        return false;
+      }
     } catch (error) {
-      const reason = error instanceof Error ? error.name : "unknown";
-      console.warn(`INDICATOR_WEBHOOK_FAILED:${reason}`);
-      return false;
+      throw new PimsUnavailableError(
+        `Indicator webhook delivery failed: ${error instanceof Error ? error.message : String(error)}`,
+        { cause: error instanceof Error ? error.message : String(error) },
+      );
     }
   }
 
   private async spool(eventType: string, payload: JsonObject): Promise<void> {
     const count = await this.store.countIndicatorSpool();
+    let droppedCount = 0;
     if (count >= this.config.INDICATOR_SPOOL_MAX) {
-      const dropped = await this.store.dropOldestIndicatorSpool(
+      droppedCount = await this.store.dropOldestIndicatorSpool(
         count - this.config.INDICATOR_SPOOL_MAX + 1,
       );
-      console.warn(`INDICATOR_SPOOL_FULL:dropped=${dropped}`);
+      console.warn(`${CONSTANTS.INDICATOR_SPOOL_FULL_PREFIX}${droppedCount}`);
+    } else {
+      droppedCount = 0;
     }
     await this.store.spoolIndicator(eventType, payload);
   }

@@ -6,6 +6,7 @@ import {
   type LifecycleStage,
 } from "@pims/types/agent.ts";
 import {
+  AgentExecutionError,
   LoopStepSkippedError,
   TransitionForbiddenError,
 } from "@pims/types/errors.ts";
@@ -16,17 +17,24 @@ export const FIXED_STEP_ORDER: readonly LifecycleStage[] = LIFECYCLE_STAGES;
 
 export function nextStage(current: LifecycleStage): LifecycleStage | null {
   const index = FIXED_STEP_ORDER.indexOf(current);
-  if (index < 0 || index === FIXED_STEP_ORDER.length - 1) {
+  if (index < 0) {
+    throw new AgentExecutionError(`Invalid lifecycle stage: ${current}`);
+  }
+  if (index === FIXED_STEP_ORDER.length - 1) {
     return null;
   }
-  return FIXED_STEP_ORDER[index + 1] ?? null;
+  const next = FIXED_STEP_ORDER[index + 1];
+  if (next === undefined) {
+    return null;
+  }
+  return next;
 }
 
 export class LifecycleState {
   readonly run_id: string;
   readonly incident_code: string;
   readonly incident_id: number;
-  private stageIndex: number;
+  private currentIndex: number;
   private cycles: number;
   private vetoParkedUntilUtc: string | null;
   private vetoedBy: string | null;
@@ -37,7 +45,7 @@ export class LifecycleState {
     this.run_id = crypto.randomUUID();
     this.incident_code = params.incident_code;
     this.incident_id = params.incident_id;
-    this.stageIndex = -1;
+    this.currentIndex = -1;
     this.cycles = 0;
     this.vetoParkedUntilUtc = null;
     this.vetoedBy = null;
@@ -45,10 +53,16 @@ export class LifecycleState {
     this.reopenGeneration = 0;
   }
 
+  get stageIndex(): number {
+    return this.currentIndex;
+  }
+
   get stage(): LifecycleStage {
-    const stage = FIXED_STEP_ORDER[this.stageIndex];
+    const stage = FIXED_STEP_ORDER[this.currentIndex];
     if (stage === undefined) {
-      return "capture";
+      throw new AgentExecutionError(
+        `Invalid lifecycle stage index ${this.currentIndex}`,
+      );
     }
     return stage;
   }
@@ -62,12 +76,12 @@ export class LifecycleState {
   }
 
   advance(to: LifecycleStage): void {
-    const expectedIndex = this.stageIndex + 1;
+    const expectedIndex = this.currentIndex + 1;
     const expected = FIXED_STEP_ORDER[expectedIndex];
     if (expected === undefined || expected !== to) {
       throw new LoopStepSkippedError(to);
     }
-    this.stageIndex = expectedIndex;
+    this.currentIndex = expectedIndex;
   }
 
   recordReviewCycle(): void {
@@ -77,9 +91,11 @@ export class LifecycleState {
   reopen(): void {
     const investigateIndex = FIXED_STEP_ORDER.indexOf("investigate");
     if (investigateIndex < 0) {
-      throw new Error("investigate stage missing from FIXED_STEP_ORDER");
+      throw new AgentExecutionError(
+        "investigate stage missing from FIXED_STEP_ORDER",
+      );
     }
-    this.stageIndex = investigateIndex;
+    this.currentIndex = investigateIndex;
     this.reopenGeneration += 1;
     this.cycles = 0;
     this.vetoParkedUntilUtc = null;

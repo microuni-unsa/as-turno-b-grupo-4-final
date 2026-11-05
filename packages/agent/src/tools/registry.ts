@@ -212,18 +212,55 @@ export class ToolRegistry {
       throw new ToolUnknownError(toolName);
     }
 
-    const incidentCode = context?.incidentCode ?? null;
+    let incidentCode: string | null = null;
+    if (
+      context !== undefined &&
+      context.incidentCode !== undefined &&
+      context.incidentCode !== null
+    ) {
+      incidentCode = context.incidentCode;
+    }
+    let incidentId: number | null = null;
+    if (
+      context !== undefined &&
+      context.incidentId !== undefined &&
+      context.incidentId !== null
+    ) {
+      incidentId = context.incidentId;
+    }
+    let operatorJwtSub: string | null = null;
+    if (
+      context !== undefined &&
+      context.operatorJwtSub !== undefined &&
+      context.operatorJwtSub !== null
+    ) {
+      operatorJwtSub = context.operatorJwtSub;
+    }
+
+    const effectiveIncidentCode =
+      incidentCode !== null ? incidentCode : "global";
+
     const ctx: ToolExecutionContext = {
       role: handle.role,
-      incidentId: context?.incidentId ?? null,
+      incidentId,
       incidentCode,
       idempotencyKey: null,
-      operatorJwtSub: context?.operatorJwtSub ?? null,
+      operatorJwtSub,
       now: this.deps.clock(),
     };
-    ctx.idempotencyKey =
-      this.deps.idempotencyKeyFactory?.(incidentCode ?? "global", toolName) ??
-      idempotencyKey(this.deps.config, incidentCode ?? "global", toolName);
+
+    if (this.deps.idempotencyKeyFactory !== undefined) {
+      ctx.idempotencyKey = this.deps.idempotencyKeyFactory(
+        effectiveIncidentCode,
+        toolName,
+      );
+    } else {
+      ctx.idempotencyKey = idempotencyKey(
+        this.deps.config,
+        effectiveIncidentCode,
+        toolName,
+      );
+    }
 
     const rawResult = await handler(ctx, normalizedArgs);
 
@@ -238,14 +275,14 @@ export class ToolRegistry {
     }
     const result = parsedResult.data as JsonObject;
 
-    const resultRef = `${toolName}:${incidentCode ?? "global"}:${crypto
+    const resultRef = `${toolName}:${effectiveIncidentCode}:${crypto
       .createHash("sha256")
       .update(canonicalizeJson(result), "utf8")
       .digest("hex")
       .slice(0, 16)}`;
 
     await this.deps.evidenceStore.appendToolLedger({
-      incident_code: incidentCode ?? "global",
+      incident_code: effectiveIncidentCode,
       at_utc: ctx.now.toISOString(),
       role: handle.role,
       tool: toolName,

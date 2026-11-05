@@ -38,6 +38,14 @@ export type PiiCategory =
   | "hostname"
   | "url";
 
+const DNI_REGEX = /^\d{8}$/;
+const RUC_REGEX = /^(?:10|15|17|20)\d{9}$/;
+const WORD_SPLIT_REGEX = /[\s,;"'()<>[\]{}]+/;
+const HTTP_PREFIX = "http://";
+const HTTPS_PREFIX = "https://";
+const LOOPBACK_IPV4_1 = "127.0.0.1";
+const LOOPBACK_IPV4_2 = "0.0.0.0";
+
 let globalPresidioClient: PresidioClient | null = null;
 
 export function setGlobalPresidioClient(client: PresidioClient | null): void {
@@ -52,17 +60,26 @@ export async function redactForPrompt(
   text: string,
   client?: PresidioClient | null,
 ): Promise<string> {
-  if (!text) {
+  if (typeof text !== "string" || text.length === 0) {
     return text;
   }
-  const presidio = client ?? globalPresidioClient;
+  const presidio =
+    client !== undefined && client !== null ? client : globalPresidioClient;
   if (!presidio) {
     throw new PiiRedactionUnavailableError(
-      "Presidio analyzer client is required for prompt redaction",
+      "PII_REDACTION_UNAVAILABLE: Presidio analyzer client is required for prompt redaction",
     );
   }
-  const result = await presidio.redact(text);
-  return result.redactedText;
+  try {
+    const result = await presidio.redact(text);
+    return result.redactedText;
+  } catch (err: unknown) {
+    if (err instanceof PiiRedactionUnavailableError) {
+      throw err;
+    }
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new PiiRedactionUnavailableError(`PII_REDACTION_UNAVAILABLE: ${msg}`);
+  }
 }
 
 export async function redactOptionalForPrompt(
@@ -75,16 +92,100 @@ export async function redactOptionalForPrompt(
   return redactForPrompt(value, client);
 }
 
+export interface RedactChatPayloadInput {
+  system: string;
+  messages: Message[];
+}
+
+export async function redactChatPayload(
+  payload: RedactChatPayloadInput,
+  client?: PresidioClient | null,
+): Promise<{ system: string; messages: Message[] }> {
+  if (!payload || typeof payload !== "object") {
+    throw new PiiRedactionUnavailableError(
+      "PII_REDACTION_UNAVAILABLE: Chat payload must be an object",
+    );
+  }
+  if (typeof payload.system !== "string") {
+    throw new PiiRedactionUnavailableError(
+      "PII_REDACTION_UNAVAILABLE: System prompt must be a string",
+    );
+  }
+  if (!Array.isArray(payload.messages)) {
+    throw new PiiRedactionUnavailableError(
+      "PII_REDACTION_UNAVAILABLE: Messages must be an array",
+    );
+  }
+
+  const presidio =
+    client !== undefined && client !== null ? client : globalPresidioClient;
+  if (!presidio) {
+    throw new PiiRedactionUnavailableError(
+      "PII_REDACTION_UNAVAILABLE: Presidio analyzer client is required for chat payload redaction",
+    );
+  }
+
+  try {
+    const redactedSystem = await redactForPrompt(payload.system, presidio);
+    const redactedMessages: Message[] = [];
+    for (const msg of payload.messages) {
+      if (!msg || typeof msg !== "object") {
+        throw new PiiRedactionUnavailableError(
+          "PII_REDACTION_UNAVAILABLE: Invalid message in chat payload",
+        );
+      }
+      if (
+        typeof msg.role !== "string" ||
+        (msg.role !== "system" &&
+          msg.role !== "user" &&
+          msg.role !== "assistant")
+      ) {
+        throw new PiiRedactionUnavailableError(
+          `PII_REDACTION_UNAVAILABLE: Invalid message role "${String((msg as unknown as Record<string, unknown>).role)}"`,
+        );
+      }
+      if (typeof msg.content !== "string") {
+        throw new PiiRedactionUnavailableError(
+          "PII_REDACTION_UNAVAILABLE: Message content must be a string",
+        );
+      }
+      const redactedContent = await redactForPrompt(msg.content, presidio);
+      redactedMessages.push({
+        role: msg.role,
+        content: redactedContent,
+      });
+    }
+
+    return {
+      system: redactedSystem,
+      messages: redactedMessages,
+    };
+  } catch (error: unknown) {
+    if (error instanceof PiiRedactionUnavailableError) {
+      throw error;
+    }
+    const message = error instanceof Error ? error.message : String(error);
+    throw new PiiRedactionUnavailableError(
+      `PII_REDACTION_UNAVAILABLE: ${message}`,
+    );
+  }
+}
+
 const emailValidator = z.string().email();
 
 export function assertPromptSafe(
   systemOrText: string,
   messages?: Message[],
 ): void {
-  const combined = [
-    systemOrText,
-    ...(messages ?? []).map((message) => message.content),
-  ].join("\n");
+  const parts: string[] = [systemOrText];
+  if (messages !== undefined && messages !== null) {
+    for (const message of messages) {
+      if (typeof message.content === "string") {
+        parts.push(message.content);
+      }
+    }
+  }
+  const combined = parts.join("\n");
 
   const categories = new Set<PiiCategory>();
 
@@ -103,26 +204,30 @@ export function assertPromptSafe(
   }
 
   // 2. Email, IP, URL/hostname validation via formal libs
-  const words = combined.split(/[\s,;"'()<>[\]{}]+/);
+  const words = combined.split(WORD_SPLIT_REGEX);
   for (const word of words) {
     const clean = word.trim();
-    if (!clean || clean.startsWith("[")) {
+    if (clean.length === 0 || clean.charCodeAt(0) === 91 /* '[' */) {
       continue;
     }
 
-    if (clean.includes("@")) {
+    if (clean.indexOf("@") !== -1) {
       if (emailValidator.safeParse(clean).success) {
         categories.add("email");
       }
     }
 
-    if (net.isIP(clean) !== 0 && clean !== "127.0.0.1" && clean !== "0.0.0.0") {
+    if (
+      net.isIP(clean) !== 0 &&
+      clean !== LOOPBACK_IPV4_1 &&
+      clean !== LOOPBACK_IPV4_2
+    ) {
       categories.add("ip");
     }
 
-    if (clean.startsWith("http://") || clean.startsWith("https://")) {
+    if (clean.startsWith(HTTP_PREFIX) || clean.startsWith(HTTPS_PREFIX)) {
       categories.add("url");
-    } else if (clean.includes(".") && !clean.endsWith(".")) {
+    } else if (clean.indexOf(".") !== -1 && !clean.endsWith(".")) {
       const parsed = parse(clean);
       if (parsed.isIp) {
         categories.add("ip");
@@ -132,10 +237,10 @@ export function assertPromptSafe(
       }
     }
 
-    if (/^\d{8}$/.test(clean)) {
+    if (DNI_REGEX.test(clean)) {
       categories.add("dni");
     }
-    if (/^(10|15|17|20)\d{9}$/.test(clean)) {
+    if (RUC_REGEX.test(clean)) {
       categories.add("ruc");
     }
   }
@@ -155,7 +260,10 @@ export class AgentModelClient implements ModelProvider {
 
   constructor(inner: ModelProvider, presidio?: PresidioClient | null) {
     this.inner = inner;
-    this.presidio = presidio ?? globalPresidioClient;
+    this.presidio =
+      presidio !== undefined && presidio !== null
+        ? presidio
+        : globalPresidioClient;
   }
 
   getPresidioClient(): PresidioClient | null {
@@ -163,32 +271,39 @@ export class AgentModelClient implements ModelProvider {
   }
 
   private async redactText(text: string): Promise<string> {
-    if (!text) {
+    if (!text || text.length === 0) {
       return text;
     }
-    if (this.presidio) {
-      const res = await this.presidio.redact(text);
-      return res.redactedText;
+    if (this.presidio !== null) {
+      try {
+        const res = await this.presidio.redact(text);
+        return res.redactedText;
+      } catch (err: unknown) {
+        if (err instanceof PiiRedactionUnavailableError) {
+          throw err;
+        }
+        const msg = err instanceof Error ? err.message : String(err);
+        throw new PiiRedactionUnavailableError(
+          `PII_REDACTION_UNAVAILABLE: ${msg}`,
+        );
+      }
     }
     throw new PiiRedactionUnavailableError(
-      "Presidio analyzer client is required for model calls",
+      "PII_REDACTION_UNAVAILABLE: Presidio analyzer client is required for model calls",
     );
   }
 
   async chat_json(args: ChatJsonArgs): Promise<ChatJsonResponse> {
-    const redactedSystem = await this.redactText(args.system);
-    const redactedMessages = await Promise.all(
-      args.messages.map(async (msg) => ({
-        ...msg,
-        content: await this.redactText(msg.content),
-      })),
+    const redacted = await redactChatPayload(
+      { system: args.system, messages: args.messages },
+      this.presidio,
     );
 
-    assertPromptSafe(redactedSystem, redactedMessages);
+    assertPromptSafe(redacted.system, redacted.messages);
     return this.inner.chat_json({
       ...args,
-      system: redactedSystem,
-      messages: redactedMessages,
+      system: redacted.system,
+      messages: redacted.messages,
     });
   }
 

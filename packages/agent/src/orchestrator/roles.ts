@@ -177,6 +177,9 @@ function buildSkillDefinitions(): Record<SkillName, SkillDefinition> {
   const definitions = {} as Record<SkillName, SkillDefinition>;
   for (const skill of AGENT_SKILLS) {
     const spec = SKILL_SPECS[skill];
+    if (spec === undefined) {
+      throw new SkillUnknownError(skill);
+    }
     definitions[skill] = {
       skill,
       tools: [...spec.tools],
@@ -197,15 +200,25 @@ function buildRoleDefinitions(): Record<AgentRole, RoleDefinition> {
   const definitions = {} as Record<AgentRole, RoleDefinition>;
   for (const role of AGENT_ROLES) {
     const allowed = ROLE_TOOL_MATRIX[role];
+    if (allowed === undefined) {
+      throw new RoleUnknownError(role);
+    }
     const allowedSet = new Set<string>(allowed);
     const denied = AGENT_TOOL_NAMES.filter((tool) => !allowedSet.has(tool));
     const systemPrompt = ROLE_PROMPTS[role];
+    if (systemPrompt === undefined) {
+      throw new RoleUnknownError(role);
+    }
+    const autonomy = ROLE_AUTONOMY[role];
+    if (autonomy === undefined) {
+      throw new RoleUnknownError(role);
+    }
     definitions[role] = {
       role,
       prompt_version: CONSTANTS.ROLE_PROMPT_VERSION,
       prompt_sha256: sha256Hex(systemPrompt),
       system_prompt: systemPrompt,
-      autonomy: ROLE_AUTONOMY[role],
+      autonomy,
       allowed_tools: [...allowed],
       denied_tools: [...denied],
     };

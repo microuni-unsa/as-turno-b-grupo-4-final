@@ -623,6 +623,12 @@ export class ToolResultInvalidError extends PimsBaseError {
   }
 }
 
+export class ToolExecutionError extends PimsBaseError {
+  constructor(message: string, details?: PimsErrorDetails) {
+    super(message, "TOOL_EXECUTION_ERROR", details);
+  }
+}
+
 export class SkillUnknownError extends PimsBaseError {
   readonly skill: string;
 
@@ -1017,5 +1023,11 @@ export class CockpitPiiBlockedError extends PimsBaseError {
 export class CockpitChatInvalidError extends PimsBaseError {
   constructor(message: string, details?: PimsErrorDetails) {
     super(message, "COCKPIT_CHAT_INVALID", details);
+  }
+}
+
+export class AgentExecutionError extends PimsBaseError {
+  constructor(message: string, details?: PimsErrorDetails) {
+    super(message, "AGENT_EXECUTION_ERROR", details);
   }
 }

@@ -279,8 +279,16 @@ function renderIncidentProse(incident: PimsIncident): string {
   const lines: string[] = [
     `Titulo: ${incident.title}`,
     `Tipo: ${incident.incident_type}`,
-    `Severidad: ${incident.severity ?? "desconocida"}`,
-    `Impacto: ${incident.impact ?? "desconocido"}`,
+    `Severidad: ${
+      incident.severity !== null && incident.severity !== undefined
+        ? incident.severity
+        : "desconocida"
+    }`,
+    `Impacto: ${
+      incident.impact !== null && incident.impact !== undefined
+        ? incident.impact
+        : "desconocido"
+    }`,
     `Fecha del incidente: ${incident.incident_date}`,
   ];
   if (incident.description !== null && incident.description !== undefined) {
@@ -297,10 +305,10 @@ function renderIncidentProse(incident: PimsIncident): string {
     `Medidas de seguridad adoptadas: ${incident.security_measures_adopted.join(", ")}`,
     `Categorias CID: ${incident.affected_cid.join(", ")}`,
     `Titulares afectados: ${
-      incident.num_affected_subjects === null ||
-      incident.num_affected_subjects === undefined
-        ? "desconocido"
-        : String(incident.num_affected_subjects)
+      incident.num_affected_subjects !== null &&
+      incident.num_affected_subjects !== undefined
+        ? String(incident.num_affected_subjects)
+        : "desconocido"
     }`,
   );
   return lines.join("\n");
@@ -327,20 +335,27 @@ function canonicalizeCitations(
       continue;
     }
     const parts = normalized.split(":");
-    const sequence = parts[parts.length - 1] ?? "";
+    const lastPart = parts[parts.length - 1];
+    const sequence = lastPart !== undefined ? lastPart : "";
+    const firstPart = parts[0];
+    const prefix = firstPart !== undefined ? firstPart : "";
     const matches = allowed.filter(
       (entry) =>
         entry.endsWith(`:${normalized}`) ||
         entry.startsWith(`${normalized}:`) ||
-        (entry.startsWith(`${parts[0] ?? ""}:`) &&
+        (entry.startsWith(`${prefix}:`) &&
           sequence.length > 0 &&
           entry.includes(`:${sequence}:`)),
     );
-    if (matches[0] !== undefined) {
+    if (matches.length > 0 && matches[0] !== undefined) {
       resolved.push(matches[0]);
       continue;
     }
-    if (parts.length >= 3 && /^\d+-\d+$/.test(parts[parts.length - 1] ?? "")) {
+    if (
+      parts.length >= 3 &&
+      lastPart !== undefined &&
+      /^\d+-\d+$/.test(lastPart)
+    ) {
       resolved.push(normalized);
     }
   }
@@ -368,20 +383,26 @@ function requireDpoContact(
   incident: PimsIncident,
   artifact: string,
 ): DpoContact {
-  const name = incident.dpo_contact_name ?? null;
-  const email = incident.dpo_contact_email ?? null;
+  const name = incident.dpo_contact_name;
+  const email = incident.dpo_contact_email;
   if (
     name === null ||
-    name.length === 0 ||
+    name === undefined ||
+    name.trim().length === 0 ||
     email === null ||
-    email.length === 0
+    email === undefined ||
+    email.trim().length === 0
   ) {
     throw new ArtifactIncompleteError(artifact, "dpo");
   }
   return {
-    name,
-    email,
-    phone: incident.dpo_contact_phone ?? null,
+    name: name.trim(),
+    email: email.trim(),
+    phone:
+      incident.dpo_contact_phone !== null &&
+      incident.dpo_contact_phone !== undefined
+        ? incident.dpo_contact_phone.trim()
+        : null,
   };
 }
 
@@ -478,7 +499,11 @@ export class NoticeDraftService {
     let delayReasons: { hours_late: number; reasons: string[] } | null = null;
     if (nowMs > deadlineMs) {
       const awarenessMs = awareness.getTime();
-      const reasons = (incident.history ?? [])
+      const reasons = (
+        incident.history !== null && incident.history !== undefined
+          ? incident.history
+          : []
+      )
         .filter((row) => {
           const changedMs = new Date(row.changed_at).getTime();
           return (
@@ -487,12 +512,17 @@ export class NoticeDraftService {
             changedMs <= nowMs
           );
         })
-        .map(
-          (row) =>
-            `${row.event_type ?? "event"} at ${row.changed_at}: ${
-              row.description ?? ""
-            }`,
-        );
+        .map((row) => {
+          const eventType =
+            row.event_type !== null && row.event_type !== undefined
+              ? row.event_type
+              : "event";
+          const desc =
+            row.description !== null && row.description !== undefined
+              ? row.description
+              : "";
+          return `${eventType} at ${row.changed_at}: ${desc}`;
+        });
       delayReasons = {
         hours_late: Math.ceil((nowMs - deadlineMs) / 3600000),
         reasons: reasons.length > 0 ? reasons : ["history_unavailable"],
@@ -615,12 +645,17 @@ export class NoticeDraftService {
       );
     }
 
+    const maxWords =
+      this.config.PLAIN_LANG_MAX_WORDS !== undefined
+        ? this.config.PLAIN_LANG_MAX_WORDS
+        : CONSTANTS.PLAIN_LANGUAGE_MAX_WORDS;
+
     const response = await this.modelClient.chat_json({
       system: DRAFT_SUBJECT_SYSTEM,
       messages: [
         {
           role: "user",
-          content: `${renderIncidentProse(incident)}\nAllowed normative citations (return citations[] using ONLY the identifiers C1..Cn; never invent):\n${rag.citations.map((citation, index) => `C${index + 1} = ${citation}`).join("\n")}\nConstraints: write body_plain in Spanish; every sentence must have at most 20 words; do not include digits or numeric literals in body_plain; keep every field concrete and free of legal jargon.`,
+          content: `${renderIncidentProse(incident)}\nAllowed normative citations (return citations[] using ONLY the identifiers C1..Cn; never invent):\n${rag.citations.map((citation, index) => `C${index + 1} = ${citation}`).join("\n")}\nConstraints: write body_plain in Spanish; every sentence must have at most ${maxWords} words; do not include digits or numeric literals in body_plain; keep every field concrete and free of legal jargon.`,
         },
       ],
       json_schema: SUBJECT_JSON_SCHEMA,
@@ -635,10 +670,11 @@ export class NoticeDraftService {
       "subject",
     );
     draft.citations = canonicalizeCitations(draft.citations, rag.citations);
+    this.assertCitations(draft.citations, rag.citations);
 
     PlainLanguageValidator.validate(draft.body_plain, {
       locale: "es",
-      maxWords: this.config.PLAIN_LANG_MAX_WORDS,
+      maxWords,
       numericApprovals,
     });
 
@@ -683,12 +719,17 @@ export class NoticeDraftService {
       "corrective action and residual risk closure documentation under ISO 27701 10.2 and GDPR Article 33(5)",
       { normative_only: true, incident_code: incident.incident_code },
     );
+    const maxWords =
+      this.config.PLAIN_LANG_MAX_WORDS !== undefined
+        ? this.config.PLAIN_LANG_MAX_WORDS
+        : CONSTANTS.PLAIN_LANGUAGE_MAX_WORDS;
+
     const response = await this.modelClient.chat_json({
       system: RESOLUTION_SYSTEM,
       messages: [
         {
           role: "user",
-          content: `${renderIncidentProse(incident)}\nChecklist de cierre: ${checklist.join(", ")}\nAllowed normative citations (return citations[] using ONLY the identifiers C1..Cn; never invent):\n${rag.citations.map((citation, index) => `C${index + 1} = ${citation}`).join("\n")}\nConstraints: write summary and remediation in Spanish; every sentence must have at most 20 words; do not include digits or numeric literals.`,
+          content: `${renderIncidentProse(incident)}\nChecklist de cierre: ${checklist.join(", ")}\nAllowed normative citations (return citations[] using ONLY the identifiers C1..Cn; never invent):\n${rag.citations.map((citation, index) => `C${index + 1} = ${citation}`).join("\n")}\nConstraints: write summary and remediation in Spanish; every sentence must have at most ${maxWords} words; do not include digits or numeric literals.`,
         },
       ],
       json_schema: RESOLUTION_JSON_SCHEMA,
@@ -703,6 +744,7 @@ export class NoticeDraftService {
       "resolution",
     );
     draft.citations = canonicalizeCitations(draft.citations, rag.citations);
+    this.assertCitations(draft.citations, rag.citations);
 
     const bodyText = `${draft.summary}\n${draft.remediation}`;
     const contentSha = hashCanonicalContent({
@@ -721,6 +763,9 @@ export class NoticeDraftService {
   }
 
   private assertCitations(citations: string[], ragCitations: string[]): void {
+    if (citations.length === 0) {
+      throw new ArtifactIncompleteError("citations", "missing_citations");
+    }
     for (const citation of citations) {
       if (ragCitations.includes(citation)) {
         continue;

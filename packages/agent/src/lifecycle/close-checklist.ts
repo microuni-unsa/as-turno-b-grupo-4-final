@@ -5,6 +5,7 @@ import {
   CLOSE_CHECKLIST_ITEMS,
   type CloseChecklistItem,
 } from "@pims/types/agent.ts";
+import { PimsClientBugError } from "@pims/types/errors.ts";
 import type { JsonValue } from "@pims/types/models.ts";
 import type { PimsIncident, PimsIncidentAction } from "@pims/types/pims.ts";
 
@@ -58,8 +59,9 @@ function readsActionCount(value: JsonValue): number | null {
     candidate >= 0
   ) {
     return candidate;
+  } else {
+    return null;
   }
-  return null;
 }
 
 function lastMarkerWithPrefix(
@@ -89,21 +91,24 @@ export class CloseChecklistVerifier {
     incident: PimsIncident,
     opts?: CloseChecklistOptions,
   ): Promise<CloseChecklistResult> {
-    const skipped = new Set<CloseChecklistItem>(opts?.skip ?? []);
+    const skipped = new Set<CloseChecklistItem>(
+      opts !== undefined && opts.skip !== undefined ? opts.skip : [],
+    );
     const markers = readMarkers(incident.evidence_refs);
     const epochActions = await this.epochActions(incident);
 
     const items: CloseChecklistItemResult[] = [];
     for (const item of CLOSE_CHECKLIST_ITEMS) {
       if (skipped.has(item)) {
-        continue;
+      } else {
+        items.push(
+          await this.evaluateItem(item, incident, markers, epochActions),
+        );
       }
-      items.push(
-        await this.evaluateItem(item, incident, markers, epochActions),
-      );
     }
 
-    return { passed: items.every((entry) => entry.passed), items };
+    const allPassed = items.every((entry) => entry.passed);
+    return { passed: allPassed, items };
   }
 
   private async evaluateItem(
@@ -129,24 +134,37 @@ export class CloseChecklistVerifier {
         return this.correctiveAction(item, markers);
       case "bundle_sealed":
         return this.bundleSealed(item, incident, markers);
+      default: {
+        const _exhaustive: never = item;
+        throw new PimsClientBugError(
+          `Unhandled close checklist item: ${_exhaustive}`,
+        );
+      }
     }
   }
 
   private async epochActions(
     incident: PimsIncident,
   ): Promise<PimsIncidentAction[]> {
-    const actions = incident.actions ?? [];
+    let actions: PimsIncidentAction[];
+    if (incident.actions !== undefined) {
+      actions = incident.actions;
+    } else {
+      actions = [];
+    }
     const baseline = await this.evidenceStore.getAgentState(
       `REOPEN_BASELINE:${incident.incident_code}`,
     );
     if (baseline === null) {
       return actions;
+    } else {
+      const actionCount = readsActionCount(baseline);
+      if (actionCount === null) {
+        return actions;
+      } else {
+        return actions.slice(actionCount);
+      }
     }
-    const actionCount = readsActionCount(baseline);
-    if (actionCount === null) {
-      return actions;
-    }
-    return actions.slice(actionCount);
   }
 
   private analysisAction(
@@ -154,7 +172,11 @@ export class CloseChecklistVerifier {
     epochActions: PimsIncidentAction[],
   ): CloseChecklistItemResult {
     const present = epochActions.some((action) => action.action_type === "A");
-    return resultOf(item, present, present ? "ok" : "no_analysis_action");
+    if (present) {
+      return resultOf(item, true, "ok");
+    } else {
+      return resultOf(item, false, "no_analysis_action");
+    }
   }
 
   private resolutionActionOrConsidered(
@@ -167,17 +189,18 @@ export class CloseChecklistVerifier {
     );
     if (hasResolution) {
       return resultOf(item, true, "ok");
+    } else {
+      const considered =
+        incident.measure_considered_resolved === "Y" &&
+        epochActions.some(
+          (action) => action.action_type === "A" && nonEmpty(action.evidence),
+        );
+      if (considered) {
+        return resultOf(item, true, "ok");
+      } else {
+        return resultOf(item, false, "no_resolution_action_or_consideration");
+      }
     }
-    const considered =
-      incident.measure_considered_resolved === "Y" &&
-      epochActions.some(
-        (action) => action.action_type === "A" && nonEmpty(action.evidence),
-      );
-    return resultOf(
-      item,
-      considered,
-      considered ? "ok" : "no_resolution_action_or_consideration",
-    );
   }
 
   private async reviewerSignoff(
@@ -187,18 +210,18 @@ export class CloseChecklistVerifier {
     const approvalId = lastMarkerWithPrefix(markers, CLOSE_APPROVED_PREFIX);
     if (approvalId === null) {
       return resultOf(item, false, "no_close_approved_marker");
+    } else {
+      const approval = await this.evidenceStore.getReviewApproval(approvalId);
+      if (approval === null) {
+        return resultOf(item, false, "approval_not_found");
+      } else if (approval.consumed_at_utc !== null) {
+        return resultOf(item, false, "approval_consumed");
+      } else if (approval.pack_type !== "resolution") {
+        return resultOf(item, false, "approval_not_resolution");
+      } else {
+        return resultOf(item, true, "ok");
+      }
     }
-    const approval = await this.evidenceStore.getReviewApproval(approvalId);
-    if (approval === null) {
-      return resultOf(item, false, "approval_not_found");
-    }
-    if (approval.consumed_at_utc !== null) {
-      return resultOf(item, false, "approval_consumed");
-    }
-    if (approval.pack_type !== "resolution") {
-      return resultOf(item, false, "approval_not_resolution");
-    }
-    return resultOf(item, true, "ok");
   }
 
   private art33Documentation(
@@ -209,30 +232,31 @@ export class CloseChecklistVerifier {
   ): CloseChecklistItemResult {
     if (!nonEmpty(incident.description)) {
       return resultOf(item, false, "missing_description");
-    }
-    if (incident.affected_cid.length === 0) {
+    } else if (incident.affected_cid.length === 0) {
       return resultOf(item, false, "missing_affected_cid");
+    } else {
+      const phasedPending = markers.some((marker) =>
+        marker.startsWith(PHASED_PENDING_PREFIX),
+      );
+      const countKnown =
+        !incident.involves_personal_data ||
+        typeof incident.num_affected_subjects === "number" ||
+        phasedPending;
+      if (!countKnown) {
+        return resultOf(item, false, "missing_subject_count");
+      } else {
+        const documented = epochActions.some(
+          (action) =>
+            (action.action_type === "C" || action.action_type === "A") &&
+            nonEmpty(action.evidence),
+        );
+        if (documented) {
+          return resultOf(item, true, "ok");
+        } else {
+          return resultOf(item, false, "missing_evidence_action");
+        }
+      }
     }
-    const phasedPending = markers.some((marker) =>
-      marker.startsWith(PHASED_PENDING_PREFIX),
-    );
-    const countKnown =
-      !incident.involves_personal_data ||
-      typeof incident.num_affected_subjects === "number" ||
-      phasedPending;
-    if (!countKnown) {
-      return resultOf(item, false, "missing_subject_count");
-    }
-    const documented = epochActions.some(
-      (action) =>
-        (action.action_type === "C" || action.action_type === "A") &&
-        nonEmpty(action.evidence),
-    );
-    return resultOf(
-      item,
-      documented,
-      documented ? "ok" : "missing_evidence_action",
-    );
   }
 
   private async noticesTerminal(
@@ -251,35 +275,35 @@ export class CloseChecklistVerifier {
     if (!incident.involves_personal_data) {
       if (authority !== null) {
         return resultOf(item, false, "authority_pack_present_for_non_pii");
-      }
-      if (subject !== null && subject.state !== "not_required") {
+      } else if (subject !== null && subject.state !== "not_required") {
         return resultOf(item, false, "subject_pack_not_terminal");
+      } else {
+        return resultOf(item, true, "ok");
       }
-      return resultOf(item, true, "ok");
+    } else {
+      if (authority === null || authority.state !== "sent") {
+        return resultOf(item, false, "authority_pack_not_sent");
+      } else if (
+        subject === null ||
+        (subject.state !== "sent" &&
+          subject.state !== "exempted" &&
+          subject.state !== "not_required")
+      ) {
+        return resultOf(item, false, "subject_pack_not_terminal");
+      } else {
+        const activeTimers = await this.evidenceStore.listActiveTimers(
+          incident.incident_code,
+        );
+        const pendingPhase = activeTimers.some(
+          (timer) => timer.timer_type === "T_PHASE_FOLLOWUP",
+        );
+        if (pendingPhase) {
+          return resultOf(item, false, "phase_followup_pending");
+        } else {
+          return resultOf(item, true, "ok");
+        }
+      }
     }
-
-    if (authority === null || authority.state !== "sent") {
-      return resultOf(item, false, "authority_pack_not_sent");
-    }
-    if (
-      subject === null ||
-      (subject.state !== "sent" &&
-        subject.state !== "exempted" &&
-        subject.state !== "not_required")
-    ) {
-      return resultOf(item, false, "subject_pack_not_terminal");
-    }
-    const activeTimers = await this.evidenceStore.listActiveTimers(
-      incident.incident_code,
-    );
-    const pendingPhase = activeTimers.some(
-      (timer) => timer.timer_type === "T_PHASE_FOLLOWUP",
-    );
-    return resultOf(
-      item,
-      !pendingPhase,
-      pendingPhase ? "phase_followup_pending" : "ok",
-    );
   }
 
   private resolvedDate(
@@ -288,14 +312,13 @@ export class CloseChecklistVerifier {
   ): CloseChecklistItemResult {
     if (!nonEmpty(incident.resolved_date)) {
       return resultOf(item, false, "missing_resolved_date");
-    }
-    if (incident.measure_considered_resolved !== "Y") {
+    } else if (incident.measure_considered_resolved !== "Y") {
       return resultOf(item, false, "not_considered_resolved");
-    }
-    if (!Array.isArray(incident.security_measures_adopted)) {
+    } else if (!Array.isArray(incident.security_measures_adopted)) {
       return resultOf(item, false, "missing_security_measures");
+    } else {
+      return resultOf(item, true, "ok");
     }
-    return resultOf(item, true, "ok");
   }
 
   private correctiveAction(
@@ -304,18 +327,18 @@ export class CloseChecklistVerifier {
   ): CloseChecklistItemResult {
     if (markers.some((marker) => AUDIT_LINK_PATTERN.test(marker))) {
       return resultOf(item, true, "ok");
-    }
-    if (
+    } else if (
       markers.some((marker) => marker.startsWith(AUDIT_LINK_SKIPPED_PREFIX))
     ) {
       return resultOf(item, true, "ok");
+    } else {
+      const notSystemic = markers.includes("systemic:false");
+      if (notSystemic) {
+        return resultOf(item, true, "ok");
+      } else {
+        return resultOf(item, false, "no_corrective_action");
+      }
     }
-    const notSystemic = markers.includes("systemic:false");
-    return resultOf(
-      item,
-      notSystemic,
-      notSystemic ? "ok" : "no_corrective_action",
-    );
   }
 
   private async bundleSealed(
@@ -326,13 +349,15 @@ export class CloseChecklistVerifier {
     const sealedSha = lastMarkerWithPrefix(markers, BUNDLE_SEALED_PREFIX);
     if (sealedSha === null) {
       return resultOf(item, false, "no_bundle_sealed_marker");
+    } else {
+      const manifest = await this.evidenceStore.getBundleManifest(
+        incident.incident_code,
+      );
+      if (manifest === null || manifest.seal_sha256 !== sealedSha) {
+        return resultOf(item, false, "manifest_seal_mismatch");
+      } else {
+        return resultOf(item, true, "ok");
+      }
     }
-    const manifest = await this.evidenceStore.getBundleManifest(
-      incident.incident_code,
-    );
-    if (manifest === null || manifest.seal_sha256 !== sealedSha) {
-      return resultOf(item, false, "manifest_seal_mismatch");
-    }
-    return resultOf(item, true, "ok");
   }
 }

@@ -41,7 +41,9 @@ function trigramCounts(value: string): Map<string, number> {
   }
   for (let start = 0; start + 3 <= value.length; start += 1) {
     const trigram = value.slice(start, start + 3);
-    counts.set(trigram, (counts.get(trigram) ?? 0) + 1);
+    const existing = counts.get(trigram);
+    const count = existing !== undefined ? existing : 0;
+    counts.set(trigram, count + 1);
   }
   return counts;
 }
@@ -55,7 +57,8 @@ export function trigramSimilarity(a: string, b: string): number {
   let intersection = 0;
   let union = 0;
   for (const [trigram, countA] of countsA) {
-    const countB = countsB.get(trigram) ?? 0;
+    const existingB = countsB.get(trigram);
+    const countB = existingB !== undefined ? existingB : 0;
     intersection += Math.min(countA, countB);
     union += Math.max(countA, countB);
   }
@@ -66,8 +69,9 @@ export function trigramSimilarity(a: string, b: string): number {
   }
   if (union === 0) {
     return 1;
+  } else {
+    return intersection / union;
   }
-  return intersection / union;
 }
 
 export function cosineSimilarity(a: number[], b: number[]): number {
@@ -78,17 +82,21 @@ export function cosineSimilarity(a: number[], b: number[]): number {
   let normA = 0;
   let normB = 0;
   for (let index = 0; index < a.length; index += 1) {
-    const valueA = a[index] ?? 0;
-    const valueB = b[index] ?? 0;
-    dot += valueA * valueB;
-    normA += valueA * valueA;
-    normB += valueB * valueB;
+    const rawA = a[index];
+    const rawB = b[index];
+    if (rawA === undefined || rawB === undefined) {
+      return 0;
+    }
+    dot += rawA * rawB;
+    normA += rawA * rawA;
+    normB += rawB * rawB;
   }
   if (normA === 0 || normB === 0) {
     return 0;
+  } else {
+    const similarity = dot / (Math.sqrt(normA) * Math.sqrt(normB));
+    return Math.min(1, Math.max(0, similarity));
   }
-  const similarity = dot / (Math.sqrt(normA) * Math.sqrt(normB));
-  return Math.min(1, Math.max(0, similarity));
 }
 
 export function findDedupeDecision(input: DedupeDecisionInput): DedupeDecision {
@@ -115,24 +123,48 @@ export function findDedupeDecision(input: DedupeDecisionInput): DedupeDecision {
       normalizeTitle(incident.title),
     );
     const candidate = incident as LiveDedupeCandidate;
-    const vector =
-      candidate.embedding_vector ??
-      embeddingByCode.get(incident.incident_code) ??
-      [];
-    if (vector.length === 0) {
-      continue;
+    let vector: number[];
+    if (candidate.embedding_vector !== undefined) {
+      vector = candidate.embedding_vector;
+    } else {
+      const indexedVector = embeddingByCode.get(incident.incident_code);
+      if (indexedVector !== undefined) {
+        vector = indexedVector;
+      } else {
+        vector = [];
+      }
     }
-    const cosine = cosineSimilarity(targetEmbedding, vector);
-    noteBest({ trigram, cosine });
-    if (
-      incident.incident_date === input.incident_date &&
-      normalizeTitle(
-        incident.compromised_system ?? incident.affected_url ?? "",
-      ) === normalizedSystem &&
-      trigram >= input.trigramThreshold &&
-      cosine >= input.cosineThreshold
-    ) {
-      liveScored.push({ trigram, cosine, incident });
+
+    if (vector.length === 0) {
+    } else {
+      const cosine = cosineSimilarity(targetEmbedding, vector);
+      noteBest({ trigram, cosine });
+
+      let rawSystemOrUrl: string;
+      if (
+        incident.compromised_system !== null &&
+        incident.compromised_system !== undefined &&
+        incident.compromised_system !== ""
+      ) {
+        rawSystemOrUrl = incident.compromised_system;
+      } else if (
+        incident.affected_url !== null &&
+        incident.affected_url !== undefined &&
+        incident.affected_url !== ""
+      ) {
+        rawSystemOrUrl = incident.affected_url;
+      } else {
+        rawSystemOrUrl = "";
+      }
+
+      if (
+        incident.incident_date === input.incident_date &&
+        normalizeTitle(rawSystemOrUrl) === normalizedSystem &&
+        trigram >= input.trigramThreshold &&
+        cosine >= input.cosineThreshold
+      ) {
+        liveScored.push({ trigram, cosine, incident });
+      }
     }
   }
 
@@ -149,44 +181,47 @@ export function findDedupeDecision(input: DedupeDecisionInput): DedupeDecision {
       cosine_similarity: liveMatch.cosine,
       is_deleted: false,
     };
-  }
+  } else {
+    const indexMatches: Array<ScoredMatch & { record: DedupeIndexRecord }> = [];
+    for (const record of input.index) {
+      const trigram = trigramSimilarity(
+        normalizedTitle,
+        record.title_normalized,
+      );
+      const cosine = cosineSimilarity(targetEmbedding, record.embedding_vector);
+      noteBest({ trigram, cosine });
+      if (
+        record.incident_date === input.incident_date &&
+        record.system_or_url === normalizedSystem &&
+        trigram >= input.trigramThreshold &&
+        cosine >= input.cosineThreshold
+      ) {
+        indexMatches.push({ trigram, cosine, record });
+      }
+    }
 
-  const indexMatches: Array<ScoredMatch & { record: DedupeIndexRecord }> = [];
-  for (const record of input.index) {
-    const trigram = trigramSimilarity(normalizedTitle, record.title_normalized);
-    const cosine = cosineSimilarity(targetEmbedding, record.embedding_vector);
-    noteBest({ trigram, cosine });
-    if (
-      record.incident_date === input.incident_date &&
-      record.system_or_url === normalizedSystem &&
-      trigram >= input.trigramThreshold &&
-      cosine >= input.cosineThreshold
-    ) {
-      indexMatches.push({ trigram, cosine, record });
+    indexMatches.sort((left, right) => right.trigram - left.trigram);
+    const restoreMatch = indexMatches.find(
+      (match) => match.record.is_deleted === true,
+    );
+    if (restoreMatch !== undefined) {
+      return {
+        action: "restore",
+        incident_code: restoreMatch.record.incident_code,
+        incident_id: restoreMatch.record.pims_incident_id,
+        trigram_similarity: restoreMatch.trigram,
+        cosine_similarity: restoreMatch.cosine,
+        is_deleted: true,
+      };
+    } else {
+      return {
+        action: "create",
+        incident_code: null,
+        incident_id: null,
+        trigram_similarity: bestTrigram,
+        cosine_similarity: bestCosine,
+        is_deleted: false,
+      };
     }
   }
-
-  indexMatches.sort((left, right) => right.trigram - left.trigram);
-  const restoreMatch = indexMatches.find(
-    (match) => match.record.is_deleted === true,
-  );
-  if (restoreMatch !== undefined) {
-    return {
-      action: "restore",
-      incident_code: restoreMatch.record.incident_code,
-      incident_id: restoreMatch.record.pims_incident_id,
-      trigram_similarity: restoreMatch.trigram,
-      cosine_similarity: restoreMatch.cosine,
-      is_deleted: true,
-    };
-  }
-
-  return {
-    action: "create",
-    incident_code: null,
-    incident_id: null,
-    trigram_similarity: bestTrigram,
-    cosine_similarity: bestCosine,
-    is_deleted: false,
-  };
 }

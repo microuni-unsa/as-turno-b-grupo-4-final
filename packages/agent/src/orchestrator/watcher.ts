@@ -12,6 +12,7 @@ import type {
   WatcherState,
 } from "@pims/types/agent.ts";
 import { WatcherStateSchema } from "@pims/types/agent.ts";
+import { CONSTANTS } from "@pims/types/constants.ts";
 import {
   LeaseHeldError,
   NotifyNoRecipientsError,
@@ -131,6 +132,10 @@ export class IncidentWatcherDaemon {
     }
     try {
       await this.pollOnce();
+    } catch (error: unknown) {
+      console.error(
+        `WATCHER_POLL_LOOP_ERROR:${error instanceof Error ? error.message : String(error)}`,
+      );
     } finally {
       if (this.running) {
         this.timer = setTimeout(() => {
@@ -188,7 +193,8 @@ export class IncidentWatcherDaemon {
         case "investigated": {
           const result = await this.orchestrator.draftAndReview(incident.id, {
             phaseDueAtUtc: new Date(
-              this.clock().getTime() + this.config.PHASE_DUE_HOURS * 3_600_000,
+              this.clock().getTime() +
+                this.config.PHASE_DUE_HOURS * CONSTANTS.MS_PER_HOUR,
             ).toISOString(),
           });
           state = await this.saveState(incident, "drafted");
@@ -242,6 +248,13 @@ export class IncidentWatcherDaemon {
           }
           state = await this.saveState(incident, resume);
           break;
+        }
+        default: {
+          const exhaustiveCheck: never = state.stage;
+          throw new PimsValidationError(
+            "watcher_state",
+            `Unhandled watcher stage: ${String(exhaustiveCheck)}`,
+          );
         }
       }
     }
@@ -359,11 +372,12 @@ export class IncidentWatcherDaemon {
   }
 
   private backoffFor(attempt: number): number {
-    return (
-      TRANSIENT_BACKOFF_MS[
-        Math.min(attempt, TRANSIENT_BACKOFF_MS.length - 1)
-      ] ?? RECIPIENT_RETRY_MS
-    );
+    const index = Math.min(attempt, TRANSIENT_BACKOFF_MS.length - 1);
+    const value = TRANSIENT_BACKOFF_MS[index];
+    if (value === undefined) {
+      return RECIPIENT_RETRY_MS;
+    }
+    return value;
   }
 
   private scheduleRetry(incidentId: number, delayMs: number): void {

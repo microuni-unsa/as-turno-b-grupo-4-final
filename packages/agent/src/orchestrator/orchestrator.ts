@@ -66,6 +66,7 @@ import { assertAttachmentMeta } from "@pims/types/attachments.ts";
 import { canonicalizeJson } from "@pims/types/canonical.ts";
 import { CONSTANTS } from "@pims/types/constants.ts";
 import {
+  AgentExecutionError,
   ArtifactIncompleteError,
   BundleAlreadySealedError,
   BundlePimsMismatchError,
@@ -452,8 +453,8 @@ export class IncidentOrchestrator {
         incident_time: payload.incident_time ?? null,
         detection_date: params.detectionDate,
         detection_time: payload.detection_time ?? null,
-        incident_type: payload.incident_type ?? "OT",
-        status: "O",
+        incident_type: payload.incident_type ?? CONSTANTS.DEFAULT_INCIDENT_TYPE,
+        status: CONSTANTS.INCIDENT_STATUS_OPEN,
         affected_data_types: payload.affected_data_types ?? [],
         security_measures_adopted: payload.security_measures_adopted ?? [],
         affected_cid: payload.affected_cid ?? [],
@@ -581,6 +582,7 @@ export class IncidentOrchestrator {
     payload: IntakePayload,
   ): Promise<void> {
     if (payload.source_payload === undefined) {
+      await this.appendMarker(incident, "INTAKE_SOURCE_PAYLOAD_ABSENT");
       return;
     }
     const body = JSON.stringify({
@@ -630,7 +632,7 @@ export class IncidentOrchestrator {
         await this.armTimer(
           "T72_AUTHORITY",
           incident,
-          new Date(awareness.getTime() + hours * 3_600_000),
+          new Date(awareness.getTime() + hours * CONSTANTS.MS_PER_HOUR),
         ),
       );
     }
@@ -638,7 +640,10 @@ export class IncidentOrchestrator {
       await this.armTimer(
         "T_PERU_ADVISORY",
         incident,
-        new Date(awareness.getTime() + CONSTANTS.PERU_ADVISORY_H * 3_600_000),
+        new Date(
+          awareness.getTime() +
+            CONSTANTS.PERU_ADVISORY_H * CONSTANTS.MS_PER_HOUR,
+        ),
       ),
     );
     if (channel === "processor_notice") {
@@ -647,7 +652,8 @@ export class IncidentOrchestrator {
           "T_PROCESSOR",
           incident,
           new Date(
-            awareness.getTime() + this.deps.config.SLA_PROCESSOR_H * 3_600_000,
+            awareness.getTime() +
+              this.deps.config.SLA_PROCESSOR_H * CONSTANTS.MS_PER_HOUR,
           ),
         ),
       );
@@ -715,14 +721,17 @@ export class IncidentOrchestrator {
       await this.armTimer(
         "T72_AUTHORITY",
         incident,
-        new Date(awareness.getTime() + hours * 3_600_000),
+        new Date(awareness.getTime() + hours * CONSTANTS.MS_PER_HOUR),
       );
     }
     if (!kinds.has("T_PERU_ADVISORY")) {
       await this.armTimer(
         "T_PERU_ADVISORY",
         incident,
-        new Date(awareness.getTime() + CONSTANTS.PERU_ADVISORY_H * 3_600_000),
+        new Date(
+          awareness.getTime() +
+            CONSTANTS.PERU_ADVISORY_H * CONSTANTS.MS_PER_HOUR,
+        ),
       );
     }
   }
@@ -857,7 +866,7 @@ export class IncidentOrchestrator {
           classified,
           new Date(
             this.deps.clock().getTime() +
-              this.deps.config.SLA_REVIEW_H * 3_600_000,
+              this.deps.config.SLA_REVIEW_H * CONSTANTS.MS_PER_HOUR,
           ),
         );
       }
@@ -1373,8 +1382,8 @@ export class IncidentOrchestrator {
           description: `Risk signal from ${incident.incident_code}: ${analysis.cause}`,
           controlled_probability: Math.min(level, dimension),
           controlled_impact: Math.min(level, dimension),
-          response_strategy: "M",
-          status: "O",
+          response_strategy: CONSTANTS.DEFAULT_RESPONSE_STRATEGY,
+          status: CONSTANTS.INCIDENT_STATUS_OPEN,
         };
         if (codes.threat_code !== null) {
           signalArgs.threat_code = codes.threat_code;
@@ -1480,8 +1489,8 @@ export class IncidentOrchestrator {
     return this.withLease(code, async () => {
       this.announceRole(code, "drafter");
       const gate = this.deps.composer.evaluateHighRiskGate({
-        severity: incident.severity ?? "M",
-        impact: incident.impact ?? "M",
+        severity: incident.severity ?? CONSTANTS.DEFAULT_SEVERITY,
+        impact: incident.impact ?? CONSTANTS.DEFAULT_IMPACT,
         affectedDataTypes: incident.affected_data_types,
         numAffectedSubjects: incident.num_affected_subjects ?? null,
         unencryptedExfiltration:
@@ -1514,10 +1523,14 @@ export class IncidentOrchestrator {
           if (opts?.phaseDueAtUtc === undefined) {
             throw new PimsValidationError("phase_due_at", "PHASE_DUE_REQUIRED");
           }
+          const phaseDueDate = new Date(opts.phaseDueAtUtc);
+          if (Number.isNaN(phaseDueDate.getTime())) {
+            throw new PimsValidationError("phase_due_at", "INVALID_DATE");
+          }
           await this.armTimerIfAbsent(
             "T_PHASE_FOLLOWUP",
             incident,
-            new Date(opts.phaseDueAtUtc),
+            phaseDueDate,
             { pack_type: "authority", phase: 2 },
           );
         }
@@ -1553,7 +1566,7 @@ export class IncidentOrchestrator {
           incident,
           new Date(
             this.deps.clock().getTime() +
-              this.deps.config.SLA_SUBJECT_H * 3_600_000,
+              this.deps.config.SLA_SUBJECT_H * CONSTANTS.MS_PER_HOUR,
           ),
         );
       }
@@ -1722,8 +1735,8 @@ export class IncidentOrchestrator {
       }
 
       const gate = this.deps.composer.evaluateHighRiskGate({
-        severity: incident.severity ?? "M",
-        impact: incident.impact ?? "M",
+        severity: incident.severity ?? CONSTANTS.DEFAULT_SEVERITY,
+        impact: incident.impact ?? CONSTANTS.DEFAULT_IMPACT,
         affectedDataTypes: incident.affected_data_types,
         numAffectedSubjects: incident.num_affected_subjects ?? null,
         unencryptedExfiltration:
@@ -1769,12 +1782,18 @@ export class IncidentOrchestrator {
       const baselineRaw = await this.deps.evidenceStore.getAgentState(
         `REOPEN_BASELINE:${code}`,
       );
-      const baselineParsed = z
-        .object({ action_count: z.number().int().nonnegative() })
-        .safeParse(baselineRaw);
-      const epochActions = baselineParsed.success
-        ? actions.slice(baselineParsed.data.action_count)
-        : actions;
+      let epochActions = actions;
+      if (baselineRaw !== null && baselineRaw !== undefined) {
+        const baselineParsed = z
+          .object({ action_count: z.number().int().nonnegative() })
+          .safeParse(baselineRaw);
+        if (!baselineParsed.success) {
+          throw new AgentExecutionError(
+            `Failed to parse reopen baseline state for incident ${code}: ${baselineParsed.error.message}`,
+          );
+        }
+        epochActions = actions.slice(baselineParsed.data.action_count);
+      }
       const hasResolution = epochActions.some(
         (action) => action.action_type === "R",
       );
@@ -1876,7 +1895,7 @@ export class IncidentOrchestrator {
       const vetoWindowMin = opts?.vetoWindowMin;
       if (vetoWindowMin !== undefined && vetoWindowMin > 0) {
         const parkedUntil = new Date(
-          this.deps.clock().getTime() + vetoWindowMin * 60_000,
+          this.deps.clock().getTime() + vetoWindowMin * CONSTANTS.MS_PER_MINUTE,
         );
         const active = await this.deps.evidenceStore.listActiveTimers(code);
         for (const timer of active) {
@@ -1925,9 +1944,17 @@ export class IncidentOrchestrator {
     const code = incident.incident_code;
     const notifies: PimsNotifyResult[] = [];
 
-    for (const packType of ["authority", "subject"] as const) {
+    for (const packType of CONSTANTS.NOTICE_PACK_TYPES) {
       const row = await this.deps.evidenceStore.getDraftPack(code, packType);
-      if (row === null || row.state !== "approved") {
+      if (row === null) {
+        await this.appendMarker(incident, `PACK_ROW_ABSENT:${packType}`);
+        continue;
+      }
+      if (row.state !== "approved") {
+        await this.appendMarker(
+          incident,
+          `PACK_UNAPPROVED:${packType}:${row.state}`,
+        );
         continue;
       }
       const packId = readPackId(row.payload);
@@ -2342,16 +2369,16 @@ export class IncidentOrchestrator {
         "00:00:00",
       );
       const mttdHours = Math.max(
-        (awareness.getTime() - occurrence.getTime()) / 3_600_000,
+        (awareness.getTime() - occurrence.getTime()) / CONSTANTS.MS_PER_HOUR,
         0,
       );
       const mttrHours = Math.max(
-        (closedAt.getTime() - awareness.getTime()) / 3_600_000,
+        (closedAt.getTime() - awareness.getTime()) / CONSTANTS.MS_PER_HOUR,
         0,
       );
       const sla72Met =
         closedAt.getTime() - awareness.getTime() <=
-        this.authorityDeadlineHours() * 3_600_000;
+        this.authorityDeadlineHours() * CONSTANTS.MS_PER_HOUR;
 
       await this.deps.evidenceStore.saveTriageCalibration({
         incident_code: code,
@@ -2366,7 +2393,7 @@ export class IncidentOrchestrator {
         at_utc: closedAt.toISOString(),
         actor_role: "monitor",
         attrs: {
-          severity: sealedIncident.severity ?? "M",
+          severity: sealedIncident.severity ?? CONSTANTS.DEFAULT_SEVERITY,
           incident_type: sealedIncident.incident_type,
           mttd_hours: mttdHours,
           mttr_hours: mttrHours,
@@ -2523,6 +2550,10 @@ export class IncidentOrchestrator {
           incident.compromised_system,
         );
         if (assetIds.length === 0) {
+          await this.deps.evidenceStore.markRiskSignalFailed(
+            record.id,
+            "UNRESOLVABLE_ASSET_SIGNAL",
+          );
           continue;
         }
         await this.deps.evidenceStore.updateRiskSignalPayload(record.id, {
@@ -2545,7 +2576,7 @@ export class IncidentOrchestrator {
           risk_owner: record.signal_payload.risk_owner ?? undefined,
           response_strategy:
             record.signal_payload.response_strategy ?? undefined,
-          status: "O",
+          status: CONSTANTS.INCIDENT_STATUS_OPEN,
         });
         await this.deps.evidenceStore.markRiskSignalSent(record.id);
       } catch (error: unknown) {
@@ -2698,8 +2729,13 @@ export class IncidentOrchestrator {
         await this.appendMarker(incident, "DEADLINE_MISSED_REVIEW_SLA");
         return "breached";
       },
-      peruAdvisory: async () => {
-        return;
+      peruAdvisory: async (incidentCode) => {
+        const incident = await this.findIncidentByCode(incidentCode);
+        await this.appendMarker(incident, "PERU_ADVISORY_TIMER_ELAPSED");
+        await this.emitEvent("deadline_missed", incident, "orchestrator", {
+          deadline_kind: "T_PERU_ADVISORY",
+          reason: "PERU_ADVISORY_TIMER_ELAPSED",
+        });
       },
       phaseFollowup: async (incidentCode, payload) => {
         const incident = await this.findIncidentByCode(incidentCode);
@@ -2808,12 +2844,12 @@ export class IncidentOrchestrator {
   }
 
   private announceRole(incidentCode: string, role: AgentRole): void {
+    const previous = this.currentRoleByIncident.get(incidentCode) ?? null;
+    this.currentRoleByIncident.set(incidentCode, role);
     const events = this.deps.events;
     if (events === undefined) {
       return;
     }
-    const previous = this.currentRoleByIncident.get(incidentCode) ?? null;
-    this.currentRoleByIncident.set(incidentCode, role);
     events.emit({
       type: "role:transition",
       at_utc: this.deps.clock().toISOString(),
