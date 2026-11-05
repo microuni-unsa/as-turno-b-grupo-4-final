@@ -2,6 +2,10 @@ FROM mcr.microsoft.com/presidio-analyzer:latest
 
 USER root
 
+# Configure pip timeout and retries to prevent network download timeouts
+ENV PIP_DEFAULT_TIMEOUT=120 \
+    PIP_RETRIES=5
+
 # Install Spanish spaCy model
 RUN poetry run python -m spacy download es_core_news_md
 
