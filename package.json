@@ -17,6 +17,12 @@
     "build:ui": "bun --filter @pims/cockpit build:ui",
     "start": "bun run packages/cockpit/src/server.ts",
     "build": "bun build packages/cockpit/src/server.ts --outdir dist --target bun",
+    "dev": "microenv dev --def ./src/env-matrix.ts --stack ./src/stack-def.ts --preset dev --local",
+    "stack:dev": "bun run scripts/dev-stack.ts",
+    "env:check": "microenv check --def ./src/env-matrix.ts",
+    "env:diff": "microenv diff --def ./src/env-matrix.ts dev prod",
+    "env:materialize:dev": "microenv materialize --def ./src/env-matrix.ts --env dev --out .env --force",
+    "env:materialize:prod": "microenv materialize --def ./src/env-matrix.ts --env prod --out .env --force",
     "decrypt": "sops -d --output .env .enc.env"
   },
   "devDependencies": {
@@ -29,5 +35,9 @@
     "testcontainers": "^12.2.1",
     "typescript": "^7.0.2",
     "vitest": "^5.0.5"
+  },
+  "dependencies": {
+    "@microx-technologies/microcompose": "0.1.0",
+    "@microx-technologies/microenv": "0.1.1"
   }
 }

@@ -1,6 +1,6 @@
 FROM oven/bun:1.4.2 AS builder
 WORKDIR /app
-COPY package.json bun.lock tsconfig.json biome.json ./
+COPY package.json bun.lock tsconfig.json biome.json .npmrc ./
 COPY packages ./packages
 COPY corpus ./corpus
 RUN bun install --frozen-lockfile

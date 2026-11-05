@@ -724,3 +724,7 @@ export function loadConfig(
     FORM_NARRATIVE_MAX_CHARS: formNarrativeMaxChars,
   };
 }
+
+export * from "@pims/config/env-matrix.ts";
+export * from "@pims/config/env-schema.ts";
+export * from "@pims/config/stack-def.ts";

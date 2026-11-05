@@ -149,3 +149,7 @@ dist
 # Local live-tenant secrets (never committed)
 data/site.md
 data/pims_password
+
+# Microenv local presets and personal overrides
+*.local.ts
+

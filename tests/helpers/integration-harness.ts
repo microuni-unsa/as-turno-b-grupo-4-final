@@ -16,7 +16,12 @@ import {
   ROOT_CAUSE_SYSTEM,
   TRIAGE_SYSTEM,
 } from "@pims/agent";
-import { type AgentConfig, loadConfig } from "@pims/config";
+import {
+  type AgentConfig,
+  createStack,
+  loadConfig,
+  type StackHandle,
+} from "@pims/config";
 import { EvidenceStore } from "@pims/evidence";
 import { OpenAIModelProvider } from "@pims/models";
 import { PimsAdapter } from "@pims/pims-adapter";
@@ -34,10 +39,7 @@ import {
 } from "@pims/types/agent.ts";
 import { PIMS_TEST_SEED_PASSWORD } from "@pims/types/constants.ts";
 import type { JsonObject, RankedPassage } from "@pims/types/models.ts";
-import {
-  PostgreSqlContainer,
-  type StartedPostgreSqlContainer,
-} from "@testcontainers/postgresql";
+import type { StartedPostgreSqlContainer } from "@testcontainers/postgresql";
 import {
   buildGdprTextAxes,
   generateSpanAwareEmbedding,
@@ -55,6 +57,7 @@ export type HarnessChatHandler = (
 ) => JsonObject | null;
 
 export interface IntegrationHarness {
+  stack: StackHandle;
   container: StartedPostgreSqlContainer;
   dbClient: MockDatabaseClient;
   server: PimsTestServerInstance;
@@ -112,22 +115,21 @@ export async function startIntegrationHarness(options?: {
 }): Promise<IntegrationHarness> {
   const projectRoot = process.cwd();
   const now = new Date("2026-10-01T20:00:00.000Z");
-  const container = await new PostgreSqlContainer("pgvector/pgvector:pg16")
-    .withBindMounts([
-      {
-        source: path.resolve(projectRoot, "data/gestitel_base_de_datos.sql"),
-        target: "/docker-entrypoint-initdb.d/01-gestitel.sql",
-        mode: "ro",
-      },
-      {
-        source: path.resolve(projectRoot, "data/02-init-unsa-seed.sql"),
-        target: "/docker-entrypoint-initdb.d/02-seed.sql",
-        mode: "ro",
-      },
-    ])
-    .start();
+  const stack = createStack({ projectRoot, includePresidio: false });
+  const stackEnv = await stack.up();
+  const connectionUri = stackEnv.EVIDENCE_DB_URL ?? process.env.EVIDENCE_DB_URL;
+  if (!connectionUri) {
+    throw new Error("EVIDENCE_DB_URL was not populated by microcompose stack");
+  }
 
-  const dbClient = createMockDatabase(container.getConnectionUri());
+  const container = {
+    getConnectionUri: () => connectionUri,
+    stop: async () => {
+      await stack.down();
+    },
+  } as unknown as StartedPostgreSqlContainer;
+
+  const dbClient = createMockDatabase(connectionUri);
   const server = await createPimsTestServer(dbClient, {
     nestedActionMode: "replace",
   });
@@ -270,7 +272,7 @@ export async function startIntegrationHarness(options?: {
     }
     if (
       args.system.startsWith(B3_12_SYSTEM) ||
-      args.system.includes("breach")
+      (args.system.includes("breach") && !args.system.includes("You review"))
     ) {
       return respond({
         breach_requiring_response: !isNonPii,
@@ -427,11 +429,12 @@ export async function startIntegrationHarness(options?: {
     await server.stop();
     await store.close();
     await dbClient.sql.end();
-    await container.stop();
+    await stack.down();
     fs.rmSync(storageDir, { recursive: true, force: true });
   };
 
   return {
+    stack,
     container,
     dbClient,
     server,
