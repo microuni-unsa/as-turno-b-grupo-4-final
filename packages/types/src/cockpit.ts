@@ -93,12 +93,60 @@ export const PendingDecisionSchema = z.object({
 });
 export type PendingDecision = z.infer<typeof PendingDecisionSchema>;
 
+export const ChatTraceSpanSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  type: z.enum(["turn", "tool", "model", "agent"]),
+  status: z.enum(["ok", "error"]),
+  start_ms: z.number(),
+  end_ms: z.number(),
+  duration_ms: z.number(),
+  relative_start_ms: z.number(),
+  args: z.record(z.unknown()).optional(),
+  result: z
+    .union([z.record(z.unknown()), z.string(), z.array(z.unknown())])
+    .optional(),
+  error: z.string().optional(),
+  track: z.string().optional(),
+});
+export type ChatTraceSpan = z.infer<typeof ChatTraceSpanSchema>;
+
+export const ChatToolAggregateSchema = z.object({
+  tool: z.string().min(1),
+  calls: z.number().int().nonnegative(),
+  errors: z.number().int().nonnegative(),
+  total_ms: z.number().nonnegative(),
+  avg_ms: z.number().nonnegative(),
+  max_ms: z.number().nonnegative(),
+});
+export type ChatToolAggregate = z.infer<typeof ChatToolAggregateSchema>;
+
+export const ChatTraceSchema = z.object({
+  id: z.string().min(1),
+  title: z.string().min(1),
+  start_iso: z.string(),
+  wall_time_ms: z.number().nonnegative(),
+  model_time_ms: z.number().nonnegative(),
+  tool_time_ms: z.number().nonnegative(),
+  idle_time_ms: z.number().nonnegative(),
+  turns_count: z.number().int().nonnegative(),
+  requests_count: z.number().int().nonnegative(),
+  tool_calls_count: z.number().int().nonnegative(),
+  tokens_estimate: z.number().int().nonnegative().optional(),
+  cost_estimate_usd: z.number().nonnegative().optional(),
+  spans: z.array(ChatTraceSpanSchema),
+  aggregates: z.array(ChatToolAggregateSchema),
+});
+export type ChatTrace = z.infer<typeof ChatTraceSchema>;
+
 export const ChatResponseSchema = z.object({
   reply: z.string().min(1),
   persona: ChatPersonaSchema,
   citations: z.array(ChatCitationSchema),
   pending_decisions: z.array(PendingDecisionSchema),
   tool_calls: z.array(z.string()),
+  reasoning: z.string().optional(),
+  trace: ChatTraceSchema,
 });
 export type ChatResponse = z.infer<typeof ChatResponseSchema>;
 

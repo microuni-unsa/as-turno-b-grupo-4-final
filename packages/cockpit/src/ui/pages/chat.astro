@@ -1,162 +1,617 @@
 ---
 import AppLayout from "@pims/cockpit/ui/layouts/AppLayout.astro";
 import {
+  Activity,
   AlertTriangle,
   Bot,
-  CornerDownLeft,
+  Brain,
+  Check,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  Clock,
+  Columns,
+  Copy,
+  Download,
+  Edit3,
+  ExternalLink,
+  History,
+  Layers,
+  Maximize2,
   MessageSquare,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Plus,
+  RotateCw,
+  Search,
   Send,
+  ShieldCheck,
+  Sliders,
   Sparkles,
+  Trash2,
   User,
+  Wrench,
 } from "lucide-astro";
 ---
 
-<AppLayout title="Asistente IA | Glass-Box Cockpit" breadcrumb="Asistente IA">
-  <div class="h-[calc(100vh-7rem)] flex flex-col space-y-4">
-    <!-- Header with Persona Switcher -->
-    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-800">
-      <div>
-        <h1 class="text-xl font-bold tracking-tight text-white flex items-center space-x-2">
-          <MessageSquare class="w-6 h-6 text-blue-400" />
-          <span>Asistente IA Regulatorio</span>
-        </h1>
-        <p class="text-xs text-slate-400 mt-0.5">
-          Consultas en lenguaje natural con citas normativas exactas y verificación anti-alucinación
-        </p>
-      </div>
-
-      <!-- Persona Selector Bar -->
-      <div class="flex items-center space-x-1.5 bg-slate-900 p-1 rounded-xl border border-slate-800 text-xs">
-        <span class="text-slate-400 px-2 py-1 font-medium">Ver como:</span>
-        <button
-          type="button"
-          data-persona="auditor"
-          class="persona-btn px-3 py-1 rounded-lg font-medium transition-colors bg-blue-600 text-white"
-        >
-          Auditor
-        </button>
-        <button
-          type="button"
-          data-persona="executive"
-          class="persona-btn px-3 py-1 rounded-lg font-medium transition-colors text-slate-300 hover:text-white hover:bg-slate-800"
-        >
-          Ejecutivo
-        </button>
-        <button
-          type="button"
-          data-persona="dpo"
-          class="persona-btn px-3 py-1 rounded-lg font-medium transition-colors text-slate-300 hover:text-white hover:bg-slate-800"
-        >
-          DPO / Legal
-        </button>
-      </div>
-    </div>
-
-    <!-- Proactive Decision Warning Banner -->
-    <div
-      id="chat-warning-banner"
-      class="hidden p-3 rounded-xl bg-amber-950/70 border border-amber-800/80 text-amber-200 text-xs flex items-center justify-between shadow-sm animate-pulse"
+<AppLayout title="Asistente IA Regulatorio & Trazas | Glass-Box Cockpit" breadcrumb="Asistente IA">
+  <div class="h-[calc(100vh-7.25rem)] flex flex-row overflow-hidden border border-slate-800 rounded-2xl bg-slate-950 shadow-xl">
+    
+    <!-- LEFT: Collapsible Sessions Sidebar -->
+    <aside
+      id="chat-sessions-sidebar"
+      class="w-72 border-r border-slate-800 bg-slate-900/90 flex flex-col transition-all duration-300 shrink-0 z-20"
     >
-      <div class="flex items-center space-x-2">
-        <AlertTriangle class="w-4 h-4 text-amber-400 shrink-0" />
-        <span id="chat-warning-text">Acción pendiente detectada</span>
-      </div>
-      <a
-        href="/compliance"
-        class="px-2.5 py-1 rounded bg-amber-900/80 hover:bg-amber-800 text-white font-semibold transition-colors text-[11px]"
-      >
-        Revisar Decisión
-      </a>
-    </div>
+      <!-- New Chat Button & Search -->
+      <div class="p-3 border-b border-slate-800 space-y-2.5">
+        <button
+          id="btn-new-chat"
+          type="button"
+          class="w-full flex items-center justify-center space-x-2 px-3 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-medium text-xs shadow-md shadow-blue-600/20 transition-all hover:scale-[1.01] active:scale-[0.99]"
+        >
+          <Plus class="w-4 h-4" />
+          <span>Nuevo Chat</span>
+        </button>
 
-    <!-- Messages Container -->
-    <div
-      id="chat-messages"
-      class="flex-1 overflow-y-auto space-y-4 pr-2 text-xs"
-    >
-      <!-- Initial Welcome Message from System -->
-      <div class="flex items-start space-x-3">
-        <div class="w-8 h-8 rounded-lg bg-blue-600/20 border border-blue-500/40 text-blue-400 flex items-center justify-center shrink-0">
-          <Bot class="w-4 h-4" />
-        </div>
-        <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 max-w-2xl space-y-2">
-          <div class="flex items-center justify-between">
-            <span class="font-semibold text-white">Agente de Incidentes UNSA</span>
-            <span class="text-[10px] text-slate-500 font-mono">Conectado</span>
-          </div>
-          <p class="text-slate-300 leading-relaxed">
-            Bienvenido a la consola conversacional del Agente de Incidentes. Puede consultarme sobre el estado de incidentes activos, plazos de 72 horas del Art. 33 de GDPR, citas normativas verificadas de ISO/IEC 27701 y Ley 29733, o decisiones pendientes de firma.
-          </p>
-        </div>
-      </div>
-    </div>
-
-    <!-- Chat Input Form -->
-    <form id="chat-form" class="pt-2" onsubmit="event.preventDefault(); return false;">
-      <div class="bg-slate-900 border border-slate-800 rounded-2xl p-2.5 space-y-2 focus-within:border-blue-500 transition-colors">
-        <div class="flex items-center space-x-2 px-1 text-xs text-slate-400">
-          <span>Contexto de Incidente:</span>
+        <div class="relative">
+          <Search class="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-slate-500" />
           <input
-            id="chat-incident-context"
+            id="session-search"
             type="text"
-            placeholder="Opcional (ej. INC-001)"
-            class="bg-slate-950 border border-slate-800 rounded px-2 py-0.5 text-xs text-slate-200 font-mono focus:border-blue-500 focus:outline-none w-36"
+            placeholder="Buscar conversaciones..."
+            class="w-full bg-slate-950 border border-slate-800 rounded-lg pl-8 pr-2.5 py-1.5 text-xs text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-blue-500 transition-colors"
           />
         </div>
+      </div>
 
-        <div class="flex items-center space-x-2">
-          <textarea
-            id="chat-input"
-            rows="2"
-            placeholder="Escriba su consulta... (Enter para enviar, Shift+Enter para nueva línea)"
-            class="flex-1 bg-transparent border-0 text-slate-100 placeholder:text-slate-600 text-xs focus:ring-0 focus:outline-none resize-none p-1.5"
-          ></textarea>
+      <!-- Sessions List (Grouped by Date) -->
+      <div id="sessions-container" class="flex-1 overflow-y-auto p-2 space-y-4 text-xs select-none">
+        <!-- Rendered dynamically via TS -->
+      </div>
 
+      <!-- Footer with Clear All -->
+      <div class="p-2.5 border-t border-slate-800 flex items-center justify-between text-[11px] text-slate-400">
+        <span id="session-count-label" class="font-mono">1 chat guardado</span>
+        <button
+          id="btn-clear-all-sessions"
+          type="button"
+          class="hover:text-rose-400 transition-colors flex items-center space-x-1"
+          title="Limpiar todas las conversaciones"
+        >
+          <Trash2 class="w-3.5 h-3.5" />
+          <span>Limpiar</span>
+        </button>
+      </div>
+    </aside>
+
+    <!-- RIGHT/CENTER: Main Operational Workspace (Chat + Trace) -->
+    <div class="flex-1 flex flex-col min-w-0 h-full bg-slate-950 overflow-hidden">
+      
+      <!-- Top Action Bar -->
+      <div class="flex flex-wrap items-center justify-between gap-2.5 px-4 py-2.5 border-b border-slate-800 bg-slate-900/60 shrink-0">
+        <div class="flex items-center space-x-2.5 min-w-0">
           <button
-            id="btn-send-chat"
+            id="btn-toggle-sidebar"
             type="button"
-            class="p-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white transition-colors shrink-0 shadow-md shadow-blue-600/20"
+            class="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+            title="Mostrar/Ocultar historial"
           >
-            <Send class="w-4 h-4" />
+            <PanelLeftClose id="sidebar-icon-close" class="w-4 h-4" />
+            <PanelLeftOpen id="sidebar-icon-open" class="w-4 h-4 hidden" />
+          </button>
+
+          <div class="min-w-0 flex items-center space-x-2">
+            <h2
+              id="active-session-title"
+              class="font-semibold text-sm text-white truncate cursor-pointer hover:text-blue-400 transition-colors"
+              title="Doble clic para renombrar"
+            >
+              Nueva Conversación
+            </h2>
+            <button
+              id="btn-rename-session"
+              type="button"
+              class="text-slate-500 hover:text-slate-300 transition-colors p-1"
+              title="Renombrar chat"
+            >
+              <Edit3 class="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
+
+        <div class="flex items-center space-x-2 shrink-0">
+          <!-- Persona Selector Bar -->
+          <div class="flex items-center space-x-1 bg-slate-900 p-1 rounded-xl border border-slate-800 text-[11px]">
+            <button
+              type="button"
+              data-persona="auditor"
+              class="persona-btn px-2.5 py-1 rounded-lg font-medium transition-colors bg-blue-600 text-white"
+            >
+              Auditor
+            </button>
+            <button
+              type="button"
+              data-persona="executive"
+              class="persona-btn px-2.5 py-1 rounded-lg font-medium transition-colors text-slate-300 hover:text-white hover:bg-slate-800"
+            >
+              Ejecutivo
+            </button>
+            <button
+              type="button"
+              data-persona="dpo"
+              class="persona-btn px-2.5 py-1 rounded-lg font-medium transition-colors text-slate-300 hover:text-white hover:bg-slate-800"
+            >
+              DPO / Legal
+            </button>
+          </div>
+
+          <!-- View Mode Toggle (Chat / Split / Traces) -->
+          <div class="flex items-center bg-slate-900 p-1 rounded-xl border border-slate-800 text-[11px]">
+            <button
+              id="mode-chat"
+              type="button"
+              class="view-mode-btn px-2.5 py-1 rounded-lg font-medium transition-colors bg-blue-600 text-white flex items-center space-x-1"
+            >
+              <MessageSquare class="w-3.5 h-3.5" />
+              <span>Chat</span>
+            </button>
+            <button
+              id="mode-split"
+              type="button"
+              class="view-mode-btn px-2.5 py-1 rounded-lg font-medium transition-colors text-slate-300 hover:text-white hover:bg-slate-800 flex items-center space-x-1"
+            >
+              <Columns class="w-3.5 h-3.5" />
+              <span>Dividido</span>
+            </button>
+            <button
+              id="mode-trace"
+              type="button"
+              class="view-mode-btn px-2.5 py-1 rounded-lg font-medium transition-colors text-slate-300 hover:text-white hover:bg-slate-800 flex items-center space-x-1"
+            >
+              <Activity class="w-3.5 h-3.5" />
+              <span>Trazas</span>
+            </button>
+          </div>
+
+          <!-- Export Button -->
+          <button
+            id="btn-export-chat"
+            type="button"
+            class="p-1.5 rounded-lg bg-slate-900 border border-slate-800 text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+            title="Exportar conversación (Markdown)"
+          >
+            <Download class="w-4 h-4" />
           </button>
         </div>
       </div>
-    </form>
+
+      <!-- Proactive Decision Warning Banner -->
+      <div
+        id="chat-warning-banner"
+        class="hidden px-4 py-2 bg-amber-950/80 border-b border-amber-800/80 text-amber-200 text-xs flex items-center justify-between shadow-sm animate-pulse shrink-0"
+      >
+        <div class="flex items-center space-x-2">
+          <AlertTriangle class="w-4 h-4 text-amber-400 shrink-0" />
+          <span id="chat-warning-text">Acción pendiente detectada</span>
+        </div>
+        <a
+          href="/compliance"
+          class="px-2.5 py-1 rounded bg-amber-900 hover:bg-amber-800 text-white font-semibold transition-colors text-[11px]"
+        >
+          Revisar Decisión
+        </a>
+      </div>
+
+      <!-- Workspace Body: Chat Panel & Trace Panel -->
+      <div id="workspace-container" class="flex-1 flex flex-row overflow-hidden min-h-0">
+        
+        <!-- CHAT SECTION -->
+        <div id="chat-section" class="flex-1 flex flex-col min-w-0 h-full border-r border-transparent">
+          
+          <!-- Messages Scrollable Area -->
+          <div
+            id="chat-messages"
+            class="flex-1 overflow-y-auto px-4 py-4 space-y-4 text-xs scroll-smooth"
+          >
+            <!-- Dynamic Messages & Empty State Starter Cards -->
+          </div>
+
+          <!-- Input Controls Form -->
+          <form id="chat-form" class="p-3 border-t border-slate-800 bg-slate-900/40" onsubmit="event.preventDefault(); return false;">
+            <!-- Prompt Starters (Visible if conversation is empty) -->
+            <div id="prompt-starters" class="flex flex-wrap gap-1.5 pb-2">
+              <button
+                type="button"
+                data-prompt="¿Cuál es el plazo límite de 72h para INC-001 y cuándo vence?"
+                class="prompt-pill px-2.5 py-1 rounded-full bg-slate-900 border border-slate-800 text-slate-300 hover:text-white hover:border-blue-500/50 hover:bg-slate-800/80 transition-colors text-[11px]"
+              >
+                ⏱️ Plazo 72h INC-001
+              </button>
+              <button
+                type="button"
+                data-prompt="Verificar causales de exención Art. 34(3)(a) para el incidente activo"
+                class="prompt-pill px-2.5 py-1 rounded-full bg-slate-900 border border-slate-800 text-slate-300 hover:text-white hover:border-blue-500/50 hover:bg-slate-800/80 transition-colors text-[11px]"
+              >
+                🛡️ Exención Art. 34(3)(a)
+              </button>
+              <button
+                type="button"
+                data-prompt="Resumen ejecutivo del estado de incidentes para el comité"
+                class="prompt-pill px-2.5 py-1 rounded-full bg-slate-900 border border-slate-800 text-slate-300 hover:text-white hover:border-blue-500/50 hover:bg-slate-800/80 transition-colors text-[11px]"
+              >
+                📊 Resumen Ejecutivo
+              </button>
+              <button
+                type="button"
+                data-prompt="Consultar requisitos de medidas técnicas según ISO/IEC 27701"
+                class="prompt-pill px-2.5 py-1 rounded-full bg-slate-900 border border-slate-800 text-slate-300 hover:text-white hover:border-blue-500/50 hover:bg-slate-800/80 transition-colors text-[11px]"
+              >
+                📜 Medidas ISO/IEC 27701
+              </button>
+            </div>
+
+            <!-- Input Container with Incident Context Chip -->
+            <div class="bg-slate-900 border border-slate-800 rounded-2xl p-2.5 space-y-2 focus-within:border-blue-500 transition-colors shadow-inner">
+              <div class="flex items-center justify-between px-1 text-[11px] text-slate-400">
+                <div class="flex items-center space-x-2">
+                  <span class="font-medium text-slate-500">Contexto Incidente:</span>
+                  <div class="flex items-center space-x-1 bg-slate-950 border border-slate-800 rounded px-2 py-0.5 text-xs text-slate-200 font-mono">
+                    <span id="active-incident-badge">Ninguno</span>
+                    <button
+                      id="btn-edit-incident-context"
+                      type="button"
+                      class="text-slate-500 hover:text-blue-400 p-0.5 ml-1"
+                      title="Asignar código de incidente (ej. INC-001)"
+                    >
+                      <Edit3 class="w-3 h-3" />
+                    </button>
+                  </div>
+                </div>
+
+                <div class="flex items-center space-x-2 text-[10px] text-slate-500">
+                  <span class="font-mono">Enter ↵ enviar</span>
+                  <span>·</span>
+                  <span class="font-mono">Shift+Enter salto</span>
+                </div>
+              </div>
+
+              <div class="flex items-end space-x-2">
+                <textarea
+                  id="chat-input"
+                  rows="2"
+                  placeholder="Escriba su consulta regulatoria, operativa o técnica..."
+                  class="flex-1 bg-transparent border-0 text-slate-100 placeholder:text-slate-500 text-xs focus:ring-0 focus:outline-none resize-none p-1.5 leading-relaxed max-h-36"
+                ></textarea>
+
+                <div class="flex items-center space-x-1 shrink-0 pb-1">
+                  <button
+                    id="btn-send-chat"
+                    type="button"
+                    class="p-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white transition-all shadow-md shadow-blue-600/25 disabled:opacity-50"
+                  >
+                    <Send class="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            </div>
+          </form>
+        </div>
+
+        <!-- TRACE SECTION (OMP STATS STYLE INSPECTOR & TIMELINE) -->
+        <div id="trace-section" class="flex-1 flex flex-col min-w-0 h-full bg-slate-925/80 overflow-hidden border-l border-slate-800">
+          
+          <!-- Trace Header & Selector -->
+          <div class="p-3 border-b border-slate-800 bg-slate-900/80 flex flex-wrap items-center justify-between gap-3 shrink-0">
+            <div class="flex items-center space-x-2">
+              <Activity class="w-4 h-4 text-emerald-400 shrink-0" />
+              <span class="font-bold text-xs text-white">Inspector de Trazas</span>
+              <select
+                id="trace-selector"
+                class="bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1 text-xs text-slate-200 font-mono focus:border-blue-500 focus:outline-none"
+              >
+                <!-- Populated dynamically -->
+              </select>
+            </div>
+
+            <!-- Trace Controls (Axis mode, compress idle, search) -->
+            <div class="flex items-center space-x-2 text-xs">
+              <div class="flex items-center space-x-1 bg-slate-950 p-0.5 rounded-lg border border-slate-800 text-[10px]">
+                <button type="button" data-axis="duration" class="axis-btn px-2 py-0.5 rounded bg-blue-600 text-white font-medium">Duración</button>
+                <button type="button" data-axis="turns" class="axis-btn px-2 py-0.5 rounded text-slate-400 hover:text-white font-medium">Turnos</button>
+                <button type="button" data-axis="calls" class="axis-btn px-2 py-0.5 rounded text-slate-400 hover:text-white font-medium">Llamadas</button>
+              </div>
+
+              <label class="flex items-center space-x-1.5 text-[11px] text-slate-400 cursor-pointer select-none">
+                <input id="chk-compress-idle" type="checkbox" checked class="rounded bg-slate-950 border-slate-800 text-blue-600 focus:ring-0 w-3.5 h-3.5" />
+                <span>Comprimir idle</span>
+              </label>
+
+              <div class="relative">
+                <Search class="w-3 h-3 absolute left-2 top-2 text-slate-500" />
+                <input
+                  id="trace-search"
+                  type="text"
+                  placeholder="Filtrar spans..."
+                  class="bg-slate-950 border border-slate-800 rounded-lg pl-6 pr-2 py-1 text-[11px] text-slate-200 w-32 focus:w-44 transition-all focus:outline-none focus:border-blue-500"
+                />
+              </div>
+            </div>
+          </div>
+
+          <!-- Trace Top Metrics Strip (Wall time, Model time, Tool time, Tokens, Cost) -->
+          <div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2 p-3 bg-slate-950/70 border-b border-slate-800 text-xs font-mono shrink-0">
+            <div class="bg-slate-900/60 p-2 rounded-xl border border-slate-800/80">
+              <span class="text-[10px] text-slate-400 uppercase tracking-wider block">Wall Time</span>
+              <span id="metric-wall-time" class="font-bold text-white text-sm">0.00s</span>
+            </div>
+            <div class="bg-slate-900/60 p-2 rounded-xl border border-slate-800/80">
+              <span class="text-[10px] text-purple-400 uppercase tracking-wider block">Model Time</span>
+              <span id="metric-model-time" class="font-bold text-purple-300 text-sm">0.00s</span>
+              <span id="metric-model-pct" class="text-[9px] text-slate-500 block">0% wall</span>
+            </div>
+            <div class="bg-slate-900/60 p-2 rounded-xl border border-slate-800/80">
+              <span class="text-[10px] text-emerald-400 uppercase tracking-wider block">Tool Time</span>
+              <span id="metric-tool-time" class="font-bold text-emerald-300 text-sm">0.00s</span>
+              <span id="metric-tool-pct" class="text-[9px] text-slate-500 block">0% wall</span>
+            </div>
+            <div class="bg-slate-900/60 p-2 rounded-xl border border-slate-800/80">
+              <span class="text-[10px] text-slate-400 uppercase tracking-wider block">Idle</span>
+              <span id="metric-idle-time" class="font-bold text-slate-300 text-sm">0.00s</span>
+              <span id="metric-idle-pct" class="text-[9px] text-slate-500 block">0% wall</span>
+            </div>
+            <div class="bg-slate-900/60 p-2 rounded-xl border border-slate-800/80">
+              <span class="text-[10px] text-slate-400 uppercase tracking-wider block">Turnos</span>
+              <span id="metric-turns" class="font-bold text-white text-sm">1</span>
+            </div>
+            <div class="bg-slate-900/60 p-2 rounded-xl border border-slate-800/80">
+              <span class="text-[10px] text-slate-400 uppercase tracking-wider block">Llamadas Tool</span>
+              <span id="metric-tool-calls" class="font-bold text-emerald-400 text-sm">0</span>
+            </div>
+            <div class="bg-slate-900/60 p-2 rounded-xl border border-slate-800/80">
+              <span class="text-[10px] text-slate-400 uppercase tracking-wider block">Tokens Est.</span>
+              <span id="metric-tokens" class="font-bold text-blue-400 text-sm">0</span>
+            </div>
+            <div class="bg-slate-900/60 p-2 rounded-xl border border-slate-800/80">
+              <span class="text-[10px] text-slate-400 uppercase tracking-wider block">Costo Est.</span>
+              <span id="metric-cost" class="font-bold text-amber-400 text-sm">$0.00</span>
+            </div>
+          </div>
+
+          <!-- Timeline Interactive Canvas Area -->
+          <div class="p-3 border-b border-slate-800 space-y-2 bg-slate-900/40 shrink-0">
+            <div class="flex items-center justify-between text-[11px] text-slate-400">
+              <div class="flex items-center space-x-3">
+                <span class="font-semibold text-white">Línea de Tiempo Operacional</span>
+                <div class="flex items-center space-x-2 text-[10px]">
+                  <span class="flex items-center space-x-1"><span class="w-2.5 h-2.5 rounded bg-sky-500 inline-block"></span><span>Turno</span></span>
+                  <span class="flex items-center space-x-1"><span class="w-2.5 h-2.5 rounded bg-purple-500 inline-block"></span><span>Modelo</span></span>
+                  <span class="flex items-center space-x-1"><span class="w-2.5 h-2.5 rounded bg-emerald-500 inline-block"></span><span>Herramientas</span></span>
+                  <span class="flex items-center space-x-1"><span class="w-2.5 h-2.5 rounded bg-amber-500 inline-block"></span><span>Agente</span></span>
+                </div>
+              </div>
+
+              <div class="flex items-center space-x-1">
+                <button id="btn-zoom-in" type="button" class="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-white font-mono text-[10px]" title="Acercar">+</button>
+                <button id="btn-zoom-out" type="button" class="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-white font-mono text-[10px]" title="Alejar">-</button>
+                <button id="btn-zoom-fit" type="button" class="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-white font-mono text-[10px]" title="Ajustar">0</button>
+              </div>
+            </div>
+
+            <!-- SVG Timeline Lanes -->
+            <div id="timeline-container" class="relative w-full h-32 bg-slate-950 rounded-xl border border-slate-800 overflow-hidden cursor-crosshair">
+              <svg id="timeline-svg" class="w-full h-full" preserveAspectRatio="none">
+                <!-- Grid & Spans drawn via TS -->
+              </svg>
+            </div>
+          </div>
+
+          <!-- Bottom Split: Spans Transcript (Left) + Detail Inspector / Tool Aggregates (Right) -->
+          <div class="flex-1 flex flex-col md:flex-row overflow-hidden min-h-0 text-xs">
+            
+            <!-- Transcript List -->
+            <div class="flex-1 border-r border-slate-800 flex flex-col overflow-hidden">
+              <div class="px-3 py-2 bg-slate-900/60 border-b border-slate-800 flex items-center justify-between text-[11px] font-semibold text-slate-300 shrink-0">
+                <span>Transcripción Cronológica de Spans</span>
+                <span id="transcript-count" class="font-mono text-slate-500 text-[10px]">0 spans</span>
+              </div>
+              <div id="transcript-list" class="flex-1 overflow-y-auto p-2 space-y-1 font-mono">
+                <!-- Span rows rendered via TS -->
+              </div>
+            </div>
+
+            <!-- Detail Drawer & Tool Aggregates Tabs -->
+            <div class="flex-1 flex flex-col overflow-hidden bg-slate-950">
+              <div class="flex items-center border-b border-slate-800 bg-slate-900/60 shrink-0">
+                <button id="tab-inspector" type="button" class="inspector-tab px-4 py-2 border-b-2 border-blue-500 font-semibold text-white text-[11px]">
+                  Inspector de Span
+                </button>
+                <button id="tab-aggregates" type="button" class="inspector-tab px-4 py-2 border-b-2 border-transparent text-slate-400 hover:text-white font-semibold text-[11px]">
+                  Agregados de Herramientas
+                </button>
+              </div>
+
+              <!-- Content Tab: Inspector -->
+              <div id="inspector-pane" class="flex-1 overflow-y-auto p-3 space-y-3">
+                <div id="inspector-empty" class="text-slate-500 italic p-6 text-center">
+                  Seleccione un span en la línea de tiempo o en la lista para inspeccionar sus parámetros y resultados.
+                </div>
+                <div id="inspector-content" class="hidden space-y-3">
+                  <div class="flex items-center justify-between pb-2 border-b border-slate-800">
+                    <div>
+                      <h3 id="inspector-span-name" class="font-bold text-sm text-white font-mono">span_name</h3>
+                      <span id="inspector-span-track" class="text-[10px] text-slate-400 font-mono">Carril: Tools</span>
+                    </div>
+                    <span id="inspector-span-badge" class="px-2 py-0.5 rounded text-[10px] font-semibold font-mono bg-emerald-950 text-emerald-400 border border-emerald-800">
+                      tool
+                    </span>
+                  </div>
+
+                  <div class="grid grid-cols-2 gap-2 text-[11px] font-mono">
+                    <div class="bg-slate-900 p-2 rounded-lg border border-slate-800">
+                      <span class="text-slate-500 block text-[10px]">Duración</span>
+                      <span id="inspector-span-duration" class="font-bold text-white">0.00ms</span>
+                    </div>
+                    <div class="bg-slate-900 p-2 rounded-lg border border-slate-800">
+                      <span class="text-slate-500 block text-[10px]">Inicio Relativo</span>
+                      <span id="inspector-span-start" class="font-bold text-white">+00:00.000</span>
+                    </div>
+                  </div>
+
+                  <!-- Arguments -->
+                  <div>
+                    <div class="flex items-center justify-between pb-1">
+                      <span class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Argumentos / Entrada</span>
+                      <button id="btn-copy-args" type="button" class="text-[10px] text-blue-400 hover:underline">Copiar</button>
+                    </div>
+                    <pre id="inspector-span-args" class="p-2.5 rounded-lg bg-slate-900 border border-slate-800 text-[11px] font-mono text-slate-200 overflow-x-auto max-h-40 leading-relaxed"></pre>
+                  </div>
+
+                  <!-- Results -->
+                  <div>
+                    <div class="flex items-center justify-between pb-1">
+                      <span class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Resultado / Salida</span>
+                      <button id="btn-copy-result" type="button" class="text-[10px] text-blue-400 hover:underline">Copiar</button>
+                    </div>
+                    <pre id="inspector-span-result" class="p-2.5 rounded-lg bg-slate-900 border border-slate-800 text-[11px] font-mono text-slate-200 overflow-x-auto max-h-48 leading-relaxed"></pre>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Content Tab: Aggregates Table -->
+              <div id="aggregates-pane" class="hidden flex-1 overflow-y-auto p-3">
+                <table class="w-full text-left font-mono text-[11px] border-collapse">
+                  <thead>
+                    <tr class="border-b border-slate-800 text-slate-400 uppercase text-[10px]">
+                      <th class="py-2 px-1">Herramienta</th>
+                      <th class="py-2 px-1 text-center">Llamadas</th>
+                      <th class="py-2 px-1 text-center">Errores</th>
+                      <th class="py-2 px-1 text-right">Total</th>
+                      <th class="py-2 px-1 text-right">Promedio</th>
+                      <th class="py-2 px-1 text-right">Máximo</th>
+                    </tr>
+                  </thead>
+                  <tbody id="aggregates-table-body">
+                    <!-- Populated dynamically -->
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </AppLayout>
 
 <script>
   import { sendChat } from "@pims/cockpit/ui/lib/api.ts";
-  import { chatStore } from "@pims/cockpit/ui/lib/chat-store.ts";
+  import { chatStore, type ChatMessageNode } from "@pims/cockpit/ui/lib/chat-store.ts";
+  import { traceStore, type AxisMode } from "@pims/cockpit/ui/lib/trace-store.ts";
   import { canSwitchPersona, getSession } from "@pims/cockpit/ui/lib/session.ts";
   import { sseClient } from "@pims/cockpit/ui/lib/sse-client.ts";
-  import type { ChatCitation, ChatPersona, StreamSnapshot } from "@pims/types/cockpit.ts";
+  import type { ChatCitation, ChatPersona, ChatTrace, ChatTraceSpan, StreamSnapshot } from "@pims/types/cockpit.ts";
 
   const session = getSession();
   let currentPersona: ChatPersona = chatStore.getPersona() || session?.default_persona || "auditor";
+  let activeIncidentContext: string | undefined = undefined;
+  let viewMode: "chat" | "split" | "trace" = "chat";
+  let sidebarOpen = true;
+  let zoomLevel = 1.0;
 
-  function initChatPage() {
-    const personaBtns = document.querySelectorAll(".persona-btn");
-    const messagesContainer = document.getElementById("chat-messages") as HTMLDivElement | null;
-    const chatForm = document.getElementById("chat-form") as HTMLFormElement | null;
+  function initChatApp(): void {
+    // DOM Elements
+    const sessionsContainer = document.getElementById("sessions-container");
+    const sessionCountLabel = document.getElementById("session-count-label");
+    const sessionSearch = document.getElementById("session-search") as HTMLInputElement | null;
+    const btnNewChat = document.getElementById("btn-new-chat");
+    const btnClearAll = document.getElementById("btn-clear-all-sessions");
+    const btnToggleSidebar = document.getElementById("btn-toggle-sidebar");
+    const sidebar = document.getElementById("chat-sessions-sidebar");
+    const activeSessionTitle = document.getElementById("active-session-title");
+    const btnRenameSession = document.getElementById("btn-rename-session");
+    const btnExportChat = document.getElementById("btn-export-chat");
+
+    const modeChat = document.getElementById("mode-chat");
+    const modeSplit = document.getElementById("mode-split");
+    const modeTrace = document.getElementById("mode-trace");
+    const chatSection = document.getElementById("chat-section");
+    const traceSection = document.getElementById("trace-section");
+
+    const messagesContainer = document.getElementById("chat-messages");
+    const chatForm = document.getElementById("chat-form");
     const chatInput = document.getElementById("chat-input") as HTMLTextAreaElement | null;
-    const chatIncidentContext = document.getElementById("chat-incident-context") as HTMLInputElement | null;
-    const btnSendChat = document.getElementById("btn-send-chat");
+    const btnSendChat = document.getElementById("btn-send-chat") as HTMLButtonElement | null;
+    const activeIncidentBadge = document.getElementById("active-incident-badge");
+    const btnEditIncidentContext = document.getElementById("btn-edit-incident-context");
+    const promptStarters = document.getElementById("prompt-starters");
     const warningBanner = document.getElementById("chat-warning-banner");
     const warningText = document.getElementById("chat-warning-text");
 
+    // Trace DOM
+    const traceSelector = document.getElementById("trace-selector") as HTMLSelectElement | null;
+    const axisBtns = document.querySelectorAll(".axis-btn");
+    const chkCompressIdle = document.getElementById("chk-compress-idle") as HTMLInputElement | null;
+    const traceSearch = document.getElementById("trace-search") as HTMLInputElement | null;
+    const timelineSvg = document.getElementById("timeline-svg") as SVGSVGElement | null;
+    const transcriptList = document.getElementById("transcript-list");
+    const transcriptCount = document.getElementById("transcript-count");
+    const tabInspector = document.getElementById("tab-inspector");
+    const tabAggregates = document.getElementById("tab-aggregates");
+    const inspectorPane = document.getElementById("inspector-pane");
+    const aggregatesPane = document.getElementById("aggregates-pane");
+
     if (!messagesContainer || !chatForm || !chatInput) return;
 
-    // Restore previous messages from store
-    const stored = chatStore.getMessages();
-    if (stored.length > 0) {
-      messagesContainer.innerHTML = "";
-      for (const m of stored) {
-        appendMessage(m.sender, m.text, m.response?.citations || [], m.response?.tool_calls || [], false);
+    // --- Render View Mode ---
+    function setViewMode(mode: "chat" | "split" | "trace"): void {
+      viewMode = mode;
+      [modeChat, modeSplit, modeTrace].forEach((btn) => {
+        if (!btn) return;
+        btn.className = "view-mode-btn px-2.5 py-1 rounded-lg font-medium transition-colors text-slate-300 hover:text-white hover:bg-slate-800 flex items-center space-x-1";
+      });
+
+      if (mode === "chat") {
+        modeChat?.classList.replace("text-slate-300", "text-white");
+        modeChat?.classList.add("bg-blue-600");
+        chatSection?.classList.remove("hidden");
+        traceSection?.classList.add("hidden");
+      } else if (mode === "split") {
+        modeSplit?.classList.replace("text-slate-300", "text-white");
+        modeSplit?.classList.add("bg-blue-600");
+        chatSection?.classList.remove("hidden");
+        traceSection?.classList.remove("hidden");
+        renderTraceView();
+      } else {
+        modeTrace?.classList.replace("text-slate-300", "text-white");
+        modeTrace?.classList.add("bg-blue-600");
+        chatSection?.classList.add("hidden");
+        traceSection?.classList.remove("hidden");
+        renderTraceView();
       }
     }
 
-    // Persona switching logic
+    modeChat?.addEventListener("click", () => setViewMode("chat"));
+    modeSplit?.addEventListener("click", () => setViewMode("split"));
+    modeTrace?.addEventListener("click", () => setViewMode("trace"));
+
+    // --- Sidebar Toggle ---
+    btnToggleSidebar?.addEventListener("click", () => {
+      sidebarOpen = !sidebarOpen;
+      if (sidebar) {
+        if (sidebarOpen) {
+          sidebar.classList.remove("-ml-72");
+          document.getElementById("sidebar-icon-close")?.classList.remove("hidden");
+          document.getElementById("sidebar-icon-open")?.classList.add("hidden");
+        } else {
+          sidebar.classList.add("-ml-72");
+          document.getElementById("sidebar-icon-close")?.classList.add("hidden");
+          document.getElementById("sidebar-icon-open")?.classList.remove("hidden");
+        }
+      }
+    });
+
+    // --- Persona switching ---
+    const personaBtns = document.querySelectorAll(".persona-btn");
     if (!canSwitchPersona(session)) {
       personaBtns.forEach((btn) => {
         const p = btn.getAttribute("data-persona");
@@ -166,49 +621,528 @@ import {
       });
     } else {
       personaBtns.forEach((btn) => {
-        const p = btn.getAttribute("data-persona") as ChatPersona;
-        if (p === currentPersona) {
-          btn.className = "persona-btn px-3 py-1 rounded-lg font-medium transition-colors bg-blue-600 text-white";
-        } else {
-          btn.className = "persona-btn px-3 py-1 rounded-lg font-medium transition-colors text-slate-300 hover:text-white hover:bg-slate-800";
-        }
-        btn.onclick = () => {
+        btn.addEventListener("click", () => {
+          const p = btn.getAttribute("data-persona") as ChatPersona;
           if (p) {
             currentPersona = p;
             chatStore.setPersona(p);
-            personaBtns.forEach((b) => {
-              b.className = "persona-btn px-3 py-1 rounded-lg font-medium transition-colors text-slate-300 hover:text-white hover:bg-slate-800";
-            });
-            btn.className = "persona-btn px-3 py-1 rounded-lg font-medium transition-colors bg-blue-600 text-white";
+            updatePersonaButtons();
           }
-        };
+        });
       });
     }
 
-    async function handleSendMessage(): Promise<void> {
-      if (!chatInput || !messagesContainer) return;
-      const query = chatInput.value.trim();
-      if (!query) return;
+    function updatePersonaButtons(): void {
+      personaBtns.forEach((btn) => {
+        const p = btn.getAttribute("data-persona") as ChatPersona;
+        if (p === currentPersona) {
+          btn.className = "persona-btn px-2.5 py-1 rounded-lg font-medium transition-colors bg-blue-600 text-white";
+        } else {
+          btn.className = "persona-btn px-2.5 py-1 rounded-lg font-medium transition-colors text-slate-300 hover:text-white hover:bg-slate-800";
+        }
+      });
+    }
 
-      const incidentCode = chatIncidentContext?.value.trim() || undefined;
-      appendMessage("user", query, [], [], true);
-      chatInput.value = "";
+    // --- Incident Context Selector ---
+    function updateIncidentContextDisplay(): void {
+      if (activeIncidentBadge) {
+        activeIncidentBadge.textContent = activeIncidentContext || "Ninguno";
+      }
+    }
 
-      // Show typing placeholder
-      const typingIndicator = document.createElement("div");
-      typingIndicator.id = "typing-indicator";
-      typingIndicator.className = "flex items-center space-x-2 text-xs text-slate-500 italic py-2";
-      typingIndicator.innerHTML = `
-        <div class="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-        <span>El agente está consultando los registros normativos y evidencia...</span>
-      `;
-      messagesContainer.appendChild(typingIndicator);
+    btnEditIncidentContext?.addEventListener("click", () => {
+      const code = prompt("Ingrese el código del incidente (ej. INC-001) o déjelo vacío:", activeIncidentContext || "");
+      if (code !== null) {
+        activeIncidentContext = code.trim() || undefined;
+        updateIncidentContextDisplay();
+      }
+    });
+
+    // --- Prompt Starters ---
+    document.querySelectorAll(".prompt-pill").forEach((pill) => {
+      pill.addEventListener("click", () => {
+        const promptText = pill.getAttribute("data-prompt");
+        if (promptText && chatInput) {
+          chatInput.value = promptText;
+          chatInput.focus();
+        }
+      });
+    });
+
+    // --- Rename Session ---
+    function triggerRename(): void {
+      const current = chatStore.getActiveSession();
+      const newTitle = prompt("Renombrar conversación:", current.title);
+      if (newTitle && newTitle.trim()) {
+        chatStore.renameSession(current.id, newTitle.trim());
+      }
+    }
+    btnRenameSession?.addEventListener("click", triggerRename);
+    activeSessionTitle?.addEventListener("dblclick", triggerRename);
+
+    // --- New Chat ---
+    btnNewChat?.addEventListener("click", () => {
+      chatStore.createSession("Nueva Conversación", currentPersona, activeIncidentContext);
+      if (chatInput) chatInput.value = "";
+    });
+
+    // --- Clear All Chats ---
+    btnClearAll?.addEventListener("click", () => {
+      if (confirm("¿Desea limpiar todo el historial de conversaciones guardadas?")) {
+        chatStore.clearAll();
+      }
+    });
+
+    // --- Export Conversation ---
+    btnExportChat?.addEventListener("click", () => {
+      const messages = chatStore.getActiveBranchMessages();
+      if (messages.length === 0) {
+        alert("No hay mensajes para exportar en esta conversación.");
+        return;
+      }
+      const session = chatStore.getActiveSession();
+      let md = `# Conversación Cockpit: ${session.title}\n`;
+      md += `Fecha: ${session.createdAt}\nPerfil: ${session.persona}\n\n`;
+
+      for (const item of messages) {
+        const role = item.node.sender === "user" ? "Usuario" : "Agente Regulatorio";
+        md += `### ${role} (${item.node.timestamp})\n\n${item.node.text}\n\n`;
+        if (item.node.response?.citations && item.node.response.citations.length > 0) {
+          md += `#### Citas Normativas:\n`;
+          for (const c of item.node.response.citations) {
+            md += `- **${c.citation}** (${c.chunk_sha256.slice(0, 8)}): "${c.text}"\n`;
+          }
+          md += `\n`;
+        }
+      }
+
+      const blob = new Blob([md], { type: "text/markdown" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `chat-${session.id}.md`;
+      a.click();
+      URL.revokeObjectURL(url);
+    });
+
+    // --- Render Sessions Sidebar ---
+    function renderSessions(): void {
+      if (!sessionsContainer) return;
+      const sessions = chatStore.getSessions();
+      const active = chatStore.getActiveSession();
+      const query = (sessionSearch?.value || "").toLowerCase().trim();
+
+      if (sessionCountLabel) {
+        sessionCountLabel.textContent = `${sessions.length} ${sessions.length === 1 ? "chat" : "chats"}`;
+      }
+
+      if (activeSessionTitle) {
+        activeSessionTitle.textContent = active.title;
+      }
+
+      const filtered = query
+        ? sessions.filter((s) => s.title.toLowerCase().includes(query))
+        : sessions;
+
+      if (filtered.length === 0) {
+        sessionsContainer.innerHTML = `
+          <div class="text-slate-500 italic text-center p-4">
+            No se encontraron conversaciones
+          </div>
+        `;
+        return;
+      }
+
+      sessionsContainer.innerHTML = "";
+      for (const s of filtered) {
+        const isActive = s.id === active.id;
+        const div = document.createElement("div");
+        div.className = `group flex items-center justify-between p-2.5 rounded-xl cursor-pointer transition-all ${
+          isActive
+            ? "bg-blue-600/15 border border-blue-500/40 text-white"
+            : "text-slate-300 hover:bg-slate-800/60 hover:text-white border border-transparent"
+        }`;
+
+        div.innerHTML = `
+          <div class="min-w-0 flex-1 pr-2">
+            <p class="font-medium truncate text-xs">${s.title}</p>
+            <p class="text-[10px] text-slate-500 font-mono mt-0.5">${new Date(s.updatedAt).toLocaleDateString("es-ES", { month: "short", day: "numeric" })} · ${s.persona}</p>
+          </div>
+          <button
+            type="button"
+            data-delete-id="${s.id}"
+            class="opacity-0 group-hover:opacity-100 p-1 text-slate-500 hover:text-rose-400 rounded transition-opacity"
+            title="Eliminar chat"
+          >
+            <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+            </svg>
+          </button>
+        `;
+
+        div.onclick = (e) => {
+          const target = e.target as HTMLElement;
+          if (target.closest("[data-delete-id]")) {
+            e.stopPropagation();
+            chatStore.deleteSession(s.id);
+            return;
+          }
+          chatStore.setActiveSession(s.id);
+        };
+
+        sessionsContainer.appendChild(div);
+      }
+    }
+
+    sessionSearch?.addEventListener("input", renderSessions);
+
+    // --- Render Chat Messages ---
+    function renderMessages(): void {
+      if (!messagesContainer) return;
+      const activeItems = chatStore.getActiveBranchMessages();
+
+      if (promptStarters) {
+        if (activeItems.length === 0) {
+          promptStarters.classList.remove("hidden");
+        } else {
+          promptStarters.classList.add("hidden");
+        }
+      }
+
+      if (activeItems.length === 0) {
+        messagesContainer.innerHTML = `
+          <div class="flex items-start space-x-3 p-4 bg-slate-900/40 border border-slate-800/60 rounded-2xl max-w-2xl">
+            <div class="w-8 h-8 rounded-lg bg-blue-600/20 border border-blue-500/40 text-blue-400 flex items-center justify-center shrink-0">
+              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+              </svg>
+            </div>
+            <div class="space-y-1.5">
+              <div class="flex items-center space-x-2">
+                <span class="font-semibold text-white">Agente de Incidentes UNSA</span>
+                <span class="text-[10px] text-emerald-400 font-mono bg-emerald-950/80 px-1.5 py-0.2 rounded border border-emerald-800">En línea</span>
+              </div>
+              <p class="text-slate-300 leading-relaxed text-xs">
+                Asistente conversacional con recuperación normativa Dual-Modal RAG (ISO/IEC 27701, Ley 29733, GDPR Art. 33/34), cálculo de plazos de 72 horas y verificación anti-alucinaciones con SHA-256.
+              </p>
+            </div>
+          </div>
+        `;
+        return;
+      }
+
+      messagesContainer.innerHTML = "";
+      for (const item of activeItems) {
+        const { node, branchIndex, totalBranches, siblingIds } = item;
+        const msgDiv = document.createElement("div");
+        msgDiv.className = `group flex items-start space-x-3 ${node.sender === "user" ? "justify-end" : ""}`;
+
+        if (node.sender === "user") {
+          let branchNavHtml = "";
+          if (totalBranches > 1) {
+            branchNavHtml = `
+              <div class="flex items-center space-x-1.5 text-[10px] text-slate-300 bg-blue-700/60 rounded-md px-1.5 py-0.5 mt-1 self-start font-mono">
+                <button type="button" class="btn-prev-branch hover:text-white" ${branchIndex === 0 ? "disabled opacity-40" : ""}>◀</button>
+                <span>${branchIndex + 1}/${totalBranches}</span>
+                <button type="button" class="btn-next-branch hover:text-white" ${branchIndex === totalBranches - 1 ? "disabled opacity-40" : ""}>▶</button>
+              </div>
+            `;
+          }
+
+          msgDiv.innerHTML = `
+            <div class="flex flex-col items-end max-w-xl space-y-1">
+              <div class="bg-blue-600 text-white rounded-2xl p-3 shadow-md space-y-1 relative group/bubble">
+                <p class="leading-relaxed whitespace-pre-wrap">${escapeHtml(node.text)}</p>
+                <div class="flex items-center justify-between text-[10px] text-blue-200/80 pt-1 border-t border-blue-500/40">
+                  <span>${node.timestamp}</span>
+                  <button type="button" class="btn-edit-user opacity-0 group-hover/bubble:opacity-100 hover:text-white transition-opacity ml-2" title="Editar y bifurcar consulta">
+                    ✏️ Editar
+                  </button>
+                </div>
+              </div>
+              ${branchNavHtml}
+            </div>
+            <div class="w-8 h-8 rounded-lg bg-slate-800 border border-slate-700 text-slate-300 flex items-center justify-center shrink-0 shadow">
+              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+              </svg>
+            </div>
+          `;
+
+          // Edit inline handler
+          const editBtn = msgDiv.querySelector(".btn-edit-user");
+          editBtn?.addEventListener("click", () => {
+            openInlineEdit(msgDiv, node);
+          });
+
+          // Branch navigation handlers
+          const prevBtn = msgDiv.querySelector(".btn-prev-branch");
+          const nextBtn = msgDiv.querySelector(".btn-next-branch");
+          prevBtn?.addEventListener("click", () => {
+            if (branchIndex > 0) {
+              chatStore.switchBranch(siblingIds[branchIndex - 1]);
+            }
+          });
+          nextBtn?.addEventListener("click", () => {
+            if (branchIndex < totalBranches - 1) {
+              chatStore.switchBranch(siblingIds[branchIndex + 1]);
+            }
+          });
+        } else {
+          // ASSISTANT MESSAGE
+          let reasoningHtml = "";
+          if (node.reasoning) {
+            reasoningHtml = `
+              <details class="group/details bg-indigo-950/30 border border-indigo-900/50 rounded-xl overflow-hidden mb-2">
+                <summary class="cursor-pointer flex items-center justify-between px-3 py-1.5 text-[11px] text-indigo-300 font-medium hover:bg-indigo-950/60 select-none">
+                  <div class="flex items-center space-x-1.5">
+                    <span>🧠</span>
+                    <span>Proceso de Razonamiento</span>
+                  </div>
+                  <span class="text-[10px] text-indigo-400 group-open/details:rotate-180 transition-transform">▼</span>
+                </summary>
+                <div class="p-3 text-[11px] text-indigo-200/90 leading-relaxed border-t border-indigo-900/40 bg-indigo-950/20 font-sans">
+                  ${escapeHtml(node.reasoning)}
+                </div>
+              </details>
+            `;
+          }
+
+          let toolsHtml = "";
+          if (node.response?.tool_calls && node.response.tool_calls.length > 0) {
+            const count = node.response.tool_calls.length;
+            toolsHtml = `
+              <details class="group/details bg-emerald-950/25 border border-emerald-900/50 rounded-xl overflow-hidden mb-2">
+                <summary class="cursor-pointer flex items-center justify-between px-3 py-1.5 text-[11px] text-emerald-300 font-medium hover:bg-emerald-950/60 select-none">
+                  <div class="flex items-center space-x-1.5">
+                    <span>🔧</span>
+                    <span>Herramientas utilizadas (${count})</span>
+                  </div>
+                  <span class="text-[10px] text-emerald-400 group-open/details:rotate-180 transition-transform">▼</span>
+                </summary>
+                <div class="p-2 space-y-1.5 border-t border-emerald-900/40 bg-emerald-950/20 font-mono text-[10px]">
+                  ${node.response.tool_calls
+                    .map(
+                      (t) => `
+                    <div class="flex items-center justify-between px-2 py-1 bg-slate-950/80 rounded border border-emerald-900/30">
+                      <span class="text-emerald-400 font-semibold">${t}</span>
+                      <span class="text-slate-500">ejecutado ✓</span>
+                    </div>
+                  `
+                    )
+                    .join("")}
+                </div>
+              </details>
+            `;
+          }
+
+          let citationsHtml = "";
+          if (node.response?.citations && node.response.citations.length > 0) {
+            citationsHtml = `
+              <div class="mt-3 pt-3 border-t border-slate-800 space-y-2">
+                <p class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Citas Normativas Groundeadas (${node.response.citations.length})</p>
+                <div class="space-y-2">
+                  ${node.response.citations
+                    .map(
+                      (c) => `
+                    <div class="bg-slate-950 p-2.5 rounded-xl border border-slate-800 space-y-1.5">
+                      <div class="flex items-center justify-between">
+                        <span class="font-semibold text-blue-400 text-xs">${escapeHtml(c.citation)}</span>
+                        <span class="font-mono text-[10px] text-slate-500">${c.chunk_sha256.slice(0, 10)}…</span>
+                      </div>
+                      <blockquote class="italic text-slate-200 bg-slate-900/60 border border-slate-800 rounded p-2 text-[11px] leading-relaxed">
+                        "${escapeHtml(c.text)}"
+                      </blockquote>
+                      <div class="flex flex-wrap items-center gap-2 text-[10px] text-slate-500 pt-1 font-mono">
+                        <span>Dense: ${c.dense_score !== null ? c.dense_score.toFixed(4) : "—"}</span>
+                        <span>BM25: ${c.bm25_rank ? `#${c.bm25_rank}` : "—"}</span>
+                        <span>RRF: ${c.rrf_score.toFixed(4)}</span>
+                        <span class="text-emerald-400 font-semibold">Rerank: ${c.rerank_score.toFixed(4)}</span>
+                      </div>
+                    </div>
+                  `
+                    )
+                    .join("")}
+                </div>
+              </div>
+            `;
+          }
+
+          let branchNavHtml = "";
+          if (totalBranches > 1) {
+            branchNavHtml = `
+              <div class="flex items-center space-x-1.5 text-[10px] text-slate-400 bg-slate-900 border border-slate-800 rounded-md px-1.5 py-0.5 font-mono">
+                <button type="button" class="btn-prev-branch hover:text-white" ${branchIndex === 0 ? "disabled opacity-40" : ""}>◀</button>
+                <span>${branchIndex + 1}/${totalBranches}</span>
+                <button type="button" class="btn-next-branch hover:text-white" ${branchIndex === totalBranches - 1 ? "disabled opacity-40" : ""}>▶</button>
+              </div>
+            `;
+          }
+
+          msgDiv.innerHTML = `
+            <div class="w-8 h-8 rounded-lg bg-blue-600/20 border border-blue-500/40 text-blue-400 flex items-center justify-center shrink-0 shadow">
+              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+              </svg>
+            </div>
+            <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 max-w-2xl space-y-2 shadow-md">
+              ${reasoningHtml}
+              ${toolsHtml}
+              <div class="text-slate-100 leading-relaxed whitespace-pre-wrap">${escapeHtml(node.text)}</div>
+              ${citationsHtml}
+              
+              <!-- Bottom Action Toolbar -->
+              <div class="flex items-center justify-between pt-2 border-t border-slate-800/80 text-[11px] text-slate-400">
+                <div class="flex items-center space-x-3">
+                  <span class="font-mono text-[10px]">${node.timestamp}</span>
+                  ${branchNavHtml}
+                </div>
+
+                <div class="flex items-center space-x-2">
+                  <button type="button" class="btn-retry-msg hover:text-blue-400 transition-colors flex items-center space-x-1" title="Reintentar / Regenerar respuesta">
+                    <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                    <span>Regenerar</span>
+                  </button>
+                  <button type="button" class="btn-copy-msg hover:text-white transition-colors flex items-center space-x-1" title="Copiar texto">
+                    <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                    </svg>
+                    <span class="copy-label">Copiar</span>
+                  </button>
+                  ${
+                    node.trace
+                      ? `
+                    <button type="button" class="btn-view-trace text-emerald-400 hover:text-emerald-300 font-mono transition-colors flex items-center space-x-1" title="Inspeccionar traza operacional">
+                      <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                      </svg>
+                      <span>Ver Traza</span>
+                    </button>
+                  `
+                      : ""
+                  }
+                </div>
+              </div>
+            </div>
+          `;
+
+          // Actions
+          const retryBtn = msgDiv.querySelector(".btn-retry-msg");
+          retryBtn?.addEventListener("click", () => {
+            if (node.parentId) {
+              const userNode = chatStore.getActiveSession().nodes[node.parentId];
+              if (userNode) {
+                void executeChat(userNode.text, userNode.id);
+              }
+            }
+          });
+
+          const copyBtn = msgDiv.querySelector(".btn-copy-msg");
+          const copyLabel = msgDiv.querySelector(".copy-label");
+          copyBtn?.addEventListener("click", () => {
+            navigator.clipboard.writeText(node.text).then(() => {
+              if (copyLabel) copyLabel.textContent = "¡Copiado!";
+              setTimeout(() => {
+                if (copyLabel) copyLabel.textContent = "Copiar";
+              }, 2000);
+            });
+          });
+
+          const viewTraceBtn = msgDiv.querySelector(".btn-view-trace");
+          viewTraceBtn?.addEventListener("click", () => {
+            if (node.trace) {
+              traceStore.addTrace(node.trace, true);
+              setViewMode("split");
+            }
+          });
+
+          // Branch navigation handlers
+          const prevBtn = msgDiv.querySelector(".btn-prev-branch");
+          const nextBtn = msgDiv.querySelector(".btn-next-branch");
+          prevBtn?.addEventListener("click", () => {
+            if (branchIndex > 0) {
+              chatStore.switchBranch(siblingIds[branchIndex - 1]);
+            }
+          });
+          nextBtn?.addEventListener("click", () => {
+            if (branchIndex < totalBranches - 1) {
+              chatStore.switchBranch(siblingIds[branchIndex + 1]);
+            }
+          });
+        }
+
+        messagesContainer.appendChild(msgDiv);
+      }
+
       messagesContainer.scrollTop = messagesContainer.scrollHeight;
+    }
+
+    // --- Inline User Message Editing ---
+    function openInlineEdit(container: HTMLElement, node: ChatMessageNode): void {
+      const originalHtml = container.innerHTML;
+      container.innerHTML = `
+        <div class="w-full max-w-xl bg-slate-900 border border-blue-500 rounded-2xl p-3 space-y-2">
+          <p class="text-[11px] font-semibold text-blue-400">Editar consulta y crear nueva rama:</p>
+          <textarea class="edit-textarea w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-xs text-slate-100 focus:outline-none focus:border-blue-500 resize-none" rows="3">${escapeHtml(node.text)}</textarea>
+          <div class="flex items-center justify-end space-x-2">
+            <button type="button" class="btn-cancel-edit px-2.5 py-1 rounded-lg text-slate-400 hover:text-white text-xs">Cancelar</button>
+            <button type="button" class="btn-save-edit px-3 py-1 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-medium text-xs">Guardar y Enviar</button>
+          </div>
+        </div>
+      `;
+
+      const textarea = container.querySelector(".edit-textarea") as HTMLTextAreaElement;
+      const cancelBtn = container.querySelector(".btn-cancel-edit");
+      const saveBtn = container.querySelector(".btn-save-edit");
+
+      textarea?.focus();
+
+      cancelBtn?.addEventListener("click", () => {
+        container.innerHTML = originalHtml;
+        renderMessages();
+      });
+
+      saveBtn?.addEventListener("click", () => {
+        const newText = textarea.value.trim();
+        if (newText && newText !== node.text) {
+          const newUserNode = chatStore.editUserMessage(node.id, newText);
+          void executeChat(newText, newUserNode.id);
+        } else {
+          container.innerHTML = originalHtml;
+          renderMessages();
+        }
+      });
+    }
+
+    // --- Send & Execution Pipeline ---
+    async function executeChat(queryText: string, userNodeId?: string): Promise<void> {
+      let targetUserNodeId = userNodeId;
+      if (!targetUserNodeId) {
+        const node = chatStore.addUserMessage(queryText, activeIncidentContext, currentPersona);
+        targetUserNodeId = node.id;
+      }
+
+      renderMessages();
+
+      // Show typing indicator
+      const typingDiv = document.createElement("div");
+      typingDiv.id = "chat-typing-indicator";
+      typingDiv.className = "flex items-center space-x-2 text-xs text-slate-400 italic py-2 px-2";
+      typingDiv.innerHTML = `
+        <div class="w-3.5 h-3.5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+        <span>Consultando registros normativos, plazos regulatorios y evidencia...</span>
+      `;
+      messagesContainer?.appendChild(typingDiv);
+      if (messagesContainer) messagesContainer.scrollTop = messagesContainer.scrollHeight;
 
       try {
-        const response = await sendChat(query, incidentCode, currentPersona);
-        typingIndicator.remove();
-        appendMessage("assistant", response.reply, response.citations, response.tool_calls, true, response);
+        const response = await sendChat(queryText, activeIncidentContext, currentPersona);
+        typingDiv.remove();
+
+        chatStore.addAssistantResponse(targetUserNodeId, response);
+        traceStore.addTrace(response.trace, true);
 
         if (response.pending_decisions && response.pending_decisions.length > 0) {
           if (warningBanner && warningText) {
@@ -217,31 +1151,412 @@ import {
           }
         }
       } catch (err: unknown) {
-        typingIndicator.remove();
-        const message = err instanceof Error ? err.message : "Error desconocido";
-        appendMessage("assistant", `Error al procesar la consulta: ${message}`, [], [], true, undefined, true);
+        typingDiv.remove();
+        const msg = err instanceof Error ? err.message : "Error desconocido";
+        const fallbackTrace: ChatTrace = {
+          id: `trace-err-${Date.now()}`,
+          title: `Error [${currentPersona}]`,
+          start_iso: new Date().toISOString(),
+          wall_time_ms: 50,
+          model_time_ms: 0,
+          tool_time_ms: 0,
+          idle_time_ms: 50,
+          turns_count: 1,
+          requests_count: 1,
+          tool_calls_count: 0,
+          spans: [
+            {
+              id: "span-err",
+              name: "error",
+              type: "agent",
+              status: "error",
+              start_ms: 0,
+              end_ms: 50,
+              duration_ms: 50,
+              relative_start_ms: 0,
+              error: msg,
+              track: "Main",
+            },
+          ],
+          aggregates: [],
+        };
+
+        chatStore.addAssistantResponse(
+          targetUserNodeId,
+          {
+            reply: `Error al procesar la consulta: ${msg}`,
+            persona: currentPersona,
+            citations: [],
+            pending_decisions: [],
+            tool_calls: [],
+            trace: fallbackTrace,
+          },
+          true
+        );
       }
+    }
+
+    async function handleSend(): Promise<void> {
+      if (!chatInput) return;
+      const text = chatInput.value.trim();
+      if (!text) return;
+      chatInput.value = "";
+      await executeChat(text);
     }
 
     chatInput.onkeydown = (e) => {
       if (e.key === "Enter" && !e.shiftKey) {
         e.preventDefault();
-        void handleSendMessage();
+        void handleSend();
       }
     };
 
-    if (btnSendChat) {
-      btnSendChat.onclick = (e) => {
-        e.preventDefault();
-        void handleSendMessage();
-      };
+    btnSendChat?.addEventListener("click", () => {
+      void handleSend();
+    });
+
+    // --- RENDER TRACE VIEW (OMP STATS STYLE) ---
+    function renderTraceView(): void {
+      const trace = traceStore.getActiveTrace();
+      if (!trace) {
+        if (traceSelector) {
+          traceSelector.innerHTML = '<option value="">Sin trazas disponibles</option>';
+        }
+        return;
+      }
+
+      // Populate trace selector
+      const allTraces = traceStore.getTraces();
+      if (traceSelector) {
+        traceSelector.innerHTML = allTraces
+          .map((t) => `<option value="${t.id}" ${t.id === trace.id ? "selected" : ""}>${escapeHtml(t.title)} (${(t.wall_time_ms / 1000).toFixed(2)}s)</option>`)
+          .join("");
+
+        traceSelector.onchange = () => {
+          traceStore.setActiveTrace(traceSelector.value);
+        };
+      }
+
+      // Update Top Metrics Strip
+      const wallS = (trace.wall_time_ms / 1000).toFixed(2);
+      const modelS = (trace.model_time_ms / 1000).toFixed(2);
+      const toolS = (trace.tool_time_ms / 1000).toFixed(2);
+      const idleS = (trace.idle_time_ms / 1000).toFixed(2);
+
+      const modelPct = trace.wall_time_ms > 0 ? ((trace.model_time_ms / trace.wall_time_ms) * 100).toFixed(1) : "0";
+      const toolPct = trace.wall_time_ms > 0 ? ((trace.tool_time_ms / trace.wall_time_ms) * 100).toFixed(1) : "0";
+      const idlePct = trace.wall_time_ms > 0 ? ((trace.idle_time_ms / trace.wall_time_ms) * 100).toFixed(1) : "0";
+
+      setText("metric-wall-time", `${wallS}s`);
+      setText("metric-model-time", `${modelS}s`);
+      setText("metric-model-pct", `${modelPct}% wall`);
+      setText("metric-tool-time", `${toolS}s`);
+      setText("metric-tool-pct", `${toolPct}% wall`);
+      setText("metric-idle-time", `${idleS}s`);
+      setText("metric-idle-pct", `${idlePct}% wall`);
+      setText("metric-turns", String(trace.turns_count));
+      setText("metric-tool-calls", String(trace.tool_calls_count));
+      setText("metric-tokens", String(trace.tokens_estimate || 0));
+      setText("metric-cost", `$${(trace.cost_estimate_usd || 0).toFixed(4)}`);
+
+      // Filter spans
+      const query = traceStore.getSearchQuery().toLowerCase().trim();
+      const filteredSpans = query
+        ? trace.spans.filter((s) => s.name.toLowerCase().includes(query) || s.type.toLowerCase().includes(query))
+        : trace.spans;
+
+      if (transcriptCount) {
+        transcriptCount.textContent = `${filteredSpans.length} spans`;
+      }
+
+      // Render Transcript List
+      if (transcriptList) {
+        transcriptList.innerHTML = "";
+        const selectedSpan = traceStore.getSelectedSpan();
+
+        for (const span of filteredSpans) {
+          const isSelected = selectedSpan?.id === span.id;
+          const row = document.createElement("button");
+          row.type = "button";
+          row.className = `w-full text-left p-2 rounded-lg flex items-center justify-between transition-colors border ${
+            isSelected
+              ? "bg-blue-600/20 border-blue-500/60 text-white"
+              : "hover:bg-slate-900 border-transparent text-slate-300"
+          }`;
+
+          const typeColors: Record<string, string> = {
+            turn: "bg-sky-950 text-sky-400 border-sky-800",
+            model: "bg-purple-950 text-purple-400 border-purple-800",
+            tool: "bg-emerald-950 text-emerald-400 border-emerald-800",
+            agent: "bg-amber-950 text-amber-400 border-amber-800",
+          };
+          const badgeClass = typeColors[span.type] || "bg-slate-900 text-slate-400 border-slate-700";
+
+          row.innerHTML = `
+            <div class="flex items-center space-x-2 min-w-0 pr-2">
+              <span class="px-1.5 py-0.5 rounded text-[9px] font-semibold border ${badgeClass}">${span.type}</span>
+              <span class="font-medium text-xs truncate">${escapeHtml(span.name)}</span>
+            </div>
+            <div class="flex items-center space-x-3 shrink-0 text-[10px] text-slate-400 font-mono">
+              <span class="${span.duration_ms > 200 ? "text-amber-400" : ""}">${span.duration_ms.toFixed(1)}ms</span>
+              <span class="text-slate-500">+${(span.relative_start_ms / 1000).toFixed(2)}s</span>
+            </div>
+          `;
+
+          row.onclick = () => {
+            traceStore.setSelectedSpan(span.id);
+          };
+
+          transcriptList.appendChild(row);
+        }
+      }
+
+      // Render Timeline SVG Lanes
+      renderTimelineSvg(trace, filteredSpans);
+
+      // Render Inspector Pane
+      renderInspectorPane(trace);
+
+      // Render Aggregates Table
+      renderAggregatesTable(trace);
     }
 
-    chatForm.onsubmit = (e) => {
-      e.preventDefault();
-      void handleSendMessage();
-    };
+    function renderTimelineSvg(trace: ChatTrace, spans: ChatTraceSpan[]): void {
+      if (!timelineSvg) return;
+      timelineSvg.innerHTML = "";
 
+      const width = timelineSvg.clientWidth || 800;
+      const height = timelineSvg.clientHeight || 128;
+      const maxMs = Math.max(trace.wall_time_ms, 100) / zoomLevel;
+
+      // Lanes definitions
+      const lanes = [
+        { name: "Main", y: 15, color: "#f59e0b" },
+        { name: "Turns", y: 42, color: "#38bdf8" },
+        { name: "Model", y: 69, color: "#a855f7" },
+        { name: "Tools", y: 96, color: "#10b981" },
+      ];
+
+      // Draw background lane lines & labels
+      for (const lane of lanes) {
+        const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
+        text.setAttribute("x", "8");
+        text.setAttribute("y", String(lane.y + 12));
+        text.setAttribute("fill", "#64748b");
+        text.setAttribute("font-size", "10");
+        text.setAttribute("font-family", "monospace");
+        text.textContent = lane.name;
+        timelineSvg.appendChild(text);
+
+        const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+        line.setAttribute("x1", "55");
+        line.setAttribute("x2", String(width));
+        line.setAttribute("y1", String(lane.y + 10));
+        line.setAttribute("y2", String(lane.y + 10));
+        line.setAttribute("stroke", "#1e293b");
+        line.setAttribute("stroke-width", "1");
+        timelineSvg.appendChild(line);
+      }
+
+      const laneXStart = 55;
+      const usableWidth = width - laneXStart - 10;
+      const selectedSpan = traceStore.getSelectedSpan();
+
+      // Draw Spans
+      for (const span of spans) {
+        let laneY = 96;
+        let color = "#10b981";
+
+        if (span.type === "turn") {
+          laneY = 42;
+          color = "#38bdf8";
+        } else if (span.type === "model") {
+          laneY = 69;
+          color = "#a855f7";
+        } else if (span.type === "agent") {
+          laneY = 15;
+          color = "#f59e0b";
+        }
+
+        const startX = laneXStart + (span.relative_start_ms / maxMs) * usableWidth;
+        const spanWidth = Math.max(4, (span.duration_ms / maxMs) * usableWidth);
+        const isSelected = selectedSpan?.id === span.id;
+
+        const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+        rect.setAttribute("x", String(startX));
+        rect.setAttribute("y", String(laneY));
+        rect.setAttribute("width", String(spanWidth));
+        rect.setAttribute("height", "18");
+        rect.setAttribute("rx", "4");
+        rect.setAttribute("fill", isSelected ? "#ffffff" : color);
+        rect.setAttribute("fill-opacity", isSelected ? "0.9" : "0.75");
+        rect.setAttribute("stroke", isSelected ? "#3b82f6" : color);
+        rect.setAttribute("stroke-width", isSelected ? "2" : "1");
+        rect.setAttribute("cursor", "pointer");
+
+        rect.onclick = () => {
+          traceStore.setSelectedSpan(span.id);
+        };
+
+        const title = document.createElementNS("http://www.w3.org/2000/svg", "title");
+        title.textContent = `${span.name} (${span.duration_ms.toFixed(1)}ms)`;
+        rect.appendChild(title);
+
+        timelineSvg.appendChild(rect);
+      }
+    }
+
+    function renderInspectorPane(trace: ChatTrace): void {
+      const selected = traceStore.getSelectedSpan();
+      const emptyDiv = document.getElementById("inspector-empty");
+      const contentDiv = document.getElementById("inspector-content");
+
+      if (!selected) {
+        emptyDiv?.classList.remove("hidden");
+        contentDiv?.classList.add("hidden");
+        return;
+      }
+
+      emptyDiv?.classList.add("hidden");
+      contentDiv?.classList.remove("hidden");
+
+      setText("inspector-span-name", selected.name);
+      setText("inspector-span-track", `Carril: ${selected.track || "Main"}`);
+      setText("inspector-span-badge", selected.type);
+      setText("inspector-span-duration", `${selected.duration_ms.toFixed(2)}ms`);
+      setText("inspector-span-start", `+${(selected.relative_start_ms / 1000).toFixed(3)}s`);
+
+      const argsEl = document.getElementById("inspector-span-args");
+      if (argsEl) {
+        argsEl.textContent = selected.args ? JSON.stringify(selected.args, null, 2) : "{}";
+      }
+
+      const resultEl = document.getElementById("inspector-span-result");
+      if (resultEl) {
+        if (selected.error) {
+          resultEl.textContent = `Error: ${selected.error}`;
+        } else if (typeof selected.result === "string") {
+          resultEl.textContent = selected.result;
+        } else if (selected.result) {
+          resultEl.textContent = JSON.stringify(selected.result, null, 2);
+        } else {
+          resultEl.textContent = "Sin datos de retorno";
+        }
+      }
+
+      document.getElementById("btn-copy-args")?.addEventListener("click", () => {
+        navigator.clipboard.writeText(argsEl?.textContent || "");
+      });
+      document.getElementById("btn-copy-result")?.addEventListener("click", () => {
+        navigator.clipboard.writeText(resultEl?.textContent || "");
+      });
+    }
+
+    function renderAggregatesTable(trace: ChatTrace): void {
+      const tbody = document.getElementById("aggregates-table-body");
+      if (!tbody) return;
+
+      if (!trace.aggregates || trace.aggregates.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" class="p-4 text-center text-slate-500 italic">No se registraron herramientas</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = trace.aggregates
+        .map(
+          (a) => `
+        <tr class="border-b border-slate-900 hover:bg-slate-900/60">
+          <td class="py-2 px-1 font-semibold text-emerald-400">${escapeHtml(a.tool)}</td>
+          <td class="py-2 px-1 text-center">${a.calls}</td>
+          <td class="py-2 px-1 text-center ${a.errors > 0 ? "text-rose-400 font-bold" : "text-slate-500"}">${a.errors}</td>
+          <td class="py-2 px-1 text-right text-slate-200">${a.total_ms.toFixed(1)}ms</td>
+          <td class="py-2 px-1 text-right text-slate-400">${a.avg_ms.toFixed(1)}ms</td>
+          <td class="py-2 px-1 text-right text-slate-400">${a.max_ms.toFixed(1)}ms</td>
+        </tr>
+      `
+        )
+        .join("");
+    }
+
+    // --- Trace Controls Listeners ---
+    axisBtns.forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const mode = btn.getAttribute("data-axis") as AxisMode;
+        if (mode) {
+          traceStore.setAxisMode(mode);
+          axisBtns.forEach((b) => (b.className = "axis-btn px-2 py-0.5 rounded text-slate-400 hover:text-white font-medium"));
+          btn.className = "axis-btn px-2 py-0.5 rounded bg-blue-600 text-white font-medium";
+        }
+      });
+    });
+
+    chkCompressIdle?.addEventListener("change", () => {
+      traceStore.setCompressIdle(chkCompressIdle.checked);
+    });
+
+    traceSearch?.addEventListener("input", () => {
+      traceStore.setSearchQuery(traceSearch.value);
+    });
+
+    document.getElementById("btn-zoom-in")?.addEventListener("click", () => {
+      zoomLevel = Math.min(zoomLevel * 1.3, 10);
+      renderTraceView();
+    });
+    document.getElementById("btn-zoom-out")?.addEventListener("click", () => {
+      zoomLevel = Math.max(zoomLevel / 1.3, 0.5);
+      renderTraceView();
+    });
+    document.getElementById("btn-zoom-fit")?.addEventListener("click", () => {
+      zoomLevel = 1.0;
+      renderTraceView();
+    });
+
+    // Inspector Tabs Toggle
+    tabInspector?.addEventListener("click", () => {
+      tabInspector.className = "inspector-tab px-4 py-2 border-b-2 border-blue-500 font-semibold text-white text-[11px]";
+      tabAggregates!.className = "inspector-tab px-4 py-2 border-b-2 border-transparent text-slate-400 hover:text-white font-semibold text-[11px]";
+      inspectorPane?.classList.remove("hidden");
+      aggregatesPane?.classList.add("hidden");
+    });
+
+    tabAggregates?.addEventListener("click", () => {
+      tabAggregates.className = "inspector-tab px-4 py-2 border-b-2 border-blue-500 font-semibold text-white text-[11px]";
+      tabInspector!.className = "inspector-tab px-4 py-2 border-b-2 border-transparent text-slate-400 hover:text-white font-semibold text-[11px]";
+      inspectorPane?.classList.add("hidden");
+      aggregatesPane?.classList.remove("hidden");
+    });
+
+    // Helpers
+    function setText(id: string, text: string): void {
+      const el = document.getElementById(id);
+      if (el) el.textContent = text;
+    }
+
+    function escapeHtml(str: string): string {
+      return str
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+    }
+
+    // --- Subscriptions ---
+    chatStore.subscribe(() => {
+      renderSessions();
+      renderMessages();
+    });
+
+    traceStore.subscribe(() => {
+      renderTraceView();
+    });
+
+    // Initial Renders
+    renderSessions();
+    renderMessages();
+    updatePersonaButtons();
+    updateIncidentContextDisplay();
+
+    // Check SSE snapshot for warnings
     const snapshot = sseClient.getState().snapshot;
     if (snapshot?.pending_decisions && snapshot.pending_decisions.length > 0 && warningBanner && warningText) {
       warningText.textContent = `Atención: Hay ${snapshot.pending_decisions.length} incidentes pendientes de firma DPO en el sistema.`;
@@ -249,107 +1564,9 @@ import {
     }
   }
 
-  function appendMessage(
-    sender: "user" | "assistant",
-    text: string,
-    citations: ChatCitation[] = [],
-    tools: string[] = [],
-    persist = true,
-    response?: any,
-    error?: boolean,
-  ) {
-    const messagesContainer = document.getElementById("chat-messages");
-    if (!messagesContainer) return;
+  document.addEventListener("astro:page-load", initChatApp);
+  initChatApp();
 
-    if (persist) {
-      chatStore.addMessage({
-        sender,
-        text,
-        persona: currentPersona,
-        response,
-        error,
-      });
-    }
-
-    const msgDiv = document.createElement("div");
-    msgDiv.className = `flex items-start space-x-3 ${sender === "user" ? "justify-end" : ""}`;
-
-    if (sender === "user") {
-      msgDiv.innerHTML = `
-        <div class="bg-blue-600 text-white rounded-2xl p-3 max-w-lg space-y-1 shadow-sm">
-          <p class="leading-relaxed whitespace-pre-wrap">${text}</p>
-        </div>
-        <div class="w-8 h-8 rounded-lg bg-slate-800 border border-slate-700 text-slate-300 flex items-center justify-center shrink-0">
-          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-          </svg>
-        </div>
-      `;
-    } else {
-      let citationsHtml = "";
-      if (citations.length > 0) {
-        citationsHtml = `
-          <div class="mt-3 pt-3 border-t border-slate-800 space-y-2">
-            <p class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Citas Normativas Groundeadas (${citations.length})</p>
-            <div class="space-y-2">
-              ${citations
-                .map(
-                  (c) => `
-                <div class="bg-slate-950 p-2.5 rounded-lg border border-slate-800 space-y-1.5">
-                  <div class="flex items-center justify-between">
-                    <span class="font-semibold text-blue-400">${c.citation}</span>
-                    <span class="font-mono text-[10px] text-slate-500">${c.chunk_sha256.slice(0, 10)}…</span>
-                  </div>
-                  <blockquote class="italic text-slate-200 bg-slate-950/70 border border-slate-800 rounded p-2 text-[11px]">
-                    "${c.text}"
-                  </blockquote>
-                  <div class="flex items-center space-x-3 text-[10px] text-slate-500 pt-1">
-                    <span>Dense: ${c.dense_score !== null ? c.dense_score.toFixed(4) : "—"}</span>
-                    <span>BM25: ${c.bm25_rank ? `#${c.bm25_rank}` : "—"}</span>
-                    <span>RRF: ${c.rrf_score.toFixed(4)}</span>
-                    <span class="text-emerald-400 font-medium">Rerank: ${c.rerank_score.toFixed(4)}</span>
-                  </div>
-                </div>
-              `
-                )
-                .join("")}
-            </div>
-          </div>
-        `;
-      }
-
-      let toolsHtml = "";
-      if (tools.length > 0) {
-        toolsHtml = `
-          <div class="flex items-center space-x-1.5 text-[10px] text-slate-400 font-mono mb-1">
-            <span>Herramientas invocadas:</span>
-            ${tools.map((t) => `<span class="px-1.5 py-0.5 rounded bg-slate-950 border border-slate-800 text-blue-400">${t}</span>`).join("")}
-          </div>
-        `;
-      }
-
-      msgDiv.innerHTML = `
-        <div class="w-8 h-8 rounded-lg bg-blue-600/20 border border-blue-500/40 text-blue-400 flex items-center justify-center shrink-0">
-          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-          </svg>
-        </div>
-        <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 max-w-2xl space-y-2">
-          ${toolsHtml}
-          <div class="text-slate-200 leading-relaxed whitespace-pre-wrap">${text}</div>
-          ${citationsHtml}
-        </div>
-      `;
-    }
-
-    messagesContainer.appendChild(msgDiv);
-    messagesContainer.scrollTop = messagesContainer.scrollHeight;
-  }
-
-  document.addEventListener("astro:page-load", initChatPage);
-  initChatPage();
-
-  // Listen for SSE snapshot to show pending warnings
   window.addEventListener("cockpit:snapshot", ((e: CustomEvent<StreamSnapshot>) => {
     const pendings = e.detail.pending_decisions;
     const warningBanner = document.getElementById("chat-warning-banner");

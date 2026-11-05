@@ -16,6 +16,9 @@ import type {
   ChatPersona,
   ChatRequest,
   ChatResponse,
+  ChatToolAggregate,
+  ChatTrace,
+  ChatTraceSpan,
   CockpitSession,
 } from "@pims/types/cockpit.ts";
 import { MODEL_ROUTE_REASONING } from "@pims/types/constants.ts";
@@ -139,22 +142,146 @@ export async function handleChat(
   session: CockpitSession,
   request: ChatRequest,
 ): Promise<ChatResponse> {
+  const overallStart = performance.now();
+  const startIso = deps.clock().toISOString();
   if (!session.permissions.includes("view_incident")) {
     throw new CockpitPermissionDeniedError("view_incident");
   }
   const persona = resolvePersona(session, request.persona);
 
+  const spans: ChatTraceSpan[] = [];
+  const toolStats = new Map<
+    string,
+    { calls: number; errors: number; total_ms: number; max_ms: number }
+  >();
+
+  async function instrumentSpan<T>(
+    name: string,
+    type: "turn" | "tool" | "model" | "agent",
+    args: Record<string, unknown>,
+    fn: () => Promise<T>,
+    summarizeResult: (res: T) => Record<string, unknown> | string,
+  ): Promise<T> {
+    const spanStart = performance.now();
+    const relativeStartMs = Number((spanStart - overallStart).toFixed(2));
+    let status: "ok" | "error" = "ok";
+    let errorMessage: string | undefined;
+    let res: T;
+    try {
+      res = await fn();
+    } catch (err: unknown) {
+      status = "error";
+      errorMessage = err instanceof Error ? err.message : String(err);
+      const spanEnd = performance.now();
+      const durationMs = Number((spanEnd - spanStart).toFixed(2));
+      spans.push({
+        id: `span-${spans.length + 1}-${name}`,
+        name,
+        type,
+        status,
+        start_ms: Number(spanStart.toFixed(2)),
+        end_ms: Number(spanEnd.toFixed(2)),
+        duration_ms: durationMs,
+        relative_start_ms: relativeStartMs,
+        args,
+        error: errorMessage,
+        track: type === "tool" ? "Tools" : type === "model" ? "Model" : "Main",
+      });
+
+      if (type === "tool") {
+        const existing = toolStats.get(name) || {
+          calls: 0,
+          errors: 0,
+          total_ms: 0,
+          max_ms: 0,
+        };
+        existing.calls += 1;
+        existing.errors += 1;
+        existing.total_ms += durationMs;
+        existing.max_ms = Math.max(existing.max_ms, durationMs);
+        toolStats.set(name, existing);
+      }
+      throw err;
+    }
+
+    const spanEnd = performance.now();
+    const durationMs = Number((spanEnd - spanStart).toFixed(2));
+    const resultSummary = summarizeResult(res);
+
+    spans.push({
+      id: `span-${spans.length + 1}-${name}`,
+      name,
+      type,
+      status,
+      start_ms: Number(spanStart.toFixed(2)),
+      end_ms: Number(spanEnd.toFixed(2)),
+      duration_ms: durationMs,
+      relative_start_ms: relativeStartMs,
+      args,
+      result: resultSummary,
+      track: type === "tool" ? "Tools" : type === "model" ? "Model" : "Main",
+    });
+
+    if (type === "tool") {
+      const existing = toolStats.get(name) || {
+        calls: 0,
+        errors: 0,
+        total_ms: 0,
+        max_ms: 0,
+      };
+      existing.calls += 1;
+      existing.total_ms += durationMs;
+      existing.max_ms = Math.max(existing.max_ms, durationMs);
+      toolStats.set(name, existing);
+    }
+
+    return res;
+  }
+
+  // Turn span
+  spans.push({
+    id: "span-1-turn",
+    name: "user_turn",
+    type: "turn",
+    status: "ok",
+    start_ms: Number(overallStart.toFixed(2)),
+    end_ms: Number(overallStart.toFixed(2)),
+    duration_ms: 0.1,
+    relative_start_ms: 0,
+    args: {
+      message: request.message,
+      persona,
+      incident_code: request.incident_code,
+    },
+    result: "User query received",
+    track: "Main",
+  });
+
   const toolCalls: string[] = [];
-  const activeIncidents = await listActiveIncidents(deps.adapter);
+  const activeIncidents = await instrumentSpan(
+    "list_active_incidents",
+    "tool",
+    {},
+    () => listActiveIncidents(deps.adapter),
+    (res) => ({ active_incidents_count: res.length }),
+  );
   toolCalls.push("list_active_incidents");
 
-  const timers = await getRegulatoryTimers(deps.store, deps.clock);
+  const timers = await instrumentSpan(
+    "get_regulatory_timers",
+    "tool",
+    {},
+    () => getRegulatoryTimers(deps.store, deps.clock),
+    (res) => ({ timers_count: res.length }),
+  );
   toolCalls.push("get_regulatory_timers");
 
-  const pendingDecisions = await checkPendingDecisions(
-    deps.adapter,
-    deps.store,
-    session,
+  const pendingDecisions = await instrumentSpan(
+    "check_pending_decisions",
+    "tool",
+    { user_role: session.native_role },
+    () => checkPendingDecisions(deps.adapter, deps.store, session),
+    (res) => ({ pending_decisions_count: res.length }),
   );
   toolCalls.push("check_pending_decisions");
 
@@ -168,7 +295,13 @@ export async function handleChat(
   };
 
   if (code !== null) {
-    const status = await getIncidentStatus(deps.adapter, code);
+    const status = await instrumentSpan(
+      "get_incident_status",
+      "tool",
+      { code },
+      () => getIncidentStatus(deps.adapter, code),
+      (res) => ({ summary: res.summary, actions_count: res.actions_count }),
+    );
     toolCalls.push("get_incident_status");
     incidentStatus = {
       summary: status.summary,
@@ -177,7 +310,16 @@ export async function handleChat(
       attachments_count: status.attachments_count,
     };
 
-    ragCitations = await getRagCitations(deps.store, code);
+    ragCitations = await instrumentSpan(
+      "get_rag_citations",
+      "tool",
+      { code },
+      () => getRagCitations(deps.store, code),
+      (res) => ({
+        citations_count: res.citations.length,
+        passages_count: res.passages.length,
+      }),
+    );
     toolCalls.push("get_rag_citations");
     const chatCitations = toChatCitations(
       ragCitations.passages,
@@ -217,13 +359,23 @@ export async function handleChat(
   });
 
   const serializedContext = JSON.stringify(context);
-  const response = await deps.modelClient.chat_json({
-    route: MODEL_ROUTE_REASONING,
-    system: `${PERSONA_PROMPTS[persona]} ${RESPONSE_CONTRACT}`,
-    messages: [{ role: "user", content: serializedContext }],
-    max_tokens: 4096,
-    temperature: deps.config.TEMP_REASONING,
-  });
+  const response = await instrumentSpan(
+    "model_reasoning",
+    "model",
+    { route: MODEL_ROUTE_REASONING, persona, max_tokens: 4096 },
+    () =>
+      deps.modelClient.chat_json({
+        route: MODEL_ROUTE_REASONING,
+        system: `${PERSONA_PROMPTS[persona]} ${RESPONSE_CONTRACT}`,
+        messages: [{ role: "user", content: serializedContext }],
+        max_tokens: 4096,
+        temperature: deps.config.TEMP_REASONING,
+      }),
+    (res) => ({
+      has_reply: typeof res.content.reply === "string",
+      keys: Object.keys(res.content),
+    }),
+  );
 
   const reply = normalizeReplyText(response.content.reply);
   if (reply === null) {
@@ -275,11 +427,91 @@ export async function handleChat(
     throw new CockpitPiiBlockedError(fields);
   }
 
+  // Extract or synthesize reasoning
+  let reasoning: string | undefined;
+  if (
+    typeof response.content.reasoning === "string" &&
+    response.content.reasoning.trim().length > 0
+  ) {
+    reasoning = response.content.reasoning.trim();
+  } else {
+    const steps: string[] = [];
+    steps.push(`Análisis regulatorio ejecutado con perfil '${persona}'.`);
+    if (code !== null) {
+      steps.push(`Contexto focalizado en incidente '${code}'.`);
+    }
+    steps.push(
+      `Consultadas ${toolCalls.length} fuentes de datos y ${citationEntries.length} citas normativas.`,
+    );
+    if (pendingDecisions.length > 0) {
+      steps.push(
+        `Identificadas ${pendingDecisions.length} decisiones regulatorias pendientes de revisión humana.`,
+      );
+    }
+    reasoning = steps.join(" ");
+  }
+
+  const overallEnd = performance.now();
+  const wallTimeMs = Number((overallEnd - overallStart).toFixed(2));
+  const toolTimeMs = Number(
+    spans
+      .filter((s) => s.type === "tool")
+      .reduce((acc, s) => acc + s.duration_ms, 0)
+      .toFixed(2),
+  );
+  const modelTimeMs = Number(
+    spans
+      .filter((s) => s.type === "model")
+      .reduce((acc, s) => acc + s.duration_ms, 0)
+      .toFixed(2),
+  );
+  const idleTimeMs = Number(
+    Math.max(0, wallTimeMs - toolTimeMs - modelTimeMs).toFixed(2),
+  );
+  const tokensEstimate = Math.round(
+    (serializedContext.length + reply.length) / 4,
+  );
+  const costEstimateUsd = Number(
+    ((tokensEstimate / 1000) * 0.00015).toFixed(5),
+  );
+
+  const aggregates: ChatToolAggregate[] = Array.from(toolStats.entries()).map(
+    ([tool, stats]) => ({
+      tool,
+      calls: stats.calls,
+      errors: stats.errors,
+      total_ms: Number(stats.total_ms.toFixed(2)),
+      avg_ms: Number((stats.total_ms / stats.calls).toFixed(2)),
+      max_ms: Number(stats.max_ms.toFixed(2)),
+    }),
+  );
+
+  const trace: ChatTrace = {
+    id: `trace-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    title: code
+      ? `Consulta ${persona.toUpperCase()} [${code}]`
+      : `Consulta ${persona.toUpperCase()}`,
+    start_iso: startIso,
+    wall_time_ms: wallTimeMs,
+    model_time_ms: modelTimeMs,
+    tool_time_ms: toolTimeMs,
+    idle_time_ms: idleTimeMs,
+    turns_count: 1,
+    requests_count: 1,
+    tool_calls_count: toolCalls.length,
+    tokens_estimate: tokensEstimate,
+    cost_estimate_usd: costEstimateUsd,
+    spans,
+    aggregates,
+  };
+
   return {
     reply,
     persona,
     citations: resolved,
     pending_decisions: pendingDecisions,
     tool_calls: toolCalls,
+    reasoning,
+    trace,
   };
 }
