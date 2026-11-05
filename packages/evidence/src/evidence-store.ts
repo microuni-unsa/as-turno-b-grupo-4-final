@@ -588,16 +588,24 @@ export class EvidenceStore {
     incidentCode: string,
     limit = 20,
   ): Promise<RagRetrievalRecord[]> {
+    return this.listRecentRagRetrievals(limit, incidentCode);
+  }
+
+  async listRecentRagRetrievals(
+    limit = 20,
+    incidentCode?: string,
+  ): Promise<RagRetrievalRecord[]> {
     if (!Number.isInteger(limit) || limit <= 0) {
       throw new PimsValidationError(
         "rag_retrievals.limit",
         "limit must be a positive integer",
       );
     }
-    const rows = await this.db
-      .select()
-      .from(ragRetrievalsTable)
-      .where(eq(ragRetrievalsTable.incident_code, incidentCode))
+    const baseQuery = this.db.select().from(ragRetrievalsTable);
+    const rows = await (incidentCode !== undefined
+      ? baseQuery.where(eq(ragRetrievalsTable.incident_code, incidentCode))
+      : baseQuery
+    )
       .orderBy(desc(ragRetrievalsTable.at_utc), desc(ragRetrievalsTable.id))
       .limit(limit);
 

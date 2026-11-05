@@ -16,7 +16,7 @@
     "dev:ui": "bun --filter @pims/cockpit dev:ui",
     "build:ui": "bun --filter @pims/cockpit build:ui",
     "start": "bun run packages/cockpit/src/server.ts",
-    "build": "bun build packages/cockpit/src/server.ts --outdir dist --target bun",
+    "build": "bun build packages/cockpit/src/server.ts --outdir dist --target bun --external cpu-features --external ssh2",
     "dev": "microenv dev --def ./src/env-matrix.ts --stack ./src/stack-def.ts --preset dev --local",
     "stack:dev": "bun run scripts/dev-stack.ts",
     "env:check": "microenv check --def ./src/env-matrix.ts",

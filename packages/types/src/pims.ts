@@ -445,7 +445,7 @@ export const PimsAuditActionPlanSchema = z.object({
   responsible: z.string().nullable().optional(),
   due_date: z.string().nullable().optional(),
   status: z.enum(ACTION_PLAN_STATUSES),
-  progress: z.number().optional(),
+  progress: z.number().nullable().optional(),
   position: z.number().optional(),
 });
 
@@ -496,7 +496,7 @@ export const PimsAuditCreateSchema = z.object({
               responsible: z.string().min(1),
               due_date: z.string().min(1),
               status: z.enum(ACTION_PLAN_STATUSES),
-              progress: z.number().optional(),
+              progress: z.number().nullable().optional(),
             }),
           )
           .optional(),

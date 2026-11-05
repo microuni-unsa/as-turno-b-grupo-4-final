@@ -95,6 +95,7 @@ import {
   import { sseClient } from "@pims/cockpit/ui/lib/sse-client.ts";
   import type { CockpitTimer, PendingDecision, StreamSnapshot } from "@pims/types/cockpit.ts";
   import type { AgentEvent } from "@pims/types/agent.ts";
+  import type { RetrievalPassage } from "@pims/types/rag.ts";
   import { formatRemainingTime } from "@pims/cockpit/ui/lib/utils.ts";
 
   const session = getSession();
@@ -106,6 +107,7 @@ import {
 
   let activeTimers: CockpitTimer[] = [];
   let pendingDecisions: PendingDecision[] = [];
+  const seenPassageKeys = new Set<string>();
 
   function renderTimers() {
     const timersGrid = getEl<HTMLDivElement>("timers-grid");
@@ -128,12 +130,14 @@ import {
         if (timer.timer_type === "T_SUBJECT") label = "Notificación a Titulares Art. 34";
         if (timer.timer_type === "T_PROCESSOR") label = "Notificación a Encargados";
 
+        const isOverdue = timer.remaining_ms <= 0;
+
         return `
-          <div class="bg-slate-900 border border-slate-800 rounded-xl p-4 flex flex-col justify-between space-y-3 shadow-sm hover:border-slate-700 transition-colors">
+          <div class="bg-slate-900 border ${isOverdue ? "border-rose-900/80 bg-rose-950/20" : "border-slate-800"} rounded-xl p-4 flex flex-col justify-between space-y-3 shadow-sm hover:border-slate-700 transition-colors">
             <div class="flex items-start justify-between">
               <div class="space-y-1">
                 <div class="flex items-center space-x-2">
-                  <span class="px-2 py-0.5 rounded text-xs font-semibold bg-blue-950 text-blue-400 border border-blue-900">
+                  <span class="px-2 py-0.5 rounded text-xs font-semibold ${isOverdue ? "bg-rose-950 text-rose-300 border border-rose-800" : "bg-blue-950 text-blue-400 border border-blue-900"}">
                     ${timer.incident_code}
                   </span>
                   <span class="text-xs font-medium text-slate-300">
@@ -144,7 +148,7 @@ import {
                   Vence: ${new Date(timer.fire_at_utc).toLocaleString("es-PE")}
                 </p>
               </div>
-              <div class="p-2 rounded-lg bg-slate-800 text-slate-300">
+              <div class="p-2 rounded-lg ${isOverdue ? "bg-rose-950/80 text-rose-300" : "bg-slate-800 text-slate-300"}">
                 <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
@@ -152,12 +156,14 @@ import {
             </div>
 
             <div class="pt-2 border-t border-slate-800/80 flex items-baseline justify-between">
-              <span class="text-xs text-slate-400">Tiempo restante:</span>
+              <span class="text-xs ${isOverdue ? "text-rose-400 font-semibold" : "text-slate-400"}">
+                ${isOverdue ? "Plazo vencido:" : "Tiempo restante:"}
+              </span>
               <span
                 data-timer-id="${timer.timer_id}"
                 data-ms="${timer.remaining_ms}"
                 class="text-xl font-bold font-mono tracking-tight tabular-nums ${
-                  timer.remaining_ms <= 0
+                  isOverdue
                     ? "text-rose-500 animate-pulse"
                     : timer.remaining_ms < 12 * 3600 * 1000
                     ? "text-amber-400"
@@ -171,6 +177,109 @@ import {
         `;
       })
       .join("");
+  }
+
+  function renderProposalHtml(prop: Record<string, any> | null | undefined, packType: string | null): string {
+    if (!prop || typeof prop !== "object") {
+      return `
+        <div class="p-3 bg-slate-950/60 rounded border border-slate-800 text-slate-500 italic">
+          No hay detalles de borrador estructurado disponibles para esta puerta de decisión.
+        </div>
+      `;
+    }
+
+    let html = `<div class="p-3 bg-slate-950/80 rounded-lg border border-slate-800 space-y-3">`;
+
+    html += `
+      <div class="flex items-center justify-between pb-2 border-b border-slate-800">
+        <span class="text-xs font-semibold text-slate-200">
+          ${packType === "authority" ? "Propuesta Art. 33 (Notificación a la Autoridad)" : "Propuesta Art. 34 (Comunicación a Titulares)"}
+        </span>
+        <span class="px-2 py-0.5 rounded text-[10px] font-mono bg-blue-950 text-blue-300 border border-blue-800">
+          Borrador Validado por Adversarial Reviewer
+        </span>
+      </div>
+    `;
+
+    if (prop.item_a_approx_subjects !== undefined || prop.item_a_approx_records !== undefined) {
+      html += `
+        <div class="grid grid-cols-2 gap-2 text-xs">
+          <div class="bg-slate-900/80 p-2 rounded border border-slate-800">
+            <span class="text-slate-400 block text-[11px]">Sujetos Afectados:</span>
+            <span class="text-slate-200 font-semibold font-mono">${prop.item_a_approx_subjects ?? "Por determinar"}</span>
+          </div>
+          <div class="bg-slate-900/80 p-2 rounded border border-slate-800">
+            <span class="text-slate-400 block text-[11px]">Registros Comprometidos:</span>
+            <span class="text-slate-200 font-semibold font-mono">${prop.item_a_approx_records ?? "Por determinar"}</span>
+          </div>
+        </div>
+      `;
+    }
+
+    if (prop.item_c_consequences) {
+      html += `
+        <div class="space-y-1">
+          <span class="text-[11px] font-semibold text-slate-300 uppercase tracking-wider">Consecuencias Probables (Art. 33.3.c):</span>
+          <p class="text-slate-300 leading-relaxed bg-slate-900/60 p-2.5 rounded border border-slate-800/80">${prop.item_c_consequences}</p>
+        </div>
+      `;
+    }
+
+    if (Array.isArray(prop.item_d_measures_taken) && prop.item_d_measures_taken.length > 0) {
+      html += `
+        <div class="space-y-1">
+          <span class="text-[11px] font-semibold text-emerald-400 uppercase tracking-wider">Medidas Técnicas Adoptadas (Art. 33.3.d):</span>
+          <ul class="list-disc pl-4 text-slate-300 space-y-1 bg-slate-900/60 p-2.5 rounded border border-slate-800/80">
+            ${prop.item_d_measures_taken.map((m: any) => `<li>${m}</li>`).join("")}
+          </ul>
+        </div>
+      `;
+    }
+
+    if (Array.isArray(prop.item_d_measures_proposed) && prop.item_d_measures_proposed.length > 0) {
+      html += `
+        <div class="space-y-1">
+          <span class="text-[11px] font-semibold text-amber-400 uppercase tracking-wider">Medidas Adicionales Propuestas (Art. 33.3.d):</span>
+          <ul class="list-disc pl-4 text-slate-300 space-y-1 bg-slate-900/60 p-2.5 rounded border border-slate-800/80">
+            ${prop.item_d_measures_proposed.map((m: any) => `<li>${m}</li>`).join("")}
+          </ul>
+        </div>
+      `;
+    }
+
+    if (prop.body_plain) {
+      html += `
+        <div class="space-y-1">
+          <span class="text-[11px] font-semibold text-slate-300 uppercase tracking-wider">Comunicación a los Titulares (Lenguaje Claro Art. 34):</span>
+          <div class="bg-slate-900/60 p-3 rounded border border-slate-800/80 text-slate-200 whitespace-pre-wrap leading-relaxed">${prop.body_plain}</div>
+        </div>
+      `;
+    }
+
+    if (Array.isArray(prop.safety_recommendations) && prop.safety_recommendations.length > 0) {
+      html += `
+        <div class="space-y-1">
+          <span class="text-[11px] font-semibold text-blue-400 uppercase tracking-wider">Recomendaciones para los Titulares:</span>
+          <ul class="list-disc pl-4 text-slate-300 space-y-1 bg-slate-900/60 p-2.5 rounded border border-slate-800/80">
+            ${prop.safety_recommendations.map((r: any) => `<li>${r}</li>`).join("")}
+          </ul>
+        </div>
+      `;
+    }
+
+    if (Array.isArray(prop.citations) && prop.citations.length > 0) {
+      html += `
+        <div class="pt-2 border-t border-slate-800/80 flex items-center justify-between flex-wrap gap-2">
+          <span class="text-[11px] font-semibold text-slate-400">Citas Normativas Verificadas:</span>
+          <div class="flex flex-wrap gap-1">
+            ${prop.citations.map((c: any) => `<span class="px-2 py-0.5 rounded bg-blue-950 text-blue-300 border border-blue-900 text-[10px] font-mono">${c}</span>`).join("")}
+          </div>
+        </div>
+      `;
+    }
+
+    html += `</div>`;
+    return html;
   }
 
   function renderPendingDecisions() {
@@ -196,9 +305,10 @@ import {
     }
 
     pendingContainer.innerHTML = pendingDecisions
-      .map((item) => {
+      .map((item, index) => {
         const disabledAttr = canChangeIncident ? "" : "disabled title=\"Permiso 'change_incident' requerido (Modo solo lectura)\"";
         const disabledClasses = canChangeIncident ? "" : "opacity-50 cursor-not-allowed";
+        const propTargetId = `prop-view-${item.incident_id}-${item.pack_type || index}`;
 
         if (item.kind === "agent_blocked") {
           return `
@@ -244,59 +354,99 @@ import {
         }
 
         return `
-          <div class="bg-slate-900 border border-slate-800 rounded-xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-            <div class="space-y-1">
-              <div class="flex items-center space-x-2">
-                <span class="px-2 py-0.5 rounded text-xs font-bold font-mono bg-blue-950 text-blue-400 border border-blue-900">
-                  ${item.incident_code}
-                </span>
-                <span class="text-sm font-semibold text-white">
-                  Paquete de Notificación listo para emisión (${item.pack_type === "authority" ? "Autoridad Art. 33" : "Titulares Art. 34"})
-                </span>
+          <div class="bg-slate-900 border border-slate-800 rounded-xl p-4 flex flex-col space-y-3 shadow-sm hover:border-slate-700 transition-colors">
+            <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+              <div class="space-y-1">
+                <div class="flex items-center space-x-2">
+                  <span class="px-2 py-0.5 rounded text-xs font-bold font-mono bg-blue-950 text-blue-400 border border-blue-900">
+                    ${item.incident_code}
+                  </span>
+                  <span class="text-sm font-semibold text-white">
+                    Paquete de Notificación listo para emisión (${item.pack_type === "authority" ? "Autoridad Art. 33" : "Titulares Art. 34"})
+                  </span>
+                  <span class="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-950 text-emerald-300 border border-emerald-800">
+                    Validado por Adversarial Reviewer
+                  </span>
+                </div>
+                <p class="text-xs text-slate-400">
+                  ${item.blocked_reason || "Revisión adversaria superada. Esperando firma y aprobación humana de la DPO."}
+                </p>
               </div>
-              <p class="text-xs text-slate-400">
-                ${item.blocked_reason || "Revisión adversaria superada. Esperando aprobación humana."}
-              </p>
+
+              <div class="flex items-center space-x-2 shrink-0">
+                <button
+                  type="button"
+                  data-toggle-prop="${propTargetId}"
+                  class="px-2.5 py-1.5 rounded-lg bg-blue-950/70 hover:bg-blue-900 text-blue-300 text-xs font-medium transition-colors flex items-center space-x-1.5 border border-blue-800"
+                >
+                  <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                  </svg>
+                  <span>Ver Propuesta</span>
+                </button>
+
+                <button
+                  type="button"
+                  data-action="revision"
+                  data-inc-id="${item.incident_id}"
+                  data-inc-code="${item.incident_code}"
+                  data-item-idx="${index}"
+                  ${disabledAttr}
+                  class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium transition-colors flex items-center space-x-1 border border-slate-700 ${disabledClasses}"
+                >
+                  <span>Solicitar Revisión</span>
+                </button>
+
+                <button
+                  type="button"
+                  data-action="exemption"
+                  data-inc-id="${item.incident_id}"
+                  data-inc-code="${item.incident_code}"
+                  data-item-idx="${index}"
+                  ${disabledAttr}
+                  class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium transition-colors flex items-center space-x-1 border border-slate-700 ${disabledClasses}"
+                >
+                  <span>Atestiguar Exención</span>
+                </button>
+
+                <button
+                  type="button"
+                  data-action="approve"
+                  data-inc-id="${item.incident_id}"
+                  data-inc-code="${item.incident_code}"
+                  data-item-idx="${index}"
+                  ${disabledAttr}
+                  class="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold transition-colors flex items-center space-x-1 shadow-sm shadow-emerald-600/20 ${disabledClasses}"
+                >
+                  <span>Aprobar Emisión</span>
+                </button>
+              </div>
             </div>
 
-            <div class="flex items-center space-x-2 shrink-0">
-              <button
-                type="button"
-                data-action="revision"
-                data-inc-id="${item.incident_id}"
-                data-inc-code="${item.incident_code}"
-                ${disabledAttr}
-                class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium transition-colors flex items-center space-x-1 border border-slate-700 ${disabledClasses}"
-              >
-                <span>Solicitar Revisión</span>
-              </button>
-
-              <button
-                type="button"
-                data-action="exemption"
-                data-inc-id="${item.incident_id}"
-                data-inc-code="${item.incident_code}"
-                ${disabledAttr}
-                class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium transition-colors flex items-center space-x-1 border border-slate-700 ${disabledClasses}"
-              >
-                <span>Atestiguar Exención</span>
-              </button>
-
-              <button
-                type="button"
-                data-action="approve"
-                data-inc-id="${item.incident_id}"
-                data-inc-code="${item.incident_code}"
-                ${disabledAttr}
-                class="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold transition-colors flex items-center space-x-1 shadow-sm shadow-emerald-600/20 ${disabledClasses}"
-              >
-                <span>Aprobar Emisión</span>
-              </button>
+            <div id="${propTargetId}" class="hidden pt-3 border-t border-slate-800">
+              ${renderProposalHtml(item.proposal, item.pack_type)}
             </div>
           </div>
         `;
       })
       .join("");
+
+    // Attach listeners for proposal toggle
+    pendingContainer.querySelectorAll("button[data-toggle-prop]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const targetId = btn.getAttribute("data-toggle-prop");
+        if (!targetId) return;
+        const targetEl = document.getElementById(targetId);
+        if (targetEl) {
+          targetEl.classList.toggle("hidden");
+          const isHidden = targetEl.classList.contains("hidden");
+          btn.innerHTML = isHidden
+            ? `<svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg><span>Ver Propuesta</span>`
+            : `<svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l18 18" /></svg><span>Ocultar Propuesta</span>`;
+        }
+      });
+    });
 
     // Attach listeners to trigger modal
     pendingContainer.querySelectorAll("button[data-action]").forEach((btn) => {
@@ -305,13 +455,74 @@ import {
         const action = btn.getAttribute("data-action");
         const incidentId = Number(btn.getAttribute("data-inc-id"));
         const incidentCode = btn.getAttribute("data-inc-code") || "";
+        const itemIdx = Number(btn.getAttribute("data-item-idx") || "-1");
+        const proposal = itemIdx >= 0 && pendingDecisions[itemIdx] ? pendingDecisions[itemIdx].proposal : null;
+
         window.dispatchEvent(
           new CustomEvent("cockpit:open-decision-modal", {
-            detail: { action, incidentId, incidentCode },
+            detail: { action, incidentId, incidentCode, proposal },
           })
         );
       });
     });
+  }
+
+  function renderPassageCard(p: RetrievalPassage): string {
+    const key = `${p.doc_id}:${p.chunk_id}:${p.lines}`;
+    if (seenPassageKeys.has(key)) return "";
+    seenPassageKeys.add(key);
+
+    return `
+      <div class="bg-slate-900 border border-slate-800 rounded-xl p-4 space-y-3">
+        <div class="flex items-center justify-between">
+          <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-blue-950 text-blue-300 border border-blue-800">
+            ${p.citation}
+          </span>
+          <span class="font-mono text-[10px] text-slate-400">${p.chunk_sha256.slice(0, 12)}…</span>
+        </div>
+        <blockquote class="text-sm text-slate-200 bg-slate-950/60 border border-slate-800/80 rounded-lg p-3 font-serif italic">
+          "${p.text}"
+        </blockquote>
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2 border-t border-slate-800/80 text-[11px]">
+          <div class="bg-slate-950/60 p-1.5 rounded border border-slate-800 flex justify-between">
+            <span class="text-slate-400">Dense:</span>
+            <span class="font-mono text-slate-200">${p.dense_score !== null && p.dense_score !== undefined ? Number(p.dense_score).toFixed(4) : "—"}</span>
+          </div>
+          <div class="bg-slate-950/60 p-1.5 rounded border border-slate-800 flex justify-between">
+            <span class="text-slate-400">BM25:</span>
+            <span class="font-mono text-slate-200">${p.bm25_rank !== null && p.bm25_rank !== undefined ? `#${p.bm25_rank}` : "—"}</span>
+          </div>
+          <div class="bg-slate-950/60 p-1.5 rounded border border-slate-800 flex justify-between">
+            <span class="text-slate-400">RRF:</span>
+            <span class="font-mono text-blue-400">${Number(p.rrf_score).toFixed(4)}</span>
+          </div>
+          <div class="bg-slate-950/60 p-1.5 rounded border border-slate-800 flex justify-between">
+            <span class="text-slate-400">Rerank:</span>
+            <span class="font-mono text-emerald-400">${Number(p.rerank_score).toFixed(4)}</span>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  function renderRagRetrievals(records: Array<{ passages: RetrievalPassage[] }>) {
+    const ragContainer = getEl<HTMLDivElement>("rag-citations-container");
+    if (!ragContainer || !Array.isArray(records) || records.length === 0) return;
+    let html = "";
+    for (const record of records) {
+      if (Array.isArray(record.passages)) {
+        for (const p of record.passages) {
+          html += renderPassageCard(p);
+        }
+      }
+    }
+    if (html.length > 0) {
+      if (ragContainer.textContent?.includes("Esperando eventos")) {
+        ragContainer.innerHTML = html;
+      } else {
+        ragContainer.insertAdjacentHTML("afterbegin", html);
+      }
+    }
   }
 
   // Timer ticker
@@ -335,26 +546,32 @@ import {
       pendingDecisions = existingSnapshot.pending_decisions;
       renderTimers();
       renderPendingDecisions();
-    } else {
-      try {
-        const response = await authenticatedFetch("/api/compliance");
-        if (response.ok) {
-          const data = (await response.json()) as {
-            timers: CockpitTimer[];
-            pending_decisions: PendingDecision[];
-          };
-          if (activeTimers.length === 0 && Array.isArray(data.timers)) {
-            activeTimers = data.timers;
-          }
-          if (pendingDecisions.length === 0 && Array.isArray(data.pending_decisions)) {
-            pendingDecisions = data.pending_decisions;
-          }
-          renderTimers();
-          renderPendingDecisions();
-        }
-      } catch {
-        // SSE snapshot will hydrate
+      if (existingSnapshot.recent_rag_retrievals) {
+        renderRagRetrievals(existingSnapshot.recent_rag_retrievals);
       }
+    }
+    try {
+      const response = await authenticatedFetch("/api/compliance");
+      if (response.ok) {
+        const data = (await response.json()) as {
+          timers: CockpitTimer[];
+          pending_decisions: PendingDecision[];
+          recent_rag_retrievals?: Array<{ passages: RetrievalPassage[] }>;
+        };
+        if (Array.isArray(data.timers)) {
+          activeTimers = data.timers;
+        }
+        if (Array.isArray(data.pending_decisions)) {
+          pendingDecisions = data.pending_decisions;
+        }
+        renderTimers();
+        renderPendingDecisions();
+        if (Array.isArray(data.recent_rag_retrievals)) {
+          renderRagRetrievals(data.recent_rag_retrievals);
+        }
+      }
+    } catch {
+      // SSE snapshot will hydrate
     }
   }
 
@@ -369,6 +586,9 @@ import {
     pendingDecisions = e.detail.pending_decisions;
     renderTimers();
     renderPendingDecisions();
+    if (e.detail.recent_rag_retrievals) {
+      renderRagRetrievals(e.detail.recent_rag_retrievals);
+    }
   }) as EventListener);
 
   // SSE agent event listener
@@ -391,39 +611,16 @@ import {
     } else if (event.type === "rag:retrieval") {
       const ragContainer = getEl<HTMLDivElement>("rag-citations-container");
       if (ragContainer) {
+        let html = "";
         for (const p of event.passages) {
-        const div = document.createElement("div");
-        div.className = "bg-slate-900 border border-slate-800 rounded-xl p-4 space-y-3";
-        div.innerHTML = `
-          <div class="flex items-center justify-between">
-            <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-blue-950 text-blue-300 border border-blue-800">
-              ${p.citation}
-            </span>
-            <span class="font-mono text-[10px] text-slate-400">${p.chunk_sha256.slice(0, 12)}…</span>
-          </div>
-          <blockquote class="text-sm text-slate-200 bg-slate-950/60 border border-slate-800/80 rounded-lg p-3 font-serif italic">
-            "${p.text}"
-          </blockquote>
-          <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2 border-t border-slate-800/80 text-[11px]">
-            <div class="bg-slate-950/60 p-1.5 rounded border border-slate-800 flex justify-between">
-              <span class="text-slate-400">Dense:</span>
-              <span class="font-mono text-slate-200">${p.dense_score !== null ? p.dense_score.toFixed(4) : "—"}</span>
-            </div>
-            <div class="bg-slate-950/60 p-1.5 rounded border border-slate-800 flex justify-between">
-              <span class="text-slate-400">BM25:</span>
-              <span class="font-mono text-slate-200">${p.bm25_rank !== null ? `#${p.bm25_rank}` : "—"}</span>
-            </div>
-            <div class="bg-slate-950/60 p-1.5 rounded border border-slate-800 flex justify-between">
-              <span class="text-slate-400">RRF:</span>
-              <span class="font-mono text-blue-400">${p.rrf_score.toFixed(4)}</span>
-            </div>
-            <div class="bg-slate-950/60 p-1.5 rounded border border-slate-800 flex justify-between">
-              <span class="text-slate-400">Rerank:</span>
-              <span class="font-mono text-emerald-400">${p.rerank_score.toFixed(4)}</span>
-            </div>
-          </div>
-        `;
-        ragContainer.prepend(div);
+          html += renderPassageCard(p);
+        }
+        if (html.length > 0) {
+          if (ragContainer.textContent?.includes("Esperando eventos")) {
+            ragContainer.innerHTML = html;
+          } else {
+            ragContainer.insertAdjacentHTML("afterbegin", html);
+          }
         }
       }
     }

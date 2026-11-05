@@ -379,11 +379,35 @@ export function createCockpitApp(deps: CockpitAppDeps): Hono<CockpitEnv> {
   app.get("/api/compliance", async (c) => {
     const session = c.get("session");
     requirePermission(session, "view_incident");
-    const [timers, pendingDecisions] = await Promise.all([
+    const [timers, pendingDecisions, recentRag] = await Promise.all([
       getRegulatoryTimers(deps.store, clock),
       checkPendingDecisions(deps.adapter, deps.store, session),
+      deps.store.listRecentRagRetrievals(15).catch(() => []),
     ]);
-    return c.json({ timers, pending_decisions: pendingDecisions });
+    return c.json({
+      timers,
+      pending_decisions: pendingDecisions,
+      recent_rag_retrievals: recentRag,
+    });
+  });
+
+  app.get("/api/incidents/:id/proposal", async (c) => {
+    const session = c.get("session");
+    requirePermission(session, "view_incident");
+    const incidentId = parseIncidentId(c.req.param("id"));
+    const incident = await deps.adapter.getIncident(incidentId);
+    const [authorityPack, subjectPack, rootCause] = await Promise.all([
+      deps.store.getDraftPack(incident.incident_code, "authority"),
+      deps.store.getDraftPack(incident.incident_code, "subject"),
+      deps.store.getRootCause(incident.incident_code).catch(() => null),
+    ]);
+    return c.json({
+      incident_id: incident.id,
+      incident_code: incident.incident_code,
+      authority_pack: authorityPack,
+      subject_pack: subjectPack,
+      root_cause: rootCause,
+    });
   });
 
   app.get("/api/stream", async (c) => {

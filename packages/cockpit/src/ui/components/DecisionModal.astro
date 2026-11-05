@@ -40,6 +40,7 @@ import { CheckCircle2, ShieldAlert, X } from "lucide-astro";
       <p class="text-sm text-slate-300">
         ¿Confirma la aprobación y emisión inmediata del paquete de notificación para el incidente <strong id="approve-incident-code" class="text-white"></strong>?
       </p>
+      <div id="approve-proposal-preview" class="hidden p-3 bg-slate-950/80 rounded-lg border border-slate-800 text-xs text-slate-300 space-y-2 max-h-56 overflow-y-auto"></div>
       <div class="p-3 bg-slate-950 rounded-lg border border-slate-800 text-xs text-slate-400 space-y-1">
         <p>• La aprobación desbloqueará la emisión hacia los destinatarios configurados en PIMS.</p>
         <p>• Se sellará criptográficamente el bundle de evidencias en formato canónico JSON.</p>
@@ -243,6 +244,64 @@ import { CheckCircle2, ShieldAlert, X } from "lucide-astro";
       if (modalTitle) modalTitle.textContent = "Aprobar Notificación Regulatoria";
       const codeSpan = document.getElementById("approve-incident-code");
       if (codeSpan) codeSpan.textContent = incidentCode;
+      const previewEl = document.getElementById("approve-proposal-preview");
+      if (previewEl) {
+        const prop = e.detail.proposal;
+        if (prop && typeof prop === "object") {
+          let contentHtml = "";
+          if (prop.item_c_consequences) {
+            contentHtml += `
+              <div class="space-y-1">
+                <span class="font-semibold text-slate-200">Consecuencias Probables:</span>
+                <p class="text-slate-400">${prop.item_c_consequences}</p>
+              </div>
+            `;
+          }
+          if (Array.isArray(prop.item_d_measures_taken) && prop.item_d_measures_taken.length > 0) {
+            contentHtml += `
+              <div class="space-y-1">
+                <span class="font-semibold text-slate-200">Medidas Adoptadas:</span>
+                <ul class="list-disc pl-4 text-slate-400 space-y-0.5">
+                  ${prop.item_d_measures_taken.map((m: any) => `<li>${m}</li>`).join("")}
+                </ul>
+              </div>
+            `;
+          }
+          if (Array.isArray(prop.item_d_measures_proposed) && prop.item_d_measures_proposed.length > 0) {
+            contentHtml += `
+              <div class="space-y-1">
+                <span class="font-semibold text-slate-200">Medidas Propuestas:</span>
+                <ul class="list-disc pl-4 text-slate-400 space-y-0.5">
+                  ${prop.item_d_measures_proposed.map((m: any) => `<li>${m}</li>`).join("")}
+                </ul>
+              </div>
+            `;
+          }
+          if (prop.body_plain) {
+            contentHtml += `
+              <div class="space-y-1">
+                <span class="font-semibold text-slate-200">Texto de Comunicación:</span>
+                <p class="text-slate-400">${prop.body_plain}</p>
+              </div>
+            `;
+          }
+          if (Array.isArray(prop.citations) && prop.citations.length > 0) {
+            contentHtml += `
+              <div class="space-y-1 pt-1 border-t border-slate-800">
+                <span class="font-semibold text-slate-300">Citas Normativas:</span>
+                <div class="flex flex-wrap gap-1 mt-1">
+                  ${prop.citations.map((c: any) => `<span class="px-1.5 py-0.5 rounded bg-blue-950 text-blue-300 border border-blue-900 text-[10px] font-mono">${c}</span>`).join("")}
+                </div>
+              </div>
+            `;
+          }
+          previewEl.innerHTML = contentHtml || "<p class='text-slate-500 italic'>Sin contenido adicional en el borrador.</p>";
+          previewEl.classList.remove("hidden");
+        } else {
+          previewEl.classList.add("hidden");
+          previewEl.innerHTML = "";
+        }
+      }
       if (formApprove) formApprove.classList.remove("hidden");
     } else if (action === "revision") {
       if (modalTitle) modalTitle.textContent = "Solicitar Revisión de Notificación";

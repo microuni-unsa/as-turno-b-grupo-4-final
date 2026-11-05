@@ -3,6 +3,7 @@ import {
   PimsNotifyResultSchema,
   ReviewApprovalKindSchema,
 } from "@pims/types/agent.ts";
+import { JsonObjectSchema } from "@pims/types/models.ts";
 import { ExemptionEvaluationResultSchema } from "@pims/types/notices.ts";
 import {
   ACTION_TYPES,
@@ -16,6 +17,7 @@ import {
   INCIDENT_TYPES,
   PimsIncidentActionSchema,
 } from "@pims/types/pims.ts";
+import { RagRetrievalRecordSchema } from "@pims/types/rag.ts";
 import { z } from "zod";
 
 export const COCKPIT_ROLES = [
@@ -183,6 +185,7 @@ export const PendingDecisionSchema = z.object({
   approval_id: z.string().nullable(),
   blocked_reason: z.string().nullable(),
   actionable: z.boolean(),
+  proposal: JsonObjectSchema.nullable().optional(),
 });
 export type PendingDecision = z.infer<typeof PendingDecisionSchema>;
 
@@ -307,6 +310,7 @@ export const StreamSnapshotSchema = z.object({
   incidents: z.array(CockpitIncidentSummarySchema),
   timers: z.array(CockpitTimerSchema),
   pending_decisions: z.array(PendingDecisionSchema),
+  recent_rag_retrievals: z.array(RagRetrievalRecordSchema).optional(),
 });
 export type StreamSnapshot = z.infer<typeof StreamSnapshotSchema>;
 

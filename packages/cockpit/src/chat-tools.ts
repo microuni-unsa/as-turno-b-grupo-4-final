@@ -16,6 +16,7 @@ import type {
   PendingDecision,
 } from "@pims/types/cockpit.ts";
 import { PimsNotFoundError, PimsValidationError } from "@pims/types/errors.ts";
+import type { JsonObject } from "@pims/types/models.ts";
 import type { PimsIncident } from "@pims/types/pims.ts";
 import type { RetrievalPassage } from "@pims/types/rag.ts";
 
@@ -358,6 +359,7 @@ export async function checkPendingDecisions(
         pack_id: string | null;
         approval_id: string | null;
         state: string;
+        proposal: JsonObject | null;
       }> = [];
 
       for (const [packType, row] of [
@@ -377,9 +379,18 @@ export async function checkPendingDecisions(
                 : null,
             approval_id: row.reviewApprovalId,
             state: row.state,
+            proposal:
+              typeof row.payload === "object" &&
+              row.payload !== null &&
+              !Array.isArray(row.payload)
+                ? (row.payload as JsonObject)
+                : null,
           });
         }
       }
+
+      const activeProposal =
+        draftPacks.find((p) => p.proposal !== null)?.proposal ?? null;
 
       if (draftPacks.some((pack) => pack.state === "draft")) {
         return [
@@ -391,6 +402,7 @@ export async function checkPendingDecisions(
             approval_id: null,
             blocked_reason: null,
             actionable,
+            proposal: activeProposal,
           },
         ];
       }
@@ -410,6 +422,7 @@ export async function checkPendingDecisions(
             approval_id: null,
             blocked_reason: null,
             actionable,
+            proposal: activeProposal,
           },
         ];
       }
@@ -421,6 +434,7 @@ export async function checkPendingDecisions(
         approval_id: pack.approval_id,
         blocked_reason: null,
         actionable,
+        proposal: pack.proposal,
       }));
     }),
   );

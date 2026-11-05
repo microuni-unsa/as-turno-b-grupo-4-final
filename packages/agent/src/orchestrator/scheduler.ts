@@ -272,6 +272,15 @@ export class DeadlineScheduler {
     payload: JsonObject,
     now: Date,
   ): Promise<void> {
+    const active = await this.store.listActiveTimers(incidentCode);
+    const existing = active.find(
+      (timer) =>
+        timer.timer_type === "T_RETRY" &&
+        (timer.payload as { failed_kind?: string })?.failed_kind === failedKind,
+    );
+    if (existing !== undefined) {
+      return;
+    }
     const backoffMs = DEFAULT_RETRY_BACKOFF_MS[0];
     const jittered = Math.round(backoffMs * (1 + this.random() * 0.1));
     const timerId = `timer:${incidentCode}:T_RETRY:${crypto.randomUUID()}`;
