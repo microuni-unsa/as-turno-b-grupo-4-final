@@ -1,3 +1,4 @@
+import { SHA256_HEX_LENGTH } from "@pims/types/constants.ts";
 import { JsonObjectSchema } from "@pims/types/models.ts";
 import { z } from "zod";
 
@@ -15,7 +16,7 @@ export type ForensicScanResult = z.infer<typeof ForensicScanResultSchema>;
 
 export const EvidenceAttachmentSchema = z.object({
   file_name: z.string().min(1),
-  sha256: z.string().length(64),
+  sha256: z.string().length(SHA256_HEX_LENGTH),
   bytes: z.number().int().nonnegative(),
   mime: z.string().min(1),
   pii_tags: z.array(z.string()),
@@ -62,7 +63,7 @@ export const EvidenceBundleManifestSchema = z.object({
   manifest: z.literal("evidence-bundle"),
   incident_code: z.string().min(1),
   sealed_at_utc: z.string().datetime().nullable(),
-  seal_sha256: z.string().length(64).nullable(),
+  seal_sha256: z.string().length(SHA256_HEX_LENGTH).nullable(),
   incident: EvidenceBundleIncidentSchema,
   items: z.array(EvidenceAttachmentSchema),
   citations: z.array(z.string()),

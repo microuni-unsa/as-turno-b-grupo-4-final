@@ -1,4 +1,14 @@
 import {
+  INCIDENT_STATUS_OPEN,
+  MAX_DESCRIPTION_LENGTH,
+  MAX_FILENAME_LENGTH,
+  MAX_MIME_LENGTH,
+  MAX_TITLE_LENGTH,
+  NOTICE_PACK_TYPES,
+  SHA256_HEX_LENGTH,
+} from "@pims/types/constants.ts";
+import { PimsValidationError } from "@pims/types/errors.ts";
+import {
   EvidenceAttachmentSchema,
   ForensicScanResultSchema,
   RiskSignalPayloadSchema as RiskSignalPayloadEvidenceSchema,
@@ -182,7 +192,7 @@ export const AgentEventSchema = z.discriminatedUnion("type", [
     at_utc: z.string().datetime(),
     incident_code: z.string().min(1),
     kind: ReviewApprovalKindSchema,
-    pack_type: z.enum(["authority", "subject"]).nullable(),
+    pack_type: z.enum(NOTICE_PACK_TYPES).nullable(),
     pack_id: z.string().nullable(),
     approval_id: z.string().nullable(),
   }),
@@ -255,12 +265,12 @@ export const CLOSE_CHECKLIST_ITEMS = [
 export const CloseChecklistItemSchema = z.enum(CLOSE_CHECKLIST_ITEMS);
 export type CloseChecklistItem = z.infer<typeof CloseChecklistItemSchema>;
 
-export const NOTICE_PACK_TYPES = [
+export const ALL_NOTICE_PACK_TYPES = [
   "authority",
   "subject",
   "resolution",
 ] as const;
-export const NoticePackTypeSchema = z.enum(NOTICE_PACK_TYPES);
+export const NoticePackTypeSchema = z.enum(ALL_NOTICE_PACK_TYPES);
 export type NoticePackType = z.infer<typeof NoticePackTypeSchema>;
 
 export const PROSECUTOR_SEVERITIES = ["low", "medium", "high"] as const;
@@ -278,7 +288,7 @@ export const RoleDefinitionSchema = z
   .object({
     role: AgentRoleSchema,
     prompt_version: z.string().min(1),
-    prompt_sha256: z.string().length(64),
+    prompt_sha256: z.string().length(SHA256_HEX_LENGTH),
     system_prompt: z.string().min(1),
     autonomy: z.string().min(1),
     allowed_tools: z.array(ToolNameSchema),
@@ -332,9 +342,9 @@ export type PimsGetIncidentArgs = z.infer<typeof PimsGetIncidentArgsSchema>;
 
 export const PimsCreateIncidentArgsSchema =
   PimsIncidentCreateSchema.strict().extend({
-    title: z.string().min(1).max(150),
-    description: z.string().max(1000).nullable().optional(),
-    status: z.literal("O"),
+    title: z.string().min(1).max(MAX_TITLE_LENGTH),
+    description: z.string().max(MAX_DESCRIPTION_LENGTH).nullable().optional(),
+    status: z.literal(INCIDENT_STATUS_OPEN),
     affected_data_types: z.array(z.enum(ALL_AFFECTED_DATA_TYPES)),
     security_measures_adopted: z.array(z.enum(ALL_SECURITY_MEASURES)),
     affected_cid: z.array(z.enum(AFFECTED_CID)),
@@ -385,9 +395,9 @@ export type PimsAddActionArgs = z.infer<typeof PimsAddActionArgsSchema>;
 export const PimsUploadAttachmentArgsSchema = z
   .object({
     incident_id: z.number().int().positive(),
-    bytes_ref: z.string().length(64),
-    file_name: z.string().min(1).max(255),
-    mime: z.string().min(1).max(128),
+    bytes_ref: z.string().length(SHA256_HEX_LENGTH),
+    file_name: z.string().min(1).max(MAX_FILENAME_LENGTH),
+    mime: z.string().min(1).max(MAX_MIME_LENGTH),
   })
   .strict();
 export type PimsUploadAttachmentArgs = z.infer<
@@ -480,7 +490,7 @@ export const PimsCreateAuditActionArgsSchema = z
     action_plan: z.string().min(1),
     responsible: z.string().min(1).optional(),
     due_date: z.string().date().optional(),
-    status: z.enum(ACTION_PLAN_STATUSES).default("O"),
+    status: z.enum(ACTION_PLAN_STATUSES).default(INCIDENT_STATUS_OPEN),
     source_requirement_code: z.string().min(1),
   })
   .strict();
@@ -571,7 +581,7 @@ export const PimsUploadAttachmentResultSchema = z
     file: z.string().min(1),
     file_name: z.string().min(1),
     uploaded_at: z.string().min(1),
-    sha256: z.string().length(64),
+    sha256: z.string().length(SHA256_HEX_LENGTH),
     forensic_scan: ForensicScanResultSchema.nullable(),
   })
   .strict();
@@ -704,9 +714,12 @@ export const TotEvidenceSchema = z
   .strict();
 export type TotEvidence = z.infer<typeof TotEvidenceSchema>;
 
-function normalizeTotMethod(value: unknown): unknown {
+function normalizeTotMethod(value: unknown): string {
   if (typeof value !== "string") {
-    return value;
+    throw new PimsValidationError(
+      `Unknown ToT method: ${String(value)}`,
+      "VALIDATION:UNKNOWN_TOT_METHOD",
+    );
   }
   const normalized = value
     .toLowerCase()
@@ -721,34 +734,56 @@ function normalizeTotMethod(value: unknown): unknown {
   if (normalized === "fishbone" || normalized === "ishikawa") {
     return "fishbone";
   }
-  return value;
+  throw new PimsValidationError(
+    `Unknown ToT method: ${String(value)}`,
+    "VALIDATION:UNKNOWN_TOT_METHOD",
+  );
 }
 
-function normalizeRemediation(value: unknown): unknown {
+function normalizeRemediation(value: unknown): string {
   if (typeof value === "string") {
     return value;
   }
   if (Array.isArray(value)) {
-    return value.filter((entry) => typeof entry === "string").join(" ");
+    for (const entry of value) {
+      if (typeof entry !== "string") {
+        throw new PimsValidationError(
+          "Remediation array elements must be strings",
+          "VALIDATION:INVALID_REMEDIATION",
+        );
+      }
+    }
+    return value.join(" ");
   }
   if (typeof value === "object" && value !== null) {
     const parts: string[] = [];
     for (const entry of Object.values(value)) {
       if (typeof entry === "string") {
         parts.push(entry);
-        continue;
-      }
-      if (Array.isArray(entry)) {
+      } else if (Array.isArray(entry)) {
         for (const item of entry) {
           if (typeof item === "string") {
             parts.push(item);
+          } else {
+            throw new PimsValidationError(
+              "Remediation object nested array elements must be strings",
+              "VALIDATION:INVALID_REMEDIATION",
+            );
           }
         }
+      } else {
+        throw new PimsValidationError(
+          "Remediation object values must be strings or string arrays",
+          "VALIDATION:INVALID_REMEDIATION",
+        );
       }
     }
     return parts.join(" ");
   }
-  return value;
+  throw new PimsValidationError(
+    `Unsupported remediation value type: ${typeof value}`,
+    "VALIDATION:INVALID_REMEDIATION",
+  );
 }
 
 export const RootCauseSchema = z.object({
@@ -774,7 +809,7 @@ export const ReviewApprovalSchema = z
     approval_id: z.string().uuid(),
     incident_code: z.string().min(1),
     pack_type: NoticePackTypeSchema,
-    content_sha256: z.string().length(64),
+    content_sha256: z.string().length(SHA256_HEX_LENGTH),
     approved_at_utc: z.string().datetime(),
     consumed_at_utc: z.string().datetime().nullable(),
     consumed_by: z.string().nullable(),
@@ -821,7 +856,7 @@ export const ReviewContextSchema = z
   .object({
     incident_code: z.string().min(1),
     pack_type: NoticePackTypeSchema,
-    content_sha256: z.string().length(64),
+    content_sha256: z.string().length(SHA256_HEX_LENGTH),
     body_text: z.string(),
     citations: z.array(z.string().min(1)),
     numeric_approvals: z.array(NumericApprovalSchema),
@@ -916,8 +951,8 @@ export type IntakeDpo = z.infer<typeof IntakeDpoSchema>;
 
 export const IntakeAttachmentSchema = z
   .object({
-    file_name: z.string().min(1).max(255),
-    mime: z.string().min(1).max(128),
+    file_name: z.string().min(1).max(MAX_FILENAME_LENGTH),
+    mime: z.string().min(1).max(MAX_MIME_LENGTH),
     bytes_base64: z.string().min(1),
   })
   .strict();
@@ -926,8 +961,8 @@ export type IntakeAttachment = z.infer<typeof IntakeAttachmentSchema>;
 export const IntakePayloadSchema = z
   .object({
     channel: IntakeChannelSchema,
-    title: z.string().min(1).max(150),
-    description: z.string().max(1000).optional(),
+    title: z.string().min(1).max(MAX_TITLE_LENGTH),
+    description: z.string().max(MAX_DESCRIPTION_LENGTH).optional(),
     involves_personal_data: z.boolean().nullable(),
     incident_date: z.string().date(),
     incident_time: z.string().time().optional(),

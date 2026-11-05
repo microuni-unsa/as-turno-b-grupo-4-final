@@ -1,3 +1,4 @@
+import { SHA256_HEX_LENGTH } from "@pims/types/constants.ts";
 import {
   ACTION_TYPES,
   type AffectedDataType,
@@ -161,7 +162,7 @@ export const PlainLanguageValidationOptionsSchema = z
     maxWords: z.number().int().positive().optional(),
     locale: z.enum(["es", "en"]).optional(),
     plainLanguageWaiver: PlainLanguageWaiverSchema.optional(),
-    numericApprovals: z.array(NumericApprovalSchema).default([]),
+    numericApprovals: z.array(NumericApprovalSchema).optional(),
   })
   .strict();
 export type PlainLanguageValidationOptions = z.input<
@@ -171,7 +172,7 @@ export type PlainLanguageValidationOptions = z.input<
 export const EncryptionProofAttestationSchema = z
   .object({
     incident_code: z.string().min(1),
-    source_file_sha256: z.string().length(64),
+    source_file_sha256: z.string().length(SHA256_HEX_LENGTH),
     scope: z.enum(["encrypt_rest", "encrypt_transit"]),
     algorithm: z.string().min(1),
     key_management_ref: z.string().min(1),

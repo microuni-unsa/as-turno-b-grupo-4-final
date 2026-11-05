@@ -1,6 +1,7 @@
 import {
   DEFAULT_CHUNK_MAX_TOKENS,
   DEFAULT_CHUNK_OVERLAP,
+  SHA256_HEX_LENGTH,
 } from "@pims/types/constants.ts";
 import { RankedPassageSchema } from "@pims/types/models.ts";
 import { z } from "zod";
@@ -14,7 +15,7 @@ export const CorpusChunkSchema = z.object({
   normative: z.boolean(),
   header: z.string(),
   token_count: z.number().int().nonnegative(),
-  sha256: z.string().length(64),
+  sha256: z.string().length(SHA256_HEX_LENGTH),
 });
 export type CorpusChunk = z.infer<typeof CorpusChunkSchema>;
 
@@ -27,12 +28,16 @@ export const DocumentMetadataSchema = z.object({
 });
 export type DocumentMetadata = z.infer<typeof DocumentMetadataSchema>;
 
-export const ChunkingOptionsSchema = z.object({
-  maxTokens: z.number().int().positive().default(DEFAULT_CHUNK_MAX_TOKENS),
-  chunkOverlap: z.number().int().nonnegative().default(DEFAULT_CHUNK_OVERLAP),
-  defaultNormative: z.boolean().default(true),
-});
+export const ChunkingOptionsSchema = z
+  .object({
+    maxTokens: z.number().int().positive().default(DEFAULT_CHUNK_MAX_TOKENS),
+    chunkOverlap: z.number().int().nonnegative().default(DEFAULT_CHUNK_OVERLAP),
+    defaultNormative: z.boolean().default(true),
+  })
+  .strict();
 export type ChunkingOptions = z.infer<typeof ChunkingOptionsSchema>;
+export const RagChunkOptionsSchema = ChunkingOptionsSchema;
+export type RagChunkOptions = ChunkingOptions;
 
 export const LocalCorpusSourceSchema = z.object({
   type: z.literal("local"),
@@ -58,7 +63,7 @@ export const CorpusSourceSchema = z.discriminatedUnion("type", [
 export type CorpusSource = z.infer<typeof CorpusSourceSchema>;
 
 export const RetrievalPassageSchema = RankedPassageSchema.extend({
-  chunk_sha256: z.string().length(64),
+  chunk_sha256: z.string().length(SHA256_HEX_LENGTH),
   dense_score: z.number().nullable(),
   dense_rank: z.number().int().positive().nullable(),
   bm25_score: z.number().nullable(),

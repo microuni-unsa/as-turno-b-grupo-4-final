@@ -148,10 +148,11 @@ export class PlainLanguageValidator {
       }
       const occurrence = occurrences.get(value) ?? 0;
       occurrences.set(value, occurrence + 1);
-      const approved = opts.numericApprovals.some(
-        (approval) =>
-          approval.value === value && approval.occurrence === occurrence,
-      );
+      const approved =
+        opts.numericApprovals?.some(
+          (approval) =>
+            approval.value === value && approval.occurrence === occurrence,
+        ) === true;
       if (!approved) {
         throw new SubjectCountForbiddenError(undefined, {
           value,

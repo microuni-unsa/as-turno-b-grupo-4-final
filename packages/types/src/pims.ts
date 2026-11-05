@@ -129,7 +129,9 @@ export const AuditModelSchema = z.object({
     .boolean()
     .nullable()
     .optional()
-    .transform((value) => value ?? false),
+    .transform((value) =>
+      value !== null && value !== undefined ? value : false,
+    ),
   deleted_at: z.string().nullable().optional(),
   deleted_by: z.number().nullable().optional(),
 });
@@ -281,10 +283,20 @@ export const PimsIncidentHistorySchema = z.object({
       if (Array.isArray(value)) {
         return value;
       }
-      return value
-        .split(",")
-        .map((entry) => entry.trim())
-        .filter((entry) => entry.length > 0);
+      if (typeof value === "string") {
+        const trimmed = value.trim();
+        if (trimmed.length === 0) {
+          return [];
+        }
+        const entries = trimmed.split(",").map((entry) => entry.trim());
+        for (const entry of entries) {
+          if (entry.length === 0) {
+            throw new Error("recipients_snapshot cannot contain empty entries");
+          }
+        }
+        return entries;
+      }
+      throw new Error(`Unexpected recipients_snapshot type: ${typeof value}`);
     }),
 });
 
@@ -299,7 +311,7 @@ export const PimsIncidentRecipientSchema = z.object({
 export const PimsIncidentRecipientCreateSchema = z.object({
   email: z.string().email(),
   label: z.string(),
-  is_active: z.boolean().optional().default(true),
+  is_active: z.boolean(),
 });
 
 export const PimsIncidentSchema = AuditModelSchema.extend({

@@ -2,6 +2,7 @@ import path from "node:path";
 import {
   ATTACHMENT_EXTENSIONS,
   MAX_ATTACHMENT_SIZE_MB,
+  MAX_FILENAME_LENGTH,
 } from "@pims/types/constants.ts";
 import {
   AttachmentRejectedError,
@@ -13,22 +14,30 @@ import { z } from "zod";
 export type AllowedAttachmentExtension = (typeof ATTACHMENT_EXTENSIONS)[number];
 
 export const AttachmentMetaSchema = z.object({
-  fileName: z.string().min(1).max(255),
+  fileName: z.string().min(1).max(MAX_FILENAME_LENGTH),
   bytes: z.number().int().nonnegative(),
 });
 
-export function assertSafeFileName(fileName: string): string {
-  const hasControl = Array.from(fileName).some((char) => {
-    const code = char.codePointAt(0) ?? 0;
-    return code < 0x20 || code === 0x7f;
-  });
+export function isSafeFileName(fileName: string): boolean {
+  for (let i = 0; i < fileName.length; i++) {
+    const code = fileName.charCodeAt(i);
+    if (code < 32 || code === 127) {
+      return false;
+    }
+  }
   if (
     fileName === "" ||
     fileName === "." ||
     fileName === ".." ||
-    fileName !== path.basename(fileName) ||
-    hasControl
+    fileName !== path.basename(fileName)
   ) {
+    return false;
+  }
+  return true;
+}
+
+export function assertSafeFileName(fileName: string): string {
+  if (!isSafeFileName(fileName)) {
     throw new PathEscapeError(fileName);
   }
   return fileName;

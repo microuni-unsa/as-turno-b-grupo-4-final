@@ -36,7 +36,14 @@ export class PimsValidationError extends PimsBaseError {
     fields?: PimsErrorDetails,
     details?: PimsErrorDetails,
   ) {
-    const errorDetails = details ?? fields;
+    let errorDetails: PimsErrorDetails;
+    if (details !== undefined) {
+      errorDetails = details;
+    } else if (fields !== undefined) {
+      errorDetails = fields;
+    } else {
+      errorDetails = undefined;
+    }
     const msg = message ?? `Validation failed for field: ${field}`;
     super(msg, `PIMS_VALIDATION:${field}`, errorDetails);
     this.field = field;
@@ -185,11 +192,13 @@ export class PimsErrorShapeUnknownError extends PimsBaseError {
     rawBody?: string,
     details?: PimsErrorDetails,
   ) {
-    super(
-      message,
-      "PIMS_ERROR_SHAPE_UNKNOWN",
-      details ?? { rawBody: rawBody ?? "" },
-    );
+    let errorDetails: PimsErrorDetails;
+    if (details !== undefined) {
+      errorDetails = details;
+    } else {
+      errorDetails = { rawBody: rawBody !== undefined ? rawBody : "" };
+    }
+    super(message, "PIMS_ERROR_SHAPE_UNKNOWN", errorDetails);
     this.rawBody = rawBody;
   }
 }
@@ -479,7 +488,7 @@ export class PlainLanguageViolationError extends PimsBaseError {
   constructor(
     sentenceIndex: number,
     wordCount: number,
-    maxWords = PLAIN_LANGUAGE_MAX_WORDS,
+    maxWords: number = PLAIN_LANGUAGE_MAX_WORDS,
     details?: PimsErrorDetails,
   ) {
     super(

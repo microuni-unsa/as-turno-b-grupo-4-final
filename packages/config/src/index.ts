@@ -407,7 +407,7 @@ export function loadConfig(
       : autoNotifyRaw === "true";
 
   const watcherPollRaw = env.WATCHER_POLL_INTERVAL_MS;
-  let watcherPollIntervalMs = DEFAULT_WATCHER_POLL_INTERVAL_MS;
+  let watcherPollIntervalMs: number = DEFAULT_WATCHER_POLL_INTERVAL_MS;
   if (watcherPollRaw !== undefined) {
     const parsed = Number(watcherPollRaw);
     if (!Number.isInteger(parsed) || parsed <= 0) {
@@ -728,3 +728,4 @@ export function loadConfig(
 export * from "@pims/config/env-matrix.ts";
 export * from "@pims/config/env-schema.ts";
 export * from "@pims/config/stack-def.ts";
+export { CONSTANTS } from "@pims/types/constants.ts";

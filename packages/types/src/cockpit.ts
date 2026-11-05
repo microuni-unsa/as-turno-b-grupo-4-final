@@ -3,6 +3,14 @@ import {
   PimsNotifyResultSchema,
   ReviewApprovalKindSchema,
 } from "@pims/types/agent.ts";
+import {
+  INCIDENT_STATUS_OPEN,
+  MAX_DESCRIPTION_LENGTH,
+  MAX_TITLE_LENGTH,
+  NOTICE_PACK_TYPES,
+  SHA256_HEX_LENGTH,
+  SHA256_HEX_REGEX,
+} from "@pims/types/constants.ts";
 import { JsonObjectSchema } from "@pims/types/models.ts";
 import { ExemptionEvaluationResultSchema } from "@pims/types/notices.ts";
 import {
@@ -73,15 +81,15 @@ export const GuidedActionSchema = z.object({
 export type GuidedAction = z.infer<typeof GuidedActionSchema>;
 
 export const GuidedReportingSchema = z.object({
-  title: z.string().min(1).max(150),
-  description: z.string().max(1000).nullable().optional(),
+  title: z.string().min(1).max(MAX_TITLE_LENGTH),
+  description: z.string().max(MAX_DESCRIPTION_LENGTH).nullable().optional(),
   incident_date: z.string().min(1),
   incident_time: z.string().nullable().optional(),
   detection_date: z.string().nullable().optional(),
   detection_time: z.string().nullable().optional(),
   incident_type: z.enum(INCIDENT_TYPES),
   involves_personal_data: z.boolean(),
-  status: z.enum(INCIDENT_STATUSES).default("O"),
+  status: z.enum(INCIDENT_STATUSES).default(INCIDENT_STATUS_OPEN),
   severity: z.enum(INCIDENT_SEVERITIES).nullable().optional(),
   impact: z.enum(INCIDENT_IMPACTS).nullable().optional(),
   affected_data_types: z.array(z.enum(ALL_AFFECTED_DATA_TYPES)).default([]),
@@ -168,7 +176,7 @@ export const ChatCitationSchema = z.object({
   doc_id: z.string().min(1),
   chunk_id: z.string().min(1),
   lines: z.string().min(1),
-  chunk_sha256: z.string().length(64),
+  chunk_sha256: z.string().length(SHA256_HEX_LENGTH),
   dense_score: z.number().nullable(),
   bm25_rank: z.number().int().positive().nullable(),
   rrf_score: z.number(),
@@ -256,14 +264,14 @@ export const ApproveResponseSchema = z.object({
 export type ApproveResponse = z.infer<typeof ApproveResponseSchema>;
 
 export const RevisionRequestSchema = z.object({
-  pack_type: z.enum(["authority", "subject"]),
+  pack_type: z.enum(NOTICE_PACK_TYPES),
   reason: z.string().min(1),
 });
 export type RevisionRequest = z.infer<typeof RevisionRequestSchema>;
 
 export const ExemptionAttestationRequestSchema = z.object({
   letter: z.literal("a"),
-  source_file_sha256: z.string().regex(/^[0-9a-f]{64}$/),
+  source_file_sha256: z.string().regex(SHA256_HEX_REGEX),
   scope: z.enum(["encrypt_rest", "encrypt_transit"]),
   algorithm: z.string().min(1),
   key_management_ref: z.string().min(1),
