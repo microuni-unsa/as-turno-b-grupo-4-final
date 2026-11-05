@@ -3,8 +3,8 @@
 | Field | Value |
 |---|---|
 | Document | Production specification, Agente de Incidentes (personal data breach / incident response) |
-| Version | 1.0.0-final |
-| Status | Final, buildable. No scaffolding, no deferred design. |
+| Version | 1.1.0-final |
+| Status | Final, buildable. v1.1.0 adds Cockpit guided incident creation (§8.4) and Presidio pre-LLM redaction (§11.3). No scaffolding, no deferred design. |
 | Language | English. Spanish appears only inside verbatim literals (PIMS field labels, enum names, API messages, quoted sources). |
 | Operator target | GESTITEL PIMS, tenant `unsa`, base `https://unsa.27k.pe` |
 | Reference runtime | Bun + TypeScript (follows `flake.nix`, the sole toolchain pin). Tool, provider, and artifact contracts are language-agnostic. |
@@ -22,7 +22,7 @@ This agent owns the full closed loop for security and privacy incidents: intake,
 
 In scope (MUST implement all):
 
-1. Incident lifecycle on `core_incident` and its children (`core_incidentaction`, `core_incidentattachment`, `core_incidenthistory`, `core_incidentrecipient`), statuses `O/P/C`, via the §3 REST contract only.
+1. Incident lifecycle on `core_incident` and its children (`core_incidentaction`, `core_incidentattachment`, `core_incidenthistory`, `core_incidentrecipient`), statuses `O/P/C`, via the §3 REST contract only. Intake channels are watcher polling, Cockpit guided-create (§8.4), conversational assistant input, and SIEM/processor signals (§9.1).
 2. GDPR Article 33 authority notification packs and Article 34 data-subject communications, including the Article 34(3) exemption evaluation, per §2.
 3. Root-cause analysis with single-prompt method selection (5-whys / fishbone / fault-tree), evidence collection with SHA-256 hashing, and action sequencing `C*→A+→R`.
 4. Corrective-action linkage: auto-create or link `core_auditfinding` (`classification=N`) plus `core_auditactionplan` rows for qualifying incidents.
@@ -397,7 +397,7 @@ Required by: B.3.11 (define and communicate incident management processes, roles
 ```mermaid
 flowchart LR
     subgraph CH["Channels (untrusted)"]
-        FORM[Web intake form]
+        GUIDED[Cockpit guided-create<br/>§8.4]
         APIIN[External signals<br/>SIEM / processor notice]
         CONSOLE[Operator console]
     end
@@ -414,7 +414,8 @@ flowchart LR
         HIST[(core_incidenthistory<br/>+ core_securitylog)]
     end
     MP[ModelProvider<br/>configurable cloud LLM<br/>§4.3]
-    FORM --> ORCH
+    REDACT[pii-redactor<br/>Presidio sidecar §11.3]
+    GUIDED --> ORCH
     APIIN --> ORCH
     CONSOLE <--> ORCH
     ORCH <--> ADAPT
@@ -423,6 +424,7 @@ flowchart LR
     ORCH <--> EV
     ORCH --> IE
     ORCH <--> MP
+    ORCH <--> REDACT
     ADAPT <--> REST
     REST --> HIST
     EV --> ADAPT
@@ -438,9 +440,10 @@ flowchart LR
 | `notice-composer` | Builds Art 33/34 packs from validated incident fields + RAG citations; runs the exemption decision tables; produces drafts ONLY (never sends). | Trusted builder; output is inert until `compliance_reviewer` approves. |
 | `evidence-store` | PostgreSQL with Drizzle ORM + blob staging: attachment bytes pre-upload, SHA-256 hash integrity verification, PII tags, bundle manifests, draft packs, leases, dedupe index, queued signals. | Trusted staging; MUST encrypt at rest (AES-256-GCM, key via env) and purge per retention (§13). |
 | `indicator-emitter` | Emits metric events per §10.6 on every state change; feeds Agente de Indicadores and 9.3.2(d) inputs. | Fire-and-forget with local spool; emission failure → `INDICATOR_SPOOL_FULL` (spool 10k events, then oldest dropped with counter — the single allowed lossy path, counters preserved). |
-| `operator-console` | Read-mostly UI: queue, incident timeline, drafts pending veto, audit trail view, kill-switch, grant/revoke recipient activation, capture re-run buttons. | Authenticated operators only (§11.1). Console actions are synchronous calls into `orchestrator`; console MUST NOT call PIMS directly. |
+| `operator-console` | Operations UI: queue, incident timeline, drafts pending veto, audit trail view, kill-switch, grant/revoke recipient activation, capture re-run buttons, plus the guided incident-creation section (§8.4: agent-drafted reporting form, operator check/fix, per-field explain, dictation input). | Authenticated operators only (§11.1). Console actions are synchronous calls into `orchestrator`; console MUST NOT call PIMS directly. |
+| `pii-redactor` | Presidio analyzer sidecar (pinned image, `language: "es"`, `es_core_news_md`, custom `PE_DNI`/`PE_RUC` recognizers): pre-LLM PII span detection for every model-bound string. | Localhost-only; failure → `PII_REDACTION_UNAVAILABLE` fail-closed (§11.3); never sees PIMS credentials or evidence bytes. |
 
-Strict data flow: `channel → orchestrator → tools → pims-adapter/evidence-store → history/securitylog`. The LLM (via `ModelProvider`) NEVER touches PIMS or the evidence bytes; it receives redacted context (§11.3) and returns structured tool calls / drafts that the orchestrator validates before any effect.
+Strict data flow: `channel → orchestrator → tools → pims-adapter/evidence-store → history/securitylog`. The LLM (via `ModelProvider`) NEVER touches PIMS or the evidence bytes; it receives redacted context (§11.3) and returns structured tool calls / drafts that the orchestrator validates before any effect. Draft/explain helpers (§8.4) follow the §8.2 chat-tools pattern (direct async helpers plus single redacted `chat_json` calls, not §5.3 manifest tools); the §5 role/skill/tool counts are unchanged.
 
 Runtime: Bun + TypeScript reference (only toolchain pin in `flake.nix`). All contracts in §§5/7/8/10/13 are language-agnostic JSON/HTTP; a Python runtime swaps only this chapter and §12 packaging.
 
@@ -489,7 +492,7 @@ Zero-fallback rule: no silent provider/model downgrade, no temperature change, n
 
 The Bun + TypeScript implementation follows this exact layout (zero unmapped files):
 
-- `src/index.ts` — HTTP/WS server (`Bun.serve` on `DEPLOY_PORT`) managing `core_incident` intake and console workflows: `GET /healthz`, `GET /readyz`, `GET /metrics`, `POST /webhooks/intake` (HMAC `WEBHOOK_INGEST_SECRET_ENV` or bearer token; body: `{channel:"form"|"siem"|"processor_notice", payload:object, idempotency_key:string}` → `202 {run_id, incident_code|null}`), and `/console/*` (`POST /console/halt`, `POST /console/resume`, `POST /console/veto`, `POST /console/recipients` — authenticated via PIMS operator JWT per §11.1).
+- `src/index.ts` — HTTP/WS server (`Bun.serve` on `DEPLOY_PORT`) managing `core_incident` intake and console workflows: `GET /healthz`, `GET /readyz`, `GET /metrics`, `POST /webhooks/intake` (HMAC `WEBHOOK_INGEST_SECRET_ENV` or bearer token; body: `{channel:"form"|"siem"|"processor_notice", payload:object, idempotency_key:string}` → `202 {run_id, incident_code|null}`), and `/console/*` (`POST /console/halt`, `POST /console/resume`, `POST /console/veto`, `POST /console/recipients` — authenticated via PIMS operator JWT per §11.1; guided-create `POST /api/incidents`, `POST /api/incidents/draft`, `POST /api/incidents/explain` per §8.4).
 - `src/config.ts` — Strict §13 config loader + constant verifier (`LOG_PII===false` enforcement).
 - `src/orchestrator/loop.ts` — Deterministic §6 state machine, step dispatcher, §6.5 post-step invariant verifier, lease manager.
 - `src/orchestrator/scheduler.ts` — Persistent timer wheel (`T72_AUTHORITY`, `T_PROCESSOR`, `T_SUBJECT`, `T_REVIEW_SLA`, `T_PERU_ADVISORY`, `T_PHASE_FOLLOWUP`, `T_RETRY`).
@@ -500,6 +503,7 @@ The Bun + TypeScript implementation follows this exact layout (zero unmapped fil
 - `src/review/reviewer.ts` — Single-pass adversarial challenge review and deterministic verification (checklist completeness, citation verification, plain-language check, PII scan).
 - `src/evidence/evidence-store.ts` — AES-256-GCM encrypted PostgreSQL + Drizzle ORM store (`timers`, `leases`, `dedupe_index`, `draft_packs`, `risk_queue`, `indicator_spool`, `tool_ledger`) + content-addressed blob store.
 - `src/indicators/indicator-emitter.ts` — §10.6 event calculator (MTTD/MTTR/SLA) + HMAC webhook sender.
+- `src/llm/presidio-client.ts` — §11.3 Presidio sidecar client: `POST /analyze {text, language:"es"}` plus deterministic entity→token replacement into the §11.3 token set; sidecar error/timeout/schema mismatch → `PII_REDACTION_UNAVAILABLE` (fail-closed: never unredacted send, never regex detection).
 
 ## 5. Agent roles, skills, tools
 
@@ -826,7 +830,22 @@ The server provides a real-time Server-Sent Events stream emitting authenticated
    - Speech-to-text input is handled natively in the browser via the standard Web Speech API (`SpeechRecognition` / `webkitSpeechRecognition`), enabling voice dictation and queries in Spanish/English without backend STT models or cloud audio dependencies.
 
 ### 8.3 Dropped Voice Pipeline Notice
-The legacy backend voice subsystem (`voice-intake` skill, `stt_transcribe`, and `tts_synthesize` tools) is permanently deprecated and removed. All voice interactions operate strictly client-side via the browser Web Speech API.
+The legacy backend voice subsystem (`voice-intake` skill, `stt_transcribe`, and `tts_synthesize` tools) is permanently deprecated and removed. All voice interactions operate strictly client-side via the browser Web Speech API. Guided-create dictation (§8.4) uses this same browser path; transcripts enter the §11.3 redaction pipeline identically to typed narrative.
+
+### 8.4 Guided incident creation (AI-assisted form)
+
+Required by: B.3.11 (procedures for identifying and recording breaches that operators can actually execute), B.3.12 (complete records at capture time).
+
+The Cockpit serves a guided incident-creation section that replaces manual PIMS SPA form entry for operators. The agent drafts reporting sections from targeted operator fills plus free narrative (typed or dictated); the operator checks and fixes every field before submit. Submit posts through the existing §9.1 intake path (`channel: "cockpit_guided"` → dedupe → `pims_create_incident` `status=O`); no intake contract is bypassed and no §5 role, skill, or tool is added (§8.2 chat-tools pattern: direct async helpers, counts unchanged).
+
+1. Reporting sections and the creation boundary: the form covers the reporting sections ONLY — identity (`title`, `description`), timeline (`incident_date`, `incident_time`, `detection_date`, `detection_time`), classification inputs (`incident_type` provisional, `involves_personal_data`), scope (`affected_data_types`, `num_affected_subjects`, `affected_treatment`, `compromised_system`, `affected_url`, `security_measures_adopted`, `affected_cid`), reporter block (`rep_*`), entity block (`entity_*`), ownership (`reported_by`, `dpo_contact_*`). Response fields are NEVER writable here: `severity`/`impact` stay null until triage (§9.2), `measure_*`/`resolved_date` until §9.5/§9.6, and children (actions, attachments, history) attach only post-create via their existing tools.
+2. Draft (`POST /api/incidents/draft`, requires `change_incident`): args `{narrative? (≤ `FORM_NARRATIVE_MAX_CHARS`, typed or §8.2.5-dictated), partial? (operator-set reporting fields), sections? (subset, default all)}`. Behavior: concatenate narrative plus stringified partial → Presidio redact (§11.3) → single `FAST_MODEL` (`TEMP_CLASSIFIER`) extraction to the reporting schema → validate against the §3.2 create-subset → return `{draft, provenance (per field: narrative|partial|default), redaction_report, warnings[]}`. Deterministic defaults only: `[]` arrays, `detection_date=today`, `reported_by=<operator username>`; the §9.1 single-allowed PII default is NOT applied here (the form requires an explicit yes/no). Drafts are inert JSON; nothing is persisted.
+3. Targeted fill: "fill this field with that value" sets literal form values client-side; natural-phrasing scoped requests ("describe the scope from this text") are section-scoped draft calls. Both converge on the same reviewed form state before submit.
+4. Explain (`POST /api/incidents/explain`, requires `view_incident`): args `{field (reporting field name), context? (current redacted values)}`. Enum/code fields return their §3.5 tables deterministically with no LLM call. Semantic/legal fields return a `FAST_MODEL` explanation grounded in `rag_query(normative_only=true)` with §7.5 citations; legal content without evidence → `RAG_NO_EVIDENCE` surfaced verbatim (never a bare answer). Repeat calls are identical for identical inputs.
+5. Dictation: narrative capture uses the §8.2.5 browser Web Speech API only; no backend STT exists. Transcripts are narrative text: redacted via Presidio before any LLM call, subject to the same cap and gates as typed input.
+6. Redaction and gates (binding): raw field values stay client-side until submit; every draft/explain LLM call sees Presidio-redacted text only; model replies are re-scanned by the `AgentModelClient` gate before render (`PROMPT_PII_BLOCKED` on residual); redactor failure → `PII_REDACTION_UNAVAILABLE` (fail-closed). Stored PIMS values are verbatim originals — redaction applies to LLM-bound text only, never to the record.
+7. Submit (`POST /api/incidents`, requires `change_incident`): body is the reviewed reporting set plus client `idempotency_key` (`<IDEMPOTENCY_KEY_PREFIX>:create:<uuid>`); the route fixes `channel: "cockpit_guided"` server-side and calls `orchestrator.intake()`; the §9.1 steps, guards, dedupe keys, and timer arming apply unchanged, and `/webhooks/intake` keeps its external-only vocabulary. Dedupe `update`/`restore` is surfaced to the operator with the kept `incident_code` and marker. Submit during `OPERATOR_HALT` → `OPERATOR_HALT` (halt freezes capture per §6.1); draft/explain stay available (read-only, no mutation). Attachments and recipients are post-create concerns via their existing endpoints.
+8. Observability: draft/explain are synchronous request/response; no new SSE event types. Creation appears on the existing stream as `tool:mutation` (E06) plus `lifecycle:status_change` (`[*]→O`). Draft/explain LLM calls are logged per §12.4 (no prompt text, prompt sha pinned: `GUIDED_DRAFT_v1.0`, `GUIDED_EXPLAIN_v1.0`).
 
 ## 9. Closed-loop lifecycle
 
@@ -834,11 +853,11 @@ Required by: B.3.12 (event→breach review; notifications; records), 10.2(a)–(
 
 ### 9.1 Intake (roles: `intake` + `orchestrator`; skills: `pims-incident-crud`, `rag-grounded-qa`)
 
-Accepts live PIMS polling (watcher daemon §12.5), conversational AI assistant input (text or voice-dictated), or external signals (SIEM webhook, processor notice — `{source, occurred_at, summary, affected_system?, contact?}`). Standalone web intake forms are dropped. Steps:
+Accepts live PIMS polling (watcher daemon §12.5), Cockpit guided-create submissions (§8.4, `channel: "cockpit_guided"` — operator-reviewed reporting sections calling `orchestrator.intake()`), conversational AI assistant input (text or voice-dictated), or external signals (SIEM webhook, processor notice — `{source, occurred_at, summary, affected_system?, contact?}`). Legacy standalone web intake forms are dropped (the Cockpit guided section in §8.4 is the replacement). Steps:
 
-1. Validate payload non-empty; empty → `INTAKE_EMPTY` reject, no record, log caller identity.
+1. Validate payload non-empty; empty → `INTAKE_EMPTY` reject, no record, log caller identity. Guided-create payloads are operator-reviewed form state (§8.4 item 7), not raw slot-extract output; the §8.4 client-side required checks are UX, and these server steps are the binding validation (a malformed guided payload fails here identically to any channel — missing title → `INTAKE_EMPTY`, future date → step 2 rule).
 2. Slot-extract to the intake schema: `title` (REQUIRED, ≤150 chars — truncate ONLY at word boundary with `…[truncated]` + reviewer flag, else `INTAKE_TITLE_TOO_LONG` re-prompt once), `description` (≤1000 chars, same rule), `involves_personal_data` (tri-state input `true/false/null`), `incident_date` (REQUIRED, `YYYY-MM-DD`, not future → `INTAKE_FUTURE_DATE` re-prompt once then use today + flag), `incident_time?`, `detection_date?` (default today), `detection_time?`, reporter block (`rep_document_number, rep_document_expiry, rep_first_name, rep_last_name_p, rep_last_name_m, rep_position, rep_phone, rep_email`), entity block (`entity_type R/U, entity_ruc, entity_name, entity_phone, entity_extension, entity_department, entity_province, entity_district`), `affected_treatment?`, DPO block (`dpo_contact_name, dpo_contact_email, dpo_contact_phone`), `affected_data_types[]` (default `[]`), `num_affected_subjects?`, `compromised_system?`, `affected_url?`, `reported_by?` (default channel identity), `assigned_to?` (default null → triage assigns), `severity?/impact?` (intake MAY suggest, triage decides).
-3. `involves_personal_data` tri-state handling (the SINGLE allowed default in this spec, reason: over-notifying beats under-notifying — an undeclared breach risks Art 33 violation, while a declared non-breach costs only a correction): `true` → full breach path; `false` → security-incident path (skips Art 33/34 packs, still runs C/A/R + history + monitoring + close checklist minus notice items); `null` → `INTAKE_MISSING_PII_FLAG`: re-prompt exactly once ("¿El incidente involucra datos personales?"), then default `true` with tag `assumed_pii:true` in `evidence_refs` + reviewer attention flag + indicator event `pii_assumed`.
+3. `involves_personal_data` tri-state handling (the SINGLE allowed default in this spec, reason: over-notifying beats under-notifying — an undeclared breach risks Art 33 violation, while a declared non-breach costs only a correction): `true` → full breach path; `false` → security-incident path (skips Art 33/34 packs, still runs C/A/R + history + monitoring + close checklist minus notice items); `null` → `INTAKE_MISSING_PII_FLAG`: re-prompt exactly once ("¿El incidente involucra datos personales?"), then default `true` with tag `assumed_pii:true` in `evidence_refs` + reviewer attention flag + indicator event `pii_assumed`. The §8.4 form requires an explicit yes/no up front, so guided submissions SHOULD arrive `true`/`false`; `null` from this channel still follows this same step (re-prompt then default), never a second default.
 4. Dedupe per §6.6 (fuzzy title + exact `incident_date` + exact `compromised_system`/`affected_url`). Match on live row → update-or-restore path (§6.1 `UPD`): PATCH new facts, append marker `DEDUPE_MERGED:<source_id>` per the marker rule below; match on logically-deleted row → restore (`is_deleted=false`) + same marker. No match → `pims_create_incident` with `status=O` + `affected_data_types/security_measures_adopted/affected_cid` (send `[]` when empty — NOT NULL jsonb).
 5. Post-create: arm awareness timers (`T72_AUTHORITY` always when PII; `T_PROCESSOR` when processor-signal; `T_PERU_ADVISORY` always as advisory); `O→P` is NOT done here (triage owns it after classification); emit `incident_opened` indicator event; attach intake source payload.
 Marker rule (applies everywhere this spec says "append marker"): `core_incidenthistory` is server-appended and NOT authorable via any API (E10 is GET-only; POST was never observed) — so agent markers (`DEDUPE_MERGED`, `DUPE_OF`, `VETOED_BY`, `VETO_WINDOW_EXPIRED`, `REEVALUATED`, `PROCESSOR_NOTIFIED`, `SUBJECT_NOTIFIED`, `ACK`, `CLOSE_APPROVED`, `BUNDLE_SEALED`, `TYPE_AMBIGUOUS`, `assumed_pii`, `readback_partial`, `UNASSIGNED`) are appended to `core_incident.evidence_refs` as `;`-separated tokens via E08 (read-modify-write: GET current value, append, PATCH). `evidence_refs` overflow (>1000 chars) spills to an `evidence-index.txt` attachment (NOT `.md` — outside the §3.5 allowlist) with a pointer token left in-field. Markers are machine tokens, never prose; ambiguous free text in `evidence_refs` is forbidden.
@@ -1020,7 +1039,7 @@ Secrets (PIMS credential, provider API keys, webhook HMAC, evidence encryption k
 
 ### 11.3 PII minimization (binding on every component)
 
-- Prompts carry the redacted-context schema ONLY: `{incident_code, status, incident_type, severity, impact, dates, enum_codes, redacted_text ([REPORTANTE]/[CONTACTO]/[ID]/[SISTEMA]/[DESCRIPCION] per `redactForPrompt`), counts, citations}`. Originals (`rep_*`, DPO contacts, subject data, URLs, descriptions) are resolved ONLY inside `pims-adapter`/`evidence-store` AFTER the LLM step. Violation (PII pattern in prompt — the `AgentModelClient` PII gate) → `PROMPT_PII_BLOCKED`: block the call, page reviewer (potential adapter bug).
+- Prompts carry the redacted-context schema ONLY: `{incident_code, status, incident_type, severity, impact, dates, enum_codes, redacted_text ([REPORTANTE]/[CONTACTO]/[ID]/[SISTEMA]/[DESCRIPCION]), counts, citations}`. Detection is performed by the pinned Presidio analyzer sidecar (`src/llm/presidio-client.ts`, `POST /analyze {text, language:"es"}`, `es_core_news_md` plus Spanish-context recognizers and custom `PE_DNI`/`PE_RUC` recognizers per the §13 `PRESIDIO_*` rows); the client applies a deterministic entity→token replacement (`PERSON→[REPORTANTE]`; `EMAIL_ADDRESS,PHONE_NUMBER→[CONTACTO]`; `ES_NIF,ES_NIE,PE_DNI,PE_RUC,ES_PASSPORT→[ID]`; `URL,IP_ADDRESS,LOCATION→[SISTEMA]`; any PII-bearing free-text description span→`[DESCRIPCION]`), longest-span-first over exact analyzer offsets. App-level regex MUST NOT be a detection path. Originals (`rep_*`, DPO contacts, subject data, URLs, descriptions) are resolved ONLY inside `pims-adapter`/`evidence-store` AFTER the LLM step. Two fail-closed gates bind every model call: Presidio sidecar error/timeout/schema mismatch → `PII_REDACTION_UNAVAILABLE` (block the call, page reviewer; fallback to unredacted send is forbidden; fallback to regex-only redaction is forbidden); residual PII pattern in the prompt past redaction (the `AgentModelClient` PII gate, formal `libphonenumber-js`/`tldts`/`zod` validators only) → `PROMPT_PII_BLOCKED` (block the call, page reviewer as a redactor/adapter bug).
 - Logs: field names only (mirror `core_securitylog.detail`); `incident_code`/enum codes allowed; values forbidden. `LOG_PII=false` is a CONSTANT, not settable true (config parser rejects `true` → `CONFIG_REJECTED:LOG_PII`).
 - `__str__`/display: code-only (`INC-001`), never names (Anexo_05 §6.4).
 - Cloud-LLM decision (user override of `class1.txt:442-482` "pecera de vidrio" on-prem preference): accepted as CONFIGURABLE cloud because the course grades maximum AI surface and the provider rows are swappable; mitigated by redaction + zero raw PII in prompts + zero-retention API tier at providers (contract requirement on provider selection: zero-retention API tier REQUIRED, else `PROVIDER_REJECTED:retention`). If the instructor rejects cloud at grading, execute the §4-provider-swap contingency (Assumptions): replace provider rows with Ollama/Llama + local embeddings, re-run §7.6 eval — no lifecycle rewrite.
@@ -1063,7 +1082,7 @@ Structured JSON logs, one line per tool call: `{at_utc, incident_code, role, too
 Real-time streaming: the service exposes a real-time Server-Sent Events endpoint (`/api/stream`) for the Cockpit and AI Chat assistant, streaming state transitions, role switches, dynamic 72h countdown timer ticks, verbatim RAG citations (with dense vector, BM25, and RRF scores), tool mutations, and DPO approval requests.
 Metrics (Prometheus `/metrics`): loop latency histogram, 72h SLA compliance gauge, retry counts by error, RAG hit-rate + eval status, conformal uncertainty histogram, spool depth, lease contention, circuit-breaker states.
 Tracing: OpenTelemetry `gen_ai.*` semantic conventions, one trace per incident (`trace_id=incident_code:run_uuid`), child spans per role, tool, and review check.
-Alerting: pages on `DEADLINE_MISSED_*`, `DOUBLE_NOTIFY`, `HALT_RISK_72H`, `CIRCUIT_OPEN`, `RAG_EVAL_FAILED`, `SECRET_LEAKED`; tickets (non-urgent) on `VETO_STUCK`, `ESCALATE_STUCK_REVIEW`, `BUNDLE_PIMS_MISMATCH`. Deploy gate: §7.6 eval PASS + §14 gates green, else `DEPLOY_BLOCKED:<gate>`.
+Alerting: pages on `DEADLINE_MISSED_*`, `DOUBLE_NOTIFY`, `HALT_RISK_72H`, `CIRCUIT_OPEN`, `RAG_EVAL_FAILED`, `SECRET_LEAKED`, `PII_REDACTION_UNAVAILABLE`; tickets (non-urgent) on `VETO_STUCK`, `ESCALATE_STUCK_REVIEW`, `BUNDLE_PIMS_MISMATCH`. Deploy gate: §7.6 eval PASS + §14 gates green, else `DEPLOY_BLOCKED:<gate>`.
 
 ### 12.5 Production deployment and operations
 
@@ -1074,7 +1093,7 @@ The watcher daemon polls both `GET /api/incidents/?status=O` and `?status=P` eve
 Production Build & Docker Packaging:
 - Build target (`bun run build`): Compiles the daemon and Cockpit service into a standalone distribution bundle.
 - Multi-stage `Dockerfile`: Packages the compiled Bun distribution into an unprivileged container with read-only filesystem (except local evidence data directory `/app/data`).
-- Health and readiness endpoints: `/healthz` (daemon process active), `/readyz` (PIMS reachable + corpus loaded + scheduler armed + evidence store connected).
+- Health and readiness endpoints: `/healthz` (daemon process active), `/readyz` (PIMS reachable + corpus loaded + scheduler armed + evidence store connected + Presidio sidecar reachable — redactor down fails readiness, never degrades silently).
 
 Operational troubleshooting guide per named error (one paragraph each, exact first action):
 
@@ -1089,6 +1108,7 @@ Operational troubleshooting guide per named error (one paragraph each, exact fir
 - `RAG_EVAL_FAILED` / `RAG_CORPUS_STALE`: re-ingest corpus; check `EMBEDDINGS_MODEL` drift; rollback snapshot if new ingest fails eval.
 - `DOUBLE_NOTIFY` / `DUPLICATE_CREATED` / `CITATION_FABRICATED`: treat as P0 orchestrator/model bug; preserve ledgers; page; do NOT auto-resolve.
 - `SECRET_LEAKED`: rotate the named secret immediately; purge containing artifact (log rotation + bundle exclusion); audit access log.
+- `PII_REDACTION_UNAVAILABLE`: check Presidio sidecar health (`PRESIDIO_URL`, pinned image/model versions); do NOT retry the model call unredacted; redactor recovery auto-resumes parked draft/explain/intake work.
 - `OPERATOR_HALT` extended: §6.3 (`HALT_RISK_72H` pages); resume via console with reason; verify timer catch-up on resume.
 - All other `PIMS_*`: follow the §3.6 row exactly; page when the row says page; never invent a new handling.
 
@@ -1145,6 +1165,10 @@ Required by: B.3.11 (documented, communicated procedures — configuration IS pr
 | `LOG_PII` | const false | `false` | — | CONSTANT; `true` → `CONFIG_REJECTED:LOG_PII` (§11.3) |
 | `LEASE_TTL_S` / `LEASE_RENEW_S` | ints | `300` / `60` | No | §6.6 |
 | `DEPLOY_PORT` / `DEPLOY_DATA_DIR` | int/path | `8080` / `/app/data` | No | §12.5 |
+| `PRESIDIO_URL` | url | `http://127.0.0.1:3001` | No | §11.3 Presidio analyzer sidecar base URL (localhost-only in production); unreachable → `PII_REDACTION_UNAVAILABLE` |
+| `PRESIDIO_IMAGE` / `PRESIDIO_MODEL` | string/string | `presidio-analyzer:2.2.x-es` / `es_core_news_md` | No | Pinned sidecar image tag + spaCy model (exact pins in `flake.nix`/compose); bump REQUIRES re-running the A24 golden redaction fixtures |
+| `PRESIDIO_TIMEOUT_MS` / `PRESIDIO_MIN_SCORE` | int/float | `1500` / `0.5` | No | Per-call sidecar timeout (expiry → `PII_REDACTION_UNAVAILABLE`); minimum analyzer score kept (lower dropped; names of reporters stay detected via Spanish-context recognizers) |
+| `FORM_NARRATIVE_MAX_CHARS` | int | `4000` | No | §8.4 narrative + stringified-partial cap before redaction; over → `FORM_NARRATIVE_TOO_LONG` naming the cap |
 
 Config load rules: missing required → fail fast `CONFIG_MISSING:<KEY>` naming the key; unknown key → `CONFIG_UNKNOWN:<KEY>` fail fast; type violation → `CONFIG_TYPE:<KEY>` fail fast; `*_ENV` values are env VAR NAMES (validated present + non-empty at boot, values never logged). No defaults invented at call sites — the table above is exhaustive.
 
@@ -1173,6 +1197,13 @@ Required by: 9.2 (audit criteria need predefined checks), 9.3.2 (review inputs),
 | A15 | E21 risk create in tenant with assets | `{risk_id, risk_code, period_name}` returned; closed period → `{queued:true, period_name, queued_at_utc}`, never dropped |
 | A16 | Full §14.3 mechanical gates | All six commands pass as specified |
 | A17 | Live watcher: create an `O` breach in `https://unsa.27k.pe` with `AUTO_NOTIFY=false` | Within one poll interval the daemon moves it to `P`, investigates/drafts, emits `role:transition`, `rag:retrieval` (verbatim `chunk_sha256` + dense/BM25/RRF/rerank scores), `review:approval_requested`, and `lifecycle:status_change`; `POST /api/incidents/:id/approve` sends authority/subject notices, uploads exactly one `bundle.json.txt`, and closes `P→C` with `BUNDLE_SEALED:<sha256>` |
+| A18 | Guided submit: reviewed reporting set via `POST /api/incidents` (`channel: "cockpit_guided"`) | `status=O` row created via `pims_create_incident` with all submitted reporting sections verbatim, `severity`/`impact` null, `measure_*` null, no children; dedupe update/restore surfaced with kept code; awareness timers armed; `tool:mutation` + `lifecycle:status_change` on stream |
+| A19 | Guided draft: one free narrative (typed) covering timeline + scope + reporter | Draft returns all extractable reporting fields with per-field provenance, deterministic defaults (`[]`, `detection_date=today`, `reported_by=<operator>`), explicit-PII-required warning when undecidable; no persistence, no PIMS call |
+| A20 | Guided draft: same narrative dictated via browser STT | Identical redaction + extraction path as A19 (transcript is narrative text); no backend STT call exists |
+| A21 | Guided explain: `incident_type` field, then `involves_personal_data` field | `incident_type` returns the §3.5 code table deterministically with zero LLM call; `involves_personal_data` returns a cited explanation (≥1 §7.5 citation) or verbatim `RAG_NO_EVIDENCE`; repeat call byte-identical |
+| A22 | Guided submit of near-duplicate of an existing `O` row (same title + date + system) | Dedupe fires on the guided channel: no second row; operator sees kept `incident_code` + `DEDUPE_MERGED:cockpit_guided` marker path |
+| A23 | Presidio sidecar stopped, then guided draft attempted | `PII_REDACTION_UNAVAILABLE`: model call blocked, reviewer paged, no unredacted send, no regex fallback; `/readyz` fails until recovery |
+| A24 | Golden redaction fixtures (DNI-8, RUC-11, NIE, Spanish full names, `+51` phones, Lima addresses, emails, URLs, descriptions) through `presidio-client` | Exact tokenized output per the §11.3 entity→token table (`[REPORTANTE]`/`[CONTACTO]`/`[ID]`/`[SISTEMA]`/`[DESCRIPCION]`); residual `AgentModelClient` gate scan clean; fixtures re-run on any `PRESIDIO_IMAGE`/`PRESIDIO_MODEL` bump |
 
 ### 14.2 Fixed dry-walk fixture (proof 1 input)
 
@@ -1232,6 +1263,8 @@ G2 allowlist note: G2 output MUST contain ONLY the §1 definition, §2.4/§2.5/�
 | PIMS endpoints E01–E26 | §3.1 | G6, A11, A15 |
 | PIMS error map | §3.6 | A05, A11, A12 |
 | Roles (8) + skills (10) + tools (19) | §5 | A01 (chain executes), A06 (veto parks notifier only) |
+| Guided incident creation (form, draft, explain, dictation) | §8.4, §9.1 | A18–A22 |
+| Presidio pre-LLM redaction + fail-closed gates | §11.3, §13 `PRESIDIO_*` | A23, A24 |
 | Loop + state machines + timers | §6 | A01, A02, A06, A07, A12, A13 |
 | RAG + citations + eval | §7 | A14 |
 | Voice subsystem (removed in the downscale) | §8 | §8 deprecation note; no voice tools/skills |

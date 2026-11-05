@@ -31,7 +31,7 @@ Establish seamless, live end-to-end integration with the deployed GESTITEL PIMS 
     - **Editor («Oficial de Protección de Datos» / DPO)**: Compliance views, 72h countdown clocks, draft notices, and statutory exemption attestations.
     - **Lector («Auditor / Consultor»)**: View-only access to incidents and verbatim RAG citations.
 - **Granular Permission Filtering**:
-  - `change_incident`: Guards notice approval triggers, status transitions, and exemption attestations. Lector accounts receive read-only indicators.
+  - `change_incident`: Guards notice approval triggers, status transitions, exemption attestations, and guided incident creation (§8.4 draft/submit; submit creates `status=O` via `channel: "cockpit_guided"`). Lector accounts receive read-only indicators.
   - `view_securitylog`: Guards raw HTTP mutation ledger and bitácora streams; visible exclusively to Administrador and Operador.
   - `view_audit` / `view_riskevaluation`: Filters out audit finding and risk assessment panels if permissions are lacking.
 - **Operator/Admin Role-Switching**:
@@ -68,7 +68,7 @@ Establish seamless, live end-to-end integration with the deployed GESTITEL PIMS 
     - `get_regulatory_timers()`: Time remaining on regulatory and internal SLAs.
     - `get_rag_citations(code)`: Verbatim normative quotes and retrieval scores.
     - `check_pending_decisions()`: Check for pending human sign-off actions.
-*(Note: The standalone Web Intake Form is dropped. Incident intake occurs directly in `https://unsa.27k.pe` or via the AI Chat assistant).*
+*(Note: The legacy standalone Web Intake Form is dropped and replaced by the Cockpit guided-create section (spec §8.4: agent-drafted reporting form, operator check/fix, per-field explain, dictation input). Incident intake occurs via guided-create, directly in `https://unsa.27k.pe`, or via the AI Chat assistant — all converging on `orchestrator.intake()`.)*
 
 ---
 

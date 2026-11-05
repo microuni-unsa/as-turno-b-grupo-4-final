@@ -1,7 +1,7 @@
 # Phase 6: Production Hardening, Continuous Daemon Deployment, and Acceptance Suite
 
 ## Objective
-Establish the definitive autonomous production deployment of the incident response daemon, package a production build target (`bun run build`) with a containerized Docker distribution, execute the automated acceptance suite (A01 through A16), and verify that the daemon operates continuously in the background—detecting and resolving live personal data breaches created in `https://unsa.27k.pe` purely through environment variable configuration without any separate runbooks or staged scripts.
+Establish the definitive autonomous production deployment of the incident response daemon, package a production build target (`bun run build`) with a containerized Docker distribution, execute the automated acceptance suite (A01 through A24), and verify that the daemon operates continuously in the background—detecting and resolving live personal data breaches created via Cockpit guided-create (§8.4) or in `https://unsa.27k.pe` purely through environment variable configuration without any separate runbooks or staged scripts.
 
 ---
 
@@ -13,7 +13,7 @@ Establish the definitive autonomous production deployment of the incident respon
   - No staged presentation scripts, no artificial test runners, and no bespoke demo runbooks are permitted.
   - The watcher daemon continuously polls `GET /api/incidents/?status=O` against the configured PIMS instance.
 - **Natural Live Incident Handling**:
-  - An operator or user logs into the live university application at `https://unsa.27k.pe` using their regular web browser and creates a genuine personal data breach incident (e.g., electoral registry leak).
+  - An operator drafts a genuine personal data breach incident (e.g., electoral registry leak) in the Cockpit guided-create section (§8.4: narrative + targeted fills, operator review, explicit PII yes/no) and submits it, or creates it in the live university application at `https://unsa.27k.pe` using their regular web browser.
   - The running daemon automatically detects the new incident within its polling tick:
     - Automatically transitions status `O -> P`.
     - Retrieves relevant ISO 27701 (B.3.11, B.3.12, 10.2) controls and GDPR (Art 33, 34) articles with exact verbatim quotes and retrieval scores.
@@ -55,8 +55,8 @@ Establish the definitive autonomous production deployment of the incident respon
   - Boots cleanly with a single `docker run` command using mounted environment variables or secret commands.
   - Exposes health (`/healthz`), readiness (`/readyz`), SSE stream (`/api/stream`), and Cockpit endpoints.
 
-### 4. Automated Acceptance Suite (A01–A16)
-- Maintain and verify the 16 acceptance test scenarios against containerized PostgreSQL and live API probes:
+### 4. Automated Acceptance Suite (A01–A24)
+- Maintain and verify the 24 acceptance test scenarios against containerized PostgreSQL and live API probes:
   - **A01**: Full autonomous breach lifecycle flow (`O -> P -> C`).
   - **A02**: Expedited 4-hour review SLA breach and escalation.
   - **A03**: Intake with missing PII flag (conservative fallback with `assumed_pii` tag).
@@ -73,13 +73,20 @@ Establish the definitive autonomous production deployment of the incident respon
   - **A14**: 10/10 RAG evaluation gate with exact verbatim citations.
   - **A15**: Risk signal creation and queuing when risk period is closed.
   - **A16**: Full mechanical verification gates execution (G1–G6).
+  - **A18**: Guided submit creates a fully-reported `O` row via `channel: "cockpit_guided"` (response fields empty, timers armed, stream events emitted).
+  - **A19**: Guided draft from one free narrative returns fielded reporting sections with provenance, no persistence.
+  - **A20**: Dictated narrative follows the identical redaction + extraction path (no backend STT).
+  - **A21**: Field explain returns deterministic code tables or RAG-cited guidance, repeat-identical.
+  - **A22**: Guided near-duplicate submission dedupes (no second row, kept code surfaced).
+  - **A23**: Presidio sidecar outage fails closed (`PII_REDACTION_UNAVAILABLE`, `/readyz` red).
+  - **A24**: Golden redaction fixtures tokenize exactly per the §11.3 entity→token table.
 
 ---
 
 ## Deliverables
 - `Dockerfile`: Multi-stage Docker container specification for the continuous daemon.
 - `package.json`: Updated `build` and `start` scripts.
-- `tests/acceptance/a01-a16.test.ts`: Automated test suite covering all 16 acceptance scenarios.
+- `tests/acceptance/a01-a24.test.ts`: Automated test suite covering all 24 acceptance scenarios.
 - `scripts/verify-gates.sh`: Automated mechanical validation script (G1–G6).
 
 ---
@@ -87,5 +94,5 @@ Establish the definitive autonomous production deployment of the incident respon
 ## Verification & Acceptance
 - `bun run build` succeeds and produces a standalone distribution bundle.
 - The daemon boots inside a Docker container using live environment variables and marks readiness (`/readyz`).
-- Creating a personal data breach in `https://unsa.27k.pe` triggers automatic detection, containment action creation, audit finding creation, regulatory notice generation, evidence bundle sealing, and closure without human intervention or external scripts.
-- All acceptance tests A01–A16 and mechanical gates G1–G6 pass cleanly.
+- Creating a personal data breach via Cockpit guided-create (or in `https://unsa.27k.pe`) triggers automatic detection, containment action creation, audit finding creation, regulatory notice generation, evidence bundle sealing, and closure without human intervention or external scripts.
+- All acceptance tests A01–A24 and mechanical gates G1–G6 pass cleanly.

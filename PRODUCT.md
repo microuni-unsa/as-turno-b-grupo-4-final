@@ -57,7 +57,7 @@ Explicitly undecided: deploy topology (serve the Astro UI from the same Bun/Hono
 ## Evidence on Hand
 
 - Live tenant `https://unsa.27k.pe` plus operator credentials in `data/site.md` and `data/pims_password` (untracked, gitignored, never read by code; the old password remains in git history and must be rotated per the phase-05 secret-hygiene note).
-- Backend contracts: `packages/cockpit/src/*.ts`; agent, RAG, evidence, notices, and adapter packages; `docs/incident-agent-spec.md` (v1.0.0-final) plus `docs/phases/*.md`; 38 live-API transcripts in `docs/incident-agent-capture/`; corpora in `corpus/`.
+- Backend contracts: `packages/cockpit/src/*.ts`; agent, RAG, evidence, notices, and adapter packages; `docs/incident-agent-spec.md` (v1.1.0-final) plus `docs/phases/*.md`; 38 live-API transcripts in `docs/incident-agent-capture/`; corpora in `corpus/`.
 - Live verification 2026-11-03: `INC-001` full-loop proof recorded in the phase-05 footer.
 - Absent and must not be fabricated: UI scaffold and tokens, testimonials, customers, benchmarks, pricing, licensing. No PRODUCT.md existed before this file; no DESIGN.md exists.
 
