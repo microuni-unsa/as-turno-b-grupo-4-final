@@ -21,16 +21,14 @@ import type { JsonObject } from "@pims/types/models.ts";
 import type { PimsIncident } from "@pims/types/pims.ts";
 import type { RetrievalPassage } from "@pims/types/rag.ts";
 
-const REGULATORY_TIMER_TYPES: Readonly<Record<string, true>> = {
+export const REGULATORY_TIMER_TYPES: Readonly<Record<string, true>> = {
   T72_AUTHORITY: true,
   T_REVIEW_SLA: true,
   T_SUBJECT: true,
   T_PROCESSOR: true,
   T_PERU_ADVISORY: true,
   T_PHASE_FOLLOWUP: true,
-  T_RETRY: true,
 };
-
 export function summarizeIncident(
   incident: PimsIncident,
 ): CockpitIncidentSummary {
@@ -158,7 +156,9 @@ export async function getRegulatoryTimers(
   clock: () => Date,
   code?: string,
 ): Promise<CockpitTimer[]> {
-  const timers = await store.listActiveTimers(code, true);
+  // Countdown shows live timers only. Fired deadlines stay visible through
+  // the deadline_breached decision cards (listTimers), not as 00:00:00 rows.
+  const timers = await store.listActiveTimers(code);
   const now = clock().getTime();
   const out: CockpitTimer[] = [];
   for (const timer of timers) {

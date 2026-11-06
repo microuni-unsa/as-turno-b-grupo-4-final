@@ -40,6 +40,57 @@ export interface OpenAIProviderOptions {
 
 const TOP_LOGPROBS = 5;
 
+const CODE_FENCE_PATTERN = /^```(?:json)?\s*\n?([\s\S]*?)\n?```\s*$/;
+
+function contentToText(raw: unknown): string {
+  if (typeof raw === "string") {
+    return raw;
+  }
+  if (Array.isArray(raw)) {
+    const parts: string[] = [];
+    for (const part of raw) {
+      if (typeof part === "string") {
+        parts.push(part);
+        continue;
+      }
+      if (typeof part !== "object" || part === null || Array.isArray(part)) {
+        throw new ModelSchemaViolationError(
+          "OPENAI",
+          `Model content part has unsupported shape: ${JSON.stringify(part).slice(0, 200)}`,
+        );
+      }
+      const record = part as Record<string, unknown>;
+      // Reasoning models interleave thinking traces with the answer; only
+      // text parts carry the JSON payload.
+      if (record.type === "thinking" || record.type === "reasoning") {
+        continue;
+      }
+      if (typeof record.text === "string") {
+        parts.push(record.text);
+        continue;
+      }
+      throw new ModelSchemaViolationError(
+        "OPENAI",
+        `Model content part has unsupported shape: ${JSON.stringify(part).slice(0, 200)}`,
+      );
+    }
+    return parts.join("");
+  }
+  throw new ModelSchemaViolationError(
+    "OPENAI",
+    `Model content is not text: ${typeof raw}`,
+  );
+}
+
+function unwrapCodeFence(raw: string): string {
+  const trimmed = raw.trim();
+  const match = CODE_FENCE_PATTERN.exec(trimmed);
+  if (match?.[1] !== undefined) {
+    return match[1].trim();
+  }
+  return trimmed;
+}
+
 const RerankModelResponseSchema = z.object({
   ranked: z.array(
     z.object({
@@ -252,7 +303,7 @@ export class OpenAIModelProvider implements ModelProvider {
           : {}),
       });
 
-      const rawContent = response.choices?.[0]?.message?.content;
+      const rawContent: unknown = response.choices?.[0]?.message?.content;
       if (!rawContent) {
         throw new ModelSchemaViolationError(
           route,
@@ -262,7 +313,9 @@ export class OpenAIModelProvider implements ModelProvider {
 
       let parsed: JsonObject;
       try {
-        const rawParsed: unknown = JSON.parse(rawContent);
+        const rawParsed: unknown = JSON.parse(
+          unwrapCodeFence(contentToText(rawContent)),
+        );
         const validation = JsonObjectSchema.safeParse(rawParsed);
         if (!validation.success) {
           throw new ModelSchemaViolationError(
@@ -379,14 +432,16 @@ export class OpenAIModelProvider implements ModelProvider {
         response_format: { type: "json_object" },
       });
 
-      const rawContent = response.choices?.[0]?.message?.content;
+      const rawContent: unknown = response.choices?.[0]?.message?.content;
       if (!rawContent) {
         throw new ModelSchemaViolationError(
           route,
           "Vision model returned no message content",
         );
       }
-      const parsed: unknown = JSON.parse(rawContent);
+      const parsed: unknown = JSON.parse(
+        unwrapCodeFence(contentToText(rawContent)),
+      );
       const validation = VisionJsonResponseSchema.safeParse(parsed);
       if (!validation.success) {
         throw new ModelSchemaViolationError(route, validation.error.message);
@@ -470,7 +525,7 @@ export class OpenAIModelProvider implements ModelProvider {
         response_format: { type: "json_object" },
       });
 
-      const rawContent = res.choices?.[0]?.message?.content;
+      const rawContent: unknown = res.choices?.[0]?.message?.content;
       if (!rawContent) {
         throw new ModelSchemaViolationError(
           route,
@@ -479,7 +534,7 @@ export class OpenAIModelProvider implements ModelProvider {
       }
       let parsed: unknown;
       try {
-        parsed = JSON.parse(rawContent);
+        parsed = JSON.parse(unwrapCodeFence(contentToText(rawContent)));
       } catch (err: unknown) {
         throw new ModelSchemaViolationError(
           route,

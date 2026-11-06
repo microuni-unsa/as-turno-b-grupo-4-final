@@ -5,6 +5,7 @@ import {
 } from "@pims/agent";
 import { createCockpitApp } from "@pims/cockpit/app.ts";
 import { SessionRegistry } from "@pims/cockpit/auth.ts";
+import { REGULATORY_TIMER_TYPES } from "@pims/cockpit/chat-tools.ts";
 import { CockpitEventHub } from "@pims/cockpit/event-hub.ts";
 import { loadConfig } from "@pims/config";
 import { EvidenceStore } from "@pims/evidence";
@@ -152,6 +153,7 @@ async function main(): Promise<void> {
 
   const server = Bun.serve({
     port: config.DEPLOY_PORT,
+    idleTimeout: CONSTANTS.SERVER_IDLE_TIMEOUT_S,
     fetch: app.fetch,
   });
 
@@ -168,9 +170,17 @@ async function main(): Promise<void> {
       return;
     }
     void (async () => {
-      const timers = await store.listActiveTimers(undefined, true);
+      // Unfired only: the countdown lists live timers, and the UI pushes
+      // unknown timer_ids on tick — emitting fired rows would resurrect
+      // 00:00:00 Vencido cards every second.
+      const timers = await store.listActiveTimers(undefined, false);
       const now = Date.now();
       for (const timer of timers) {
+        // T_RETRY/VETO_WINDOW ticks would re-inject internal rows into the
+        // countdown (the UI pushes unknown timer_ids); emit regulatory only.
+        if (REGULATORY_TIMER_TYPES[timer.timer_type] !== true) {
+          continue;
+        }
         const fireAt = new Date(timer.fire_at_utc).getTime();
         events.emit({
           type: "scheduler:timer_tick",

@@ -2182,6 +2182,31 @@ export class IncidentOrchestrator {
       await this.emitEvent("notice_sent", incident, "notifier", {
         reason: packType,
       });
+      // The obligation this timer guarded is discharged: cancel it so the
+      // compliance countdown stops. Audited via scheduler_cancel like close().
+      // The review SLA is also spent: human review produced its decision.
+      // Stale T_RETRY rows for the satisfied deadline go with them: retrying
+      // an already-sent obligation only re-pages the operator.
+      const satisfiedKinds =
+        packType === "authority"
+          ? ["T72_AUTHORITY", "T_REVIEW_SLA"]
+          : ["T_SUBJECT", "T_REVIEW_SLA"];
+      const active = await this.deps.evidenceStore.listActiveTimers(code);
+      for (const timer of active) {
+        const staleRetry =
+          timer.timer_type === "T_RETRY" &&
+          typeof timer.payload.failed_kind === "string" &&
+          satisfiedKinds.includes(timer.payload.failed_kind);
+        if (!satisfiedKinds.includes(timer.timer_type) && !staleRetry) {
+          continue;
+        }
+        await this.callTool(
+          "orchestrator",
+          "scheduler_cancel",
+          { timer_id: timer.timer_id, reason: `SENT:${packType}` },
+          { incidentId: incident.id, incidentCode: code },
+        );
+      }
     }
 
     return notifies;

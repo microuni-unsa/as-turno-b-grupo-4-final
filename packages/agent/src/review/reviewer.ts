@@ -37,6 +37,9 @@ export const REVIEW_CHALLENGE_AUTHORITY_SYSTEM =
 export const REVIEW_CHALLENGE_SUBJECT_SYSTEM =
   "You review a GDPR Article 34 data-subject breach communication for legal completeness, ungrounded claims, plain-language accessibility, and personal data leakage. Scope is strictly the Article 34(2) elements present in body_text: clear and plain language describing the nature of the breach, likely consequences, and measures taken or proposed to address the breach. Do NOT demand general privacy policy elements (such as legal basis of processing under Article 6, data retention periods under Article 13/14, or the full Article 15–22 rights catalog) as this is a specific breach communication, not a general privacy notice. Note that GDPR Article 34(2) DPO contact details are structured and validated separately in the pack contact block; do NOT challenge body_text for omitting DPO contact details. When approximate counts or categories of data are stated in body_text, that satisfies the requirement; do NOT challenge numbers as missing when approximations are provided. A severity of high is allowed ONLY when you quote the exact pack sentence that is missing, contradictory, or ungrounded, or when essential Article 34 breach facts (nature of breach, consequences, mitigations) are completely absent. Return one challenge per weakness with target, challenge, severity (low, medium, high), and the evidence a human reviewer must supply. Never invent facts absent from the pack; severity high blocks approval.";
 
+export const REVIEW_CHALLENGE_RESOLUTION_SYSTEM =
+  "You review an incident closure resolution summary (close-out record, NOT a breach notification). Scope is strictly: the summary describes what happened and what containment or remediation was done; no sentence contradicts the supplied checklist coverage; no new factual claims appear that the checklist cannot support. Aggregate counts, data-category names (for example, the words names, IDs, addresses, contacts when no actual values follow them), and measure names are expected content, NOT personal data leakage: challenge PII leakage ONLY when the text contains a concrete identifying value of a real person (an actual name, an actual ID number, an actual phone, email, or street address). Category words without values are never leakage. Do NOT demand breach-notification elements (72-hour authority notification proof, data-subject communication, DPO contact details, notification format or recipients): notification is a separate pack reviewed separately. Do NOT demand legal citations beyond those supplied. A severity of high is allowed ONLY when you quote the exact sentence that is contradictory, ungrounded, or contains a concrete identifying value. Return one challenge per weakness with target, challenge, severity (low, medium, high), and the evidence a human reviewer must supply. Never invent facts absent from the text; severity high blocks approval.";
+
 export interface ReviewerDeps {
   modelClient: AgentModelClient;
   ragService: RAGService;
@@ -294,83 +297,95 @@ export class NoticeReviewer {
       }
     }
 
-    const challengeSystem =
-      ctx.pack_type === "authority"
-        ? REVIEW_CHALLENGE_AUTHORITY_SYSTEM
-        : ctx.pack_type === "subject"
-          ? REVIEW_CHALLENGE_SUBJECT_SYSTEM
-          : REVIEW_CHALLENGE_SYSTEM;
-    const challengeResponse = await this.deps.modelClient.chat_json({
-      system: challengeSystem,
-      messages: [
-        {
-          role: "user",
-          content: JSON.stringify({
-            pack_type: ctx.pack_type,
-            body_text: await redactForPrompt(ctx.body_text),
-            citations: ctx.citations,
-            incident_code: ctx.incident_code,
-          }),
-        },
-      ],
-      json_schema: {
-        type: "object",
-        properties: {
-          challenges: {
-            type: "array",
-            items: {
-              type: "object",
-              properties: {
-                target: { type: "string" },
-                challenge: { type: "string" },
-                severity: {
-                  type: "string",
-                  enum: ["low", "medium", "high"],
+    // Resolution challenge calls stay enabled (audit trail of challenges),
+    // but their verdict is advisory: the deployed reasoning model cannot
+    // reliably distinguish data-category names from identifying values and
+    // invents checklist policies, while Presidio above is the authoritative
+    // PII gate. Notice packs keep the blocking prosecutor.
+    const isResolutionReview = isResolution || ctx.pack_type === "resolution";
+    let challenges: ProsecutorChallenge[] = [];
+    {
+      const challengeSystem =
+        isResolution || ctx.pack_type === "resolution"
+          ? REVIEW_CHALLENGE_RESOLUTION_SYSTEM
+          : ctx.pack_type === "authority"
+            ? REVIEW_CHALLENGE_AUTHORITY_SYSTEM
+            : ctx.pack_type === "subject"
+              ? REVIEW_CHALLENGE_SUBJECT_SYSTEM
+              : REVIEW_CHALLENGE_SYSTEM;
+      const challengeResponse = await this.deps.modelClient.chat_json({
+        system: challengeSystem,
+        messages: [
+          {
+            role: "user",
+            content: JSON.stringify({
+              pack_type: ctx.pack_type,
+              body_text: await redactForPrompt(ctx.body_text),
+              citations: ctx.citations,
+              incident_code: ctx.incident_code,
+            }),
+          },
+        ],
+        json_schema: {
+          type: "object",
+          properties: {
+            challenges: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  target: { type: "string" },
+                  challenge: { type: "string" },
+                  severity: {
+                    type: "string",
+                    enum: ["low", "medium", "high"],
+                  },
+                  evidence_required: { type: "string" },
                 },
-                evidence_required: { type: "string" },
+                required: [
+                  "target",
+                  "challenge",
+                  "severity",
+                  "evidence_required",
+                ],
+                additionalProperties: false,
               },
-              required: [
-                "target",
-                "challenge",
-                "severity",
-                "evidence_required",
-              ],
-              additionalProperties: false,
             },
           },
+          required: ["challenges"],
+          additionalProperties: false,
         },
-        required: ["challenges"],
-        additionalProperties: false,
-      },
-      max_tokens: 2500,
-      temperature: this.deps.config.TEMP_REASONING,
-      route: CONSTANTS.MODEL_ROUTE_REASONING,
-    });
-    const parsedProsecutor = ProsecutorResultSchema.safeParse(
-      challengeResponse.content,
-    );
-    if (!parsedProsecutor.success) {
-      throw new ModelSchemaViolationError(
-        CONSTANTS.MODEL_ROUTE_REASONING,
-        `Review challenge returned invalid shape: ${parsedProsecutor.error.message}`,
-      );
-    }
-    const challenges = parsedProsecutor.data.challenges;
-
-    const blockingEnabled =
-      this.deps.config.REVIEW_CHALLENGE_BLOCKING !== undefined
-        ? this.deps.config.REVIEW_CHALLENGE_BLOCKING
-        : CONSTANTS.DEFAULT_REVIEW_CHALLENGE_BLOCKING;
-
-    const highChallenge = blockingEnabled
-      ? challenges.find((c) => c.severity === "high")
-      : undefined;
-    if (highChallenge !== undefined) {
-      return NoticeReviewer.reject(challenges, {
-        judge: "reviewer",
-        item: highChallenge.target,
-        required_fix: highChallenge.challenge,
+        max_tokens: 2500,
+        temperature: this.deps.config.TEMP_REASONING,
+        route: CONSTANTS.MODEL_ROUTE_REASONING,
       });
+      const parsedProsecutor = ProsecutorResultSchema.safeParse(
+        challengeResponse.content,
+      );
+      if (!parsedProsecutor.success) {
+        throw new ModelSchemaViolationError(
+          CONSTANTS.MODEL_ROUTE_REASONING,
+          `Review challenge returned invalid shape: ${parsedProsecutor.error.message}`,
+        );
+      }
+      challenges = parsedProsecutor.data.challenges;
+
+      const blockingEnabled =
+        this.deps.config.REVIEW_CHALLENGE_BLOCKING !== undefined
+          ? this.deps.config.REVIEW_CHALLENGE_BLOCKING
+          : CONSTANTS.DEFAULT_REVIEW_CHALLENGE_BLOCKING;
+
+      const highChallenge =
+        blockingEnabled && !isResolutionReview
+          ? challenges.find((c) => c.severity === "high")
+          : undefined;
+      if (highChallenge !== undefined) {
+        return NoticeReviewer.reject(challenges, {
+          judge: "reviewer",
+          item: highChallenge.target,
+          required_fix: highChallenge.challenge,
+        });
+      }
     }
 
     const approval = await this.deps.evidenceStore.mintReviewApproval({

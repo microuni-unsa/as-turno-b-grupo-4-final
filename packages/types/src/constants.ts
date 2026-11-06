@@ -155,6 +155,9 @@ export const CONSTANTS = {
   PRESIDIO_TIMEOUT_MS: 1500,
   PRESIDIO_MIN_SCORE: 0.5,
   DEPLOY_PORT: 3000,
+  // Bun.serve kills responses idle longer than this (seconds); agent
+  // approve/review calls legitimately run for minutes (LLM + RAG chain).
+  SERVER_IDLE_TIMEOUT_S: 255,
   DEPLOY_DATA_DIR: ".evidence_blobs",
   CONTAINER_POSTGRES_INITDB_DIR: "/docker-entrypoint-initdb.d",
   EVIDENCE_HASH: "sha256",
