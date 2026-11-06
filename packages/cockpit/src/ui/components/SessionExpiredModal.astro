@@ -19,7 +19,7 @@ import { LogIn, ShieldAlert } from "lucide-astro";
         Sesión Expirada
       </h3>
       <p id="session-expired-message" class="text-xs text-slate-400 leading-relaxed">
-        Su sesión de acceso con PIMS ha expirado o se ha revocado en el servidor. Debe identificarse nuevamente para continuar operando en el Cockpit.
+        Su sesión de acceso con PIMS ha expirado o se ha revocado en el servidor. Debe identificarse nuevamente para continuar operando en la plataforma.
       </p>
     </div>
 
@@ -52,7 +52,7 @@ import { LogIn, ShieldAlert } from "lucide-astro";
         messageEl.textContent = reason.trim();
       } else {
         messageEl.textContent =
-          "Su sesión de acceso con PIMS ha expirado o se ha revocado en el servidor. Debe identificarse nuevamente para continuar operando en el Cockpit.";
+          "Su sesión de acceso con PIMS ha expirado o se ha revocado en el servidor. Debe identificarse nuevamente para continuar operando en la plataforma.";
       }
     } else {
       throw new Error("Element #session-expired-message not found in DOM");

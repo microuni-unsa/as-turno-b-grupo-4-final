@@ -1111,7 +1111,7 @@ export async function explainField(
     return {
       field,
       type: "enum",
-      explanation: `Catálogo de opciones para '${field}' según especificación técnica §3.5.`,
+      explanation: `Opciones disponibles para '${field}':`,
       options: catalogOptions,
     };
   }

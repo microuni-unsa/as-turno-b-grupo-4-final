@@ -16,9 +16,9 @@ const { timerId, incidentCode, timerKind, fireAtUtc, remainingMs } =
 function getTimerFriendlyName(kind: string): string {
   switch (kind) {
     case "T_AUTHORITY_72H":
-      return "Plazo Legal Art. 33 GDPR (72 Horas)";
+      return "Plazo Legal Art. 33 (72h)";
     case "T_INTERNAL_SLA":
-      return `SLA de Revisión Interna DPO (${CONSTANTS.SLA_REVIEW_H} Horas)`;
+      return `Revisión Interna (${CONSTANTS.SLA_REVIEW_H}h)`;
     case "T_PHASE_FOLLOWUP":
       return "Seguimiento de Notificación por Fases";
     case "T_RETRY":

@@ -21,7 +21,7 @@ const incidentCode = isCodeValid ? code.trim() : null;
 
 {
   !isCodeValid || incidentCode === null ? (
-    <BaseLayout title="Error 404: Incidente No Encontrado | Glass-Box Cockpit">
+    <BaseLayout title="Error 404: Incidente No Encontrado | UNSA">
       <div class="flex items-center justify-center min-h-screen bg-slate-950 p-4">
         <div class="max-w-md w-full bg-slate-900 border border-rose-900/60 rounded-xl p-6 text-center space-y-4 shadow-xl">
           <div class="w-12 h-12 bg-rose-950/80 border border-rose-800 rounded-full flex items-center justify-center mx-auto text-rose-400">
@@ -43,7 +43,7 @@ const incidentCode = isCodeValid ? code.trim() : null;
     </BaseLayout>
   ) : (
     <AppLayout
-      title={`Incidente ${incidentCode} | Glass-Box Cockpit`}
+      title={`Incidente ${incidentCode} | UNSA`}
       breadcrumb={`Incidentes / ${incidentCode}`}
     >
       <div id="incident-detail-root" data-incident-code={incidentCode} class="max-w-5xl mx-auto space-y-6">

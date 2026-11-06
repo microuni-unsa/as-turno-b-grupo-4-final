@@ -17,7 +17,7 @@ import {
 } from "lucide-astro";
 ---
 
-<AppLayout title="Cumplimiento DPO | Glass-Box Cockpit" breadcrumb="Cumplimiento DPO">
+<AppLayout title="Cumplimiento DPO | UNSA" breadcrumb="Cumplimiento DPO">
   <div class="space-y-8">
     <!-- Header banner -->
     <div>
@@ -26,7 +26,7 @@ import {
         <span>Cumplimiento Regulatorio & Puertas de Aprobación DPO</span>
       </h1>
       <p class="text-xs text-slate-400 mt-1">
-        Supervisión de plazos legales (Art. 33 72h / SLA 4h), atestaciones de exención técnica y trazabilidad normativa RAG
+        Supervisión de plazos legales, registro de exenciones y trazabilidad de cumplimiento
       </p>
     </div>
 
@@ -37,7 +37,7 @@ import {
           <Clock class="w-4 h-4 text-amber-400" />
           <span>Plazos Regulatorios & SLAs Activos</span>
         </h2>
-        <span class="text-xs text-slate-500">Sincronización en vivo con el scheduler</span>
+        <span class="text-xs text-slate-500">Actualización en tiempo real</span>
       </div>
 
       <div id="timers-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -73,14 +73,14 @@ import {
       <div class="flex items-center justify-between">
         <h2 class="text-xs font-semibold text-slate-300 uppercase tracking-wider flex items-center space-x-1.5">
           <BookOpen class="w-4 h-4 text-emerald-400" />
-          <span>Trazabilidad Normativa RAG Dual-Modal (ISO 27701 / GDPR / Ley 29733)</span>
+          <span>Trazabilidad Normativa (ISO 27701, GDPR, Ley 29733)</span>
         </h2>
-        <span class="text-xs text-slate-500">Puntajes densos, BM25, RRF y Cross-Encoder</span>
+        <span class="text-xs text-slate-500">Citas normativas y relevancia documental</span>
       </div>
 
       <div id="rag-citations-container" class="space-y-3">
         <div class="p-6 bg-slate-900 border border-slate-800 rounded-xl text-center text-xs text-slate-500">
-          Esperando eventos de recuperación RAG en tiempo real...
+          Esperando eventos de recuperación normativa...
         </div>
       </div>
     </div>
@@ -182,35 +182,35 @@ import {
   function renderProposalHtml(prop: Record<string, any> | null | undefined, packType: string | null): string {
     if (!prop || typeof prop !== "object") {
       return `
-        <div class="p-3 bg-slate-950/60 rounded border border-slate-800 text-slate-500 italic">
+        <div class="p-3 bg-slate-950/60 rounded-lg border border-slate-800 text-slate-500 italic text-xs">
           No hay detalles de borrador estructurado disponibles para esta puerta de decisión.
         </div>
       `;
     }
 
-    let html = `<div class="p-3 bg-slate-950/80 rounded-lg border border-slate-800 space-y-3">`;
+    let html = `<div class="p-4 bg-slate-950/80 rounded-lg border border-slate-800/80 space-y-3.5">`;
 
     html += `
-      <div class="flex items-center justify-between pb-2 border-b border-slate-800">
+      <div class="flex items-center justify-between pb-2.5 border-b border-slate-800">
         <span class="text-xs font-semibold text-slate-200">
           ${packType === "authority" ? "Propuesta Art. 33 (Notificación a la Autoridad)" : "Propuesta Art. 34 (Comunicación a Titulares)"}
         </span>
         <span class="px-2 py-0.5 rounded text-[10px] font-mono bg-blue-950 text-blue-300 border border-blue-800">
-          Borrador Validado por Adversarial Reviewer
+          Borrador Validado
         </span>
       </div>
     `;
 
     if (prop.item_a_approx_subjects !== undefined || prop.item_a_approx_records !== undefined) {
       html += `
-        <div class="grid grid-cols-2 gap-2 text-xs">
-          <div class="bg-slate-900/80 p-2 rounded border border-slate-800">
-            <span class="text-slate-400 block text-[11px]">Sujetos Afectados:</span>
-            <span class="text-slate-200 font-semibold font-mono">${prop.item_a_approx_subjects ?? "Por determinar"}</span>
+        <div class="grid grid-cols-2 gap-3 text-xs">
+          <div class="bg-slate-900/90 p-3 rounded-lg border border-slate-800">
+            <span class="text-slate-400 block text-[11px] font-medium uppercase tracking-wider">Sujetos Afectados</span>
+            <span class="text-base font-bold font-mono text-white mt-0.5 block tabular-nums">${prop.item_a_approx_subjects ?? "Por determinar"}</span>
           </div>
-          <div class="bg-slate-900/80 p-2 rounded border border-slate-800">
-            <span class="text-slate-400 block text-[11px]">Registros Comprometidos:</span>
-            <span class="text-slate-200 font-semibold font-mono">${prop.item_a_approx_records ?? "Por determinar"}</span>
+          <div class="bg-slate-900/90 p-3 rounded-lg border border-slate-800">
+            <span class="text-slate-400 block text-[11px] font-medium uppercase tracking-wider">Registros Comprometidos</span>
+            <span class="text-base font-bold font-mono text-white mt-0.5 block tabular-nums">${prop.item_a_approx_records ?? "Por determinar"}</span>
           </div>
         </div>
       `;
@@ -218,18 +218,18 @@ import {
 
     if (prop.item_c_consequences) {
       html += `
-        <div class="space-y-1">
-          <span class="text-[11px] font-semibold text-slate-300 uppercase tracking-wider">Consecuencias Probables (Art. 33.3.c):</span>
-          <p class="text-slate-300 leading-relaxed bg-slate-900/60 p-2.5 rounded border border-slate-800/80">${prop.item_c_consequences}</p>
+        <div class="space-y-1.5">
+          <span class="text-xs font-semibold text-slate-300 uppercase tracking-wider block">Consecuencias Probables (Art. 33.3.c):</span>
+          <p class="text-xs text-slate-300 leading-relaxed bg-slate-900/60 p-3 rounded-lg border border-slate-800/80">${prop.item_c_consequences}</p>
         </div>
       `;
     }
 
     if (Array.isArray(prop.item_d_measures_taken) && prop.item_d_measures_taken.length > 0) {
       html += `
-        <div class="space-y-1">
-          <span class="text-[11px] font-semibold text-emerald-400 uppercase tracking-wider">Medidas Técnicas Adoptadas (Art. 33.3.d):</span>
-          <ul class="list-disc pl-4 text-slate-300 space-y-1 bg-slate-900/60 p-2.5 rounded border border-slate-800/80">
+        <div class="space-y-1.5">
+          <span class="text-xs font-semibold text-slate-300 uppercase tracking-wider block">Medidas Técnicas Adoptadas (Art. 33.3.d):</span>
+          <ul class="list-disc pl-5 text-xs text-slate-300 space-y-1 bg-slate-900/60 p-3 rounded-lg border border-slate-800/80 leading-relaxed">
             ${prop.item_d_measures_taken.map((m: any) => `<li>${m}</li>`).join("")}
           </ul>
         </div>
@@ -238,9 +238,9 @@ import {
 
     if (Array.isArray(prop.item_d_measures_proposed) && prop.item_d_measures_proposed.length > 0) {
       html += `
-        <div class="space-y-1">
-          <span class="text-[11px] font-semibold text-amber-400 uppercase tracking-wider">Medidas Adicionales Propuestas (Art. 33.3.d):</span>
-          <ul class="list-disc pl-4 text-slate-300 space-y-1 bg-slate-900/60 p-2.5 rounded border border-slate-800/80">
+        <div class="space-y-1.5">
+          <span class="text-xs font-semibold text-slate-300 uppercase tracking-wider block">Medidas Adicionales Propuestas (Art. 33.3.d):</span>
+          <ul class="list-disc pl-5 text-xs text-slate-300 space-y-1 bg-slate-900/60 p-3 rounded-lg border border-slate-800/80 leading-relaxed">
             ${prop.item_d_measures_proposed.map((m: any) => `<li>${m}</li>`).join("")}
           </ul>
         </div>
@@ -249,18 +249,18 @@ import {
 
     if (prop.body_plain) {
       html += `
-        <div class="space-y-1">
-          <span class="text-[11px] font-semibold text-slate-300 uppercase tracking-wider">Comunicación a los Titulares (Lenguaje Claro Art. 34):</span>
-          <div class="bg-slate-900/60 p-3 rounded border border-slate-800/80 text-slate-200 whitespace-pre-wrap leading-relaxed">${prop.body_plain}</div>
+        <div class="space-y-1.5">
+          <span class="text-xs font-semibold text-slate-300 uppercase tracking-wider block">Comunicación a los Titulares (Lenguaje Claro Art. 34):</span>
+          <div class="bg-slate-900/60 p-3 rounded-lg border border-slate-800/80 text-xs text-slate-200 leading-relaxed whitespace-pre-wrap">${prop.body_plain}</div>
         </div>
       `;
     }
 
     if (Array.isArray(prop.safety_recommendations) && prop.safety_recommendations.length > 0) {
       html += `
-        <div class="space-y-1">
-          <span class="text-[11px] font-semibold text-blue-400 uppercase tracking-wider">Recomendaciones para los Titulares:</span>
-          <ul class="list-disc pl-4 text-slate-300 space-y-1 bg-slate-900/60 p-2.5 rounded border border-slate-800/80">
+        <div class="space-y-1.5">
+          <span class="text-xs font-semibold text-slate-300 uppercase tracking-wider block">Recomendaciones para los Titulares:</span>
+          <ul class="list-disc pl-5 text-xs text-slate-300 space-y-1 bg-slate-900/60 p-3 rounded-lg border border-slate-800/80 leading-relaxed">
             ${prop.safety_recommendations.map((r: any) => `<li>${r}</li>`).join("")}
           </ul>
         </div>
@@ -269,10 +269,10 @@ import {
 
     if (Array.isArray(prop.citations) && prop.citations.length > 0) {
       html += `
-        <div class="pt-2 border-t border-slate-800/80 flex items-center justify-between flex-wrap gap-2">
-          <span class="text-[11px] font-semibold text-slate-400">Citas Normativas Verificadas:</span>
-          <div class="flex flex-wrap gap-1">
-            ${prop.citations.map((c: any) => `<span class="px-2 py-0.5 rounded bg-blue-950 text-blue-300 border border-blue-900 text-[10px] font-mono">${c}</span>`).join("")}
+        <div class="pt-2 border-t border-slate-800/80 flex items-center justify-between flex-wrap gap-2 text-xs">
+          <span class="text-xs font-semibold text-slate-400">Citas Normativas Verificadas:</span>
+          <div class="flex flex-wrap gap-1.5">
+            ${prop.citations.map((c: any) => `<span class="px-2 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700 text-[11px] font-mono">${c}</span>`).join("")}
           </div>
         </div>
       `;
@@ -355,35 +355,35 @@ import {
 
         return `
           <div class="bg-slate-900 border border-slate-800 rounded-xl p-4 flex flex-col space-y-3 shadow-sm hover:border-slate-700 transition-colors">
-            <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-              <div class="space-y-1">
-                <div class="flex items-center space-x-2">
-                  <span class="px-2 py-0.5 rounded text-xs font-bold font-mono bg-blue-950 text-blue-400 border border-blue-900">
+            <div class="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
+              <div class="space-y-1 min-w-0">
+                <div class="flex items-center space-x-2 flex-wrap gap-y-1">
+                  <span class="px-2 py-0.5 rounded text-xs font-bold font-mono bg-blue-950 text-blue-400 border border-blue-900 shrink-0">
                     ${item.incident_code}
                   </span>
                   <span class="text-sm font-semibold text-white">
                     Paquete de Notificación listo para emisión (${item.pack_type === "authority" ? "Autoridad Art. 33" : "Titulares Art. 34"})
                   </span>
-                  <span class="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-950 text-emerald-300 border border-emerald-800">
-                    Validado por Adversarial Reviewer
+                  <span class="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-950 text-emerald-300 border border-emerald-800 shrink-0">
+                    Validación completada
                   </span>
                 </div>
                 <p class="text-xs text-slate-400">
-                  ${item.blocked_reason || "Revisión adversaria superada. Esperando firma y aprobación humana de la DPO."}
+                  ${item.blocked_reason || "Revisión completada. Esperando aprobación de la DPO."}
                 </p>
               </div>
 
-              <div class="flex items-center space-x-2 shrink-0">
+              <div class="flex items-center space-x-2 shrink-0 flex-wrap gap-y-2">
                 <button
                   type="button"
                   data-toggle-prop="${propTargetId}"
-                  class="px-2.5 py-1.5 rounded-lg bg-blue-950/70 hover:bg-blue-900 text-blue-300 text-xs font-medium transition-colors flex items-center space-x-1.5 border border-blue-800"
+                  title="Desplegar u ocultar el contenido detallado del borrador generado"
+                  class="px-2.5 py-1.5 rounded-lg bg-slate-800/90 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-medium transition-colors flex items-center space-x-1.5 border border-slate-700"
                 >
                   <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
                   </svg>
-                  <span>Ver Propuesta</span>
+                  <span>Ver Detalle</span>
                 </button>
 
                 <button
@@ -393,11 +393,16 @@ import {
                   data-inc-code="${item.incident_code}"
                   data-item-idx="${index}"
                   ${disabledAttr}
-                  class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium transition-colors flex items-center space-x-1 border border-slate-700 ${disabledClasses}"
+                  title="Devolver el borrador al agente autónomo con observaciones para regenerar el texto"
+                  class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white text-xs font-medium transition-colors flex items-center space-x-1.5 border border-slate-700 ${disabledClasses}"
                 >
+                  <svg class="w-3.5 h-3.5 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
                   <span>Solicitar Revisión</span>
                 </button>
 
+                ${item.pack_type === "subject" ? `
                 <button
                   type="button"
                   data-action="exemption"
@@ -405,10 +410,15 @@ import {
                   data-inc-code="${item.incident_code}"
                   data-item-idx="${index}"
                   ${disabledAttr}
-                  class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium transition-colors flex items-center space-x-1 border border-slate-700 ${disabledClasses}"
+                  title="Atestiguar formalmente medidas de protección técnica (cifrado) para eximir notificación a titulares (Art. 34.3.a GDPR)"
+                  class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white text-xs font-medium transition-colors flex items-center space-x-1.5 border border-slate-700 ${disabledClasses}"
                 >
+                  <svg class="w-3.5 h-3.5 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                  </svg>
                   <span>Atestiguar Exención</span>
                 </button>
+                ` : ""}
 
                 <button
                   type="button"
@@ -417,8 +427,12 @@ import {
                   data-inc-code="${item.incident_code}"
                   data-item-idx="${index}"
                   ${disabledAttr}
-                  class="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold transition-colors flex items-center space-x-1 shadow-sm shadow-emerald-600/20 ${disabledClasses}"
+                  title="Aprobar formalmente el paquete para su emisión y sellado criptográfico del bundle de evidencias"
+                  class="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold transition-colors flex items-center space-x-1.5 shadow-sm shadow-emerald-600/20 ${disabledClasses}"
                 >
+                  <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                  </svg>
                   <span>Aprobar Emisión</span>
                 </button>
               </div>
@@ -442,8 +456,8 @@ import {
           targetEl.classList.toggle("hidden");
           const isHidden = targetEl.classList.contains("hidden");
           btn.innerHTML = isHidden
-            ? `<svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg><span>Ver Propuesta</span>`
-            : `<svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l18 18" /></svg><span>Ocultar Propuesta</span>`;
+            ? `<svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /></svg><span>Ver Detalle</span>`
+            : `<svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7" /></svg><span>Ocultar Detalle</span>`;
         }
       });
     });
@@ -467,42 +481,130 @@ import {
     });
   }
 
+  function formatCitation(p: RetrievalPassage): string {
+    const rawCitation = (p as any).citation;
+    if (typeof rawCitation === "string" && rawCitation.trim().length > 0 && rawCitation !== "undefined") {
+      return rawCitation;
+    }
+    const docMap: Record<string, string> = {
+      "gdpr-full": "GDPR (RGPD)",
+      "iso-27701": "ISO/IEC 27701",
+      "ley-29733": "Ley 29733",
+    };
+    const doc = docMap[p.doc_id] || p.doc_id.toUpperCase();
+    const clause = p.article_or_clause || p.chunk_id;
+    return `${doc} · ${clause}`;
+  }
+
+  function cleanPassageText(text: string): string {
+    return text.replace(/^\[DOC:[^\]]+\]\s*/i, "").trim();
+  }
+
   function renderPassageCard(p: RetrievalPassage): string {
     const key = `${p.doc_id}:${p.chunk_id}:${p.lines}`;
     if (seenPassageKeys.has(key)) return "";
     seenPassageKeys.add(key);
 
+    const citationLabel = formatCitation(p);
+    const cleanText = cleanPassageText(p.text);
+    const shortSha = p.chunk_sha256.slice(0, 10);
+
     return `
-      <div class="bg-slate-900 border border-slate-800 rounded-xl p-4 space-y-3">
-        <div class="flex items-center justify-between">
-          <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-blue-950 text-blue-300 border border-blue-800">
-            ${p.citation}
-          </span>
-          <span class="font-mono text-[10px] text-slate-400">${p.chunk_sha256.slice(0, 12)}…</span>
+      <div class="bg-slate-900 border border-slate-800 rounded-xl p-4 space-y-3 shadow-sm hover:border-slate-700 transition-colors">
+        <div class="flex items-center justify-between gap-3 flex-wrap">
+          <div class="flex items-center space-x-2">
+            <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-blue-950 text-blue-300 border border-blue-900">
+              <svg class="w-3 h-3 mr-1 inline" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+              </svg>
+              ${citationLabel}
+            </span>
+            <span class="text-xs text-slate-400 font-mono">
+              Líneas: ${p.lines}
+            </span>
+          </div>
+
+          <div class="flex items-center space-x-2 shrink-0">
+            <!-- RAG Metrics Tooltip Trigger (No random colors) -->
+            <div class="relative group/rag inline-block">
+              <button
+                type="button"
+                tabindex="0"
+                class="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 text-xs font-mono transition-colors flex items-center space-x-1.5 cursor-help"
+                title="Inspeccionar métricas de recuperación RAG"
+              >
+                <svg class="w-3.5 h-3.5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                </svg>
+                <span>Puntajes RAG</span>
+                <span class="text-slate-400 font-sans text-[11px]">(Rerank: ${Number(p.rerank_score).toFixed(2)})</span>
+              </button>
+
+              <!-- Popover Tooltip with NO random colors -->
+              <div class="invisible group-hover/rag:visible group-focus-within/rag:visible absolute right-0 top-full mt-1.5 z-30 w-64 p-3 bg-slate-900 border border-slate-700 rounded-lg shadow-xl text-xs space-y-2 pointer-events-none transition-all">
+                <div class="text-[11px] font-semibold text-slate-300 border-b border-slate-800 pb-1 flex items-center justify-between">
+                  <span>Métricas de Recuperación RAG</span>
+                  <span class="text-slate-400 font-mono text-[10px]">Dual-Modal</span>
+                </div>
+                <div class="space-y-1.5 text-xs">
+                  <div class="flex justify-between items-center text-slate-400">
+                    <span>Similitud Densa (Dense):</span>
+                    <span class="font-mono text-slate-200 tabular-nums">${p.dense_score !== null && p.dense_score !== undefined ? Number(p.dense_score).toFixed(4) : "—"}</span>
+                  </div>
+                  <div class="flex justify-between items-center text-slate-400">
+                    <span>Rango Léxico (BM25):</span>
+                    <span class="font-mono text-slate-200 tabular-nums">${p.bm25_rank !== null && p.bm25_rank !== undefined ? `#${p.bm25_rank}` : "—"}</span>
+                  </div>
+                  <div class="flex justify-between items-center text-slate-400">
+                    <span>Reciprocal Rank (RRF):</span>
+                    <span class="font-mono text-slate-200 tabular-nums">${Number(p.rrf_score).toFixed(4)}</span>
+                  </div>
+                  <div class="flex justify-between items-center text-slate-400">
+                    <span>Rerank Cross-Encoder:</span>
+                    <span class="font-mono text-slate-200 font-semibold tabular-nums">${Number(p.rerank_score).toFixed(4)}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Copy Hash Button -->
+            <button
+              type="button"
+              data-copy-hash="${p.chunk_sha256}"
+              class="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition-colors text-xs flex items-center space-x-1 border border-slate-700 shrink-0"
+              title="Copiar hash del fragmento"
+            >
+              <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
+              </svg>
+              <span class="font-mono text-[10px]">${shortSha}…</span>
+            </button>
+          </div>
         </div>
-        <blockquote class="text-sm text-slate-200 bg-slate-950/60 border border-slate-800/80 rounded-lg p-3 font-serif italic">
-          "${p.text}"
+
+        <blockquote class="text-xs text-slate-200 bg-slate-950/60 border border-slate-800/80 rounded-lg p-3 leading-relaxed font-sans">
+          "${cleanText}"
         </blockquote>
-        <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2 border-t border-slate-800/80 text-[11px]">
-          <div class="bg-slate-950/60 p-1.5 rounded border border-slate-800 flex justify-between">
-            <span class="text-slate-400">Dense:</span>
-            <span class="font-mono text-slate-200">${p.dense_score !== null && p.dense_score !== undefined ? Number(p.dense_score).toFixed(4) : "—"}</span>
-          </div>
-          <div class="bg-slate-950/60 p-1.5 rounded border border-slate-800 flex justify-between">
-            <span class="text-slate-400">BM25:</span>
-            <span class="font-mono text-slate-200">${p.bm25_rank !== null && p.bm25_rank !== undefined ? `#${p.bm25_rank}` : "—"}</span>
-          </div>
-          <div class="bg-slate-950/60 p-1.5 rounded border border-slate-800 flex justify-between">
-            <span class="text-slate-400">RRF:</span>
-            <span class="font-mono text-blue-400">${Number(p.rrf_score).toFixed(4)}</span>
-          </div>
-          <div class="bg-slate-950/60 p-1.5 rounded border border-slate-800 flex justify-between">
-            <span class="text-slate-400">Rerank:</span>
-            <span class="font-mono text-emerald-400">${Number(p.rerank_score).toFixed(4)}</span>
-          </div>
-        </div>
       </div>
     `;
+  }
+
+  function attachCopyHashListeners() {
+    document.querySelectorAll<HTMLButtonElement>("button[data-copy-hash]").forEach((btn) => {
+      if (btn.hasAttribute("data-copy-bound")) return;
+      btn.setAttribute("data-copy-bound", "true");
+      btn.addEventListener("click", () => {
+        const hash = btn.getAttribute("data-copy-hash");
+        if (hash && hash.trim().length > 0) {
+          navigator.clipboard.writeText(hash.trim());
+          const original = btn.innerHTML;
+          btn.innerHTML = `<span class="text-emerald-400 text-[10px]">¡Copiado!</span>`;
+          setTimeout(() => {
+            btn.innerHTML = original;
+          }, 1500);
+        }
+      });
+    });
   }
 
   function renderRagRetrievals(records: Array<{ passages: RetrievalPassage[] }>) {
@@ -522,6 +624,7 @@ import {
       } else {
         ragContainer.insertAdjacentHTML("afterbegin", html);
       }
+      attachCopyHashListeners();
     }
   }
 
@@ -621,6 +724,7 @@ import {
           } else {
             ragContainer.insertAdjacentHTML("afterbegin", html);
           }
+          attachCopyHashListeners();
         }
       }
     }

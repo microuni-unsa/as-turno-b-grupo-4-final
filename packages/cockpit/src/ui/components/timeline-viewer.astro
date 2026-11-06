@@ -34,7 +34,7 @@ function getEventLabel(type: string): string {
   <div class="flex items-center justify-between pb-3 border-b border-slate-800">
     <div class="flex items-center space-x-2">
       <Activity class="w-4 h-4 text-blue-400" />
-      <h3 class="text-sm font-semibold text-white">Línea de Tiempo Forense</h3>
+      <h3 class="text-sm font-semibold text-white">Historial de Eventos</h3>
     </div>
     <span class="text-xs font-mono px-2 py-0.5 rounded bg-blue-950 text-blue-400 border border-blue-900">
       {incidentCode}
@@ -46,7 +46,7 @@ function getEventLabel(type: string): string {
       events.length === 0 ? (
         <div class="text-center py-8 text-slate-500 text-xs space-y-1">
           <Clock class="w-6 h-6 mx-auto text-slate-600 mb-1" />
-          <p class="font-medium text-slate-400">Sin eventos forenses registrados</p>
+          <p class="font-medium text-slate-400">Sin eventos registrados</p>
           <p class="text-[11px]">Las transiciones de estado y notificaciones aparecerán aquí automáticamente.</p>
         </div>
       ) : (

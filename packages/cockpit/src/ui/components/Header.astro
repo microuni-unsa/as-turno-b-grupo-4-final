@@ -69,7 +69,7 @@ const { breadcrumb } = Astro.props;
     if (status === "connected") {
       pulseDot.className = "w-2 h-2 rounded-full bg-emerald-400 animate-pulse";
       statusBadge.className = "flex items-center space-x-2 px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-950/60 text-emerald-300 border border-emerald-800/70";
-      statusText.textContent = "En vivo (SSE)";
+      statusText.textContent = "En vivo";
     } else if (status === "connecting") {
       pulseDot.className = "w-2 h-2 rounded-full bg-amber-400";
       statusBadge.className = "flex items-center space-x-2 px-2.5 py-1 rounded-full text-xs font-medium bg-amber-950/60 text-amber-300 border border-amber-800/70";

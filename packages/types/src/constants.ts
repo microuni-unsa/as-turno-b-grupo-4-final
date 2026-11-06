@@ -223,11 +223,11 @@ export const CONSTANTS = {
   EVENT_SCHEDULER_TIMER_TICK: "scheduler:timer_tick",
 
   // Brand Titles & Locales
-  BRAND_TITLE_DEFAULT: "Glass-Box Cockpit | UNSA GESTITEL",
-  BRAND_TITLE_LOGIN: "Iniciar Sesión | Glass-Box Cockpit UNSA",
-  BRAND_TITLE_REDIRECTING: "Redireccionando... | Glass-Box Cockpit",
-  BRAND_TITLE_INCIDENTS: "Incidentes | Glass-Box Cockpit",
-  BRAND_TITLE_NEW: "Nuevo Incidente Guiado | Glass-Box Cockpit",
+  BRAND_TITLE_DEFAULT: "UNSA GESTITEL",
+  BRAND_TITLE_LOGIN: "Iniciar Sesión | UNSA",
+  BRAND_TITLE_REDIRECTING: "Redireccionando... | UNSA",
+  BRAND_TITLE_INCIDENTS: "Incidentes | UNSA",
+  BRAND_TITLE_NEW: "Nuevo Incidente | UNSA",
   LOCALE_ES_PE: "es-PE",
   LOCALE_ES_ES: "es-ES",
 
