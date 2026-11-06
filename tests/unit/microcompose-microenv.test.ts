@@ -1,6 +1,9 @@
+import fs from "node:fs";
+import path from "node:path";
 import {
   createStack,
   DEFAULT_STACK_PORT_RANGE,
+  initAppEnv,
   matrix,
   schema,
   stack,
@@ -40,5 +43,34 @@ describe("Microenv & Microcompose Adoption Suite", () => {
     expect(DEFAULT_STACK_PORT_RANGE).toEqual([43000, 43999]);
     expect(stack).toBeDefined();
     expect(typeof stack.up).toBe("function");
+  });
+
+  it("ensures no legacy .enc.env or .env file exists on disk", () => {
+    const rootDir = process.cwd();
+    expect(fs.existsSync(path.resolve(rootDir, ".enc.env"))).toBe(false);
+    expect(fs.existsSync(path.resolve(rootDir, ".env"))).toBe(false);
+  });
+
+  it("resolves encrypted dev and prod configurations through microenv without .env", async () => {
+    const devResolved = await matrix.resolve("dev");
+    expect(Object.keys(devResolved.values).length).toBe(51);
+    expect(devResolved.values.PIMS_BASE_URL).toBeDefined();
+    expect(devResolved.values.OPENAI_API_KEY).toBeDefined();
+    expect(devResolved.values.LOG_PII).toBe("false");
+
+    const prodResolved = await matrix.resolve("prod");
+    expect(Object.keys(prodResolved.values).length).toBe(51);
+    expect(prodResolved.values.PIMS_BASE_URL).toBeDefined();
+    expect(prodResolved.values.OPENAI_API_KEY).toBeDefined();
+    expect(prodResolved.values.LOG_PII).toBe("false");
+  });
+
+  it("hydrates and restores environment via initAppEnv and matrix.down", async () => {
+    const preKey = process.env.OPENAI_API_KEY;
+    await initAppEnv("dev");
+    expect(process.env.OPENAI_API_KEY).toBeDefined();
+    expect(matrix.env).toBeDefined();
+    await matrix.down();
+    expect(process.env.OPENAI_API_KEY).toBe(preKey);
   });
 });

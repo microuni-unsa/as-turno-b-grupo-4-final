@@ -123,27 +123,17 @@ export async function startIntegrationHarness(options?: {
   autoNotify?: boolean;
   chatHandler?: HarnessChatHandler;
   presidioUrl?: string;
+  includePresidio?: boolean;
 }): Promise<IntegrationHarness> {
   const projectRoot = process.cwd();
   const now = new Date("2026-10-01T20:00:00.000Z");
-  const stack = createStack({ projectRoot, includePresidio: false });
+  const includePresidio = options?.includePresidio ?? true;
+  const stack = createStack({ projectRoot, includePresidio });
   const stackEnv = await stack.up();
 
-  let connectionUri: string | undefined;
-  if (
-    typeof stackEnv.EVIDENCE_DB_URL === "string" &&
-    stackEnv.EVIDENCE_DB_URL.length > 0
-  ) {
-    connectionUri = stackEnv.EVIDENCE_DB_URL;
-  } else if (
-    typeof process.env.EVIDENCE_DB_URL === "string" &&
-    process.env.EVIDENCE_DB_URL.length > 0
-  ) {
-    connectionUri = process.env.EVIDENCE_DB_URL;
-  } else {
-    throw new Error(
-      "EVIDENCE_DB_URL was not populated by microcompose stack or process.env",
-    );
+  const connectionUri = stackEnv.EVIDENCE_DB_URL;
+  if (typeof connectionUri !== "string" || connectionUri.trim().length === 0) {
+    throw new Error("EVIDENCE_DB_URL was not populated by microcompose stack");
   }
 
   const container = {
@@ -411,7 +401,9 @@ export async function startIntegrationHarness(options?: {
   const presidioUrl =
     options !== undefined && options.presidioUrl !== undefined
       ? options.presidioUrl
-      : TEST_PRESIDIO_URL;
+      : stackEnv.PRESIDIO_URL !== undefined && stackEnv.PRESIDIO_URL.length > 0
+        ? stackEnv.PRESIDIO_URL
+        : TEST_PRESIDIO_URL;
 
   const config = loadConfig({
     PIMS_BASE_URL: server.url,

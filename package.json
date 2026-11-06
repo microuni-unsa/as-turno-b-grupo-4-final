@@ -7,10 +7,10 @@
     "packages/*"
   ],
   "scripts": {
-    "test": "vitest run",
-    "test:unit": "vitest run tests/unit",
-    "test:integration": "vitest run tests/integration",
-    "test:acceptance": "vitest run tests/acceptance",
+    "test": "bun --bun vitest run",
+    "test:unit": "bun --bun vitest run tests/unit",
+    "test:integration": "bun --bun vitest run tests/integration",
+    "test:acceptance": "bun --bun vitest run tests/acceptance",
     "check": "biome check && tsc --noEmit",
     "check:fix": "biome check --write && tsc --noEmit",
     "dev:ui": "bun --filter @pims/cockpit dev:ui",
@@ -23,8 +23,7 @@
     "env:check": "microenv check --def ./packages/config/src/env-matrix.ts",
     "env:diff": "microenv diff --def ./packages/config/src/env-matrix.ts dev prod",
     "env:materialize:dev": "microenv materialize --def ./packages/config/src/env-matrix.ts --env dev --out .env --force",
-    "env:materialize:prod": "microenv materialize --def ./packages/config/src/env-matrix.ts --env prod --out .env --force",
-    "decrypt": "sops -d --output .env .enc.env"
+    "env:materialize:prod": "microenv materialize --def ./packages/config/src/env-matrix.ts --env prod --out .env --force"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.6.4",

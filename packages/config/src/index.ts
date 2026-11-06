@@ -790,6 +790,14 @@ export function loadConfig(
   };
 }
 
+export async function initAppEnv(
+  preset: "dev" | "prod" = "dev",
+  opts?: { allowLocal?: boolean },
+): Promise<void> {
+  const { matrix } = await import("@pims/config/env-matrix.ts");
+  await matrix.up(preset, { allowLocal: opts?.allowLocal ?? true });
+}
+
 export * from "@pims/config/env-matrix.ts";
 export * from "@pims/config/env-schema.ts";
 export * from "@pims/config/stack-def.ts";

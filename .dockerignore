@@ -7,7 +7,6 @@ dist
 .playwright-mcp
 .astro
 .sops.yaml
-.enc.env
 *.local.ts
 envs
 data
