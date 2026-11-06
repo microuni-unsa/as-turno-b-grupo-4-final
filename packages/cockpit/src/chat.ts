@@ -708,12 +708,12 @@ export async function handleChat(
       }
 
       if (citation === undefined) {
+        const normalizedChunkId = trimmed.replace(/^([a-z0-9_-]+):\1:/i, "$1:");
         const directChunk =
           deps.ragService.getChunk(trimmed) ??
-          (trimmed.includes(":")
-            ? undefined
-            : (deps.ragService.getChunk(`gdpr-full:${trimmed}`) ??
-              deps.ragService.getChunk(`iso27701:${trimmed}`)));
+          deps.ragService.getChunk(normalizedChunkId) ??
+          deps.ragService.getChunk(`gdpr-full:${normalizedChunkId}`) ??
+          deps.ragService.getChunk(`iso27701:${normalizedChunkId}`);
         if (directChunk !== undefined) {
           citation = {
             citation: `${directChunk.doc_id}:${directChunk.chunk_id}:${directChunk.lines}`,
