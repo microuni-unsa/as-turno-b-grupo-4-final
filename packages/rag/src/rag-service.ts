@@ -76,6 +76,10 @@ export class RAGService {
     return `${passage.doc_id}:${passage.chunk_id}:${passage.lines}`;
   }
 
+  getChunk(chunkId: string): CorpusChunk | undefined {
+    return this.indexer.getChunk(chunkId);
+  }
+
   getPassageByCitation(citation: string): {
     passage: Passage;
     chunk: CorpusChunk;

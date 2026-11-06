@@ -358,6 +358,93 @@ export async function handleChat(
   let incidentStatus: JsonValue = null;
   const citationEntries: JsonValue[] = [];
   const citationById = new Map<string, ChatCitation>();
+
+  function registerCitation(citation: ChatCitation, citationId?: string): void {
+    if (citationId !== undefined) {
+      citationById.set(citationId, citation);
+      citationById.set(citationId.toLowerCase(), citation);
+    }
+    citationById.set(citation.chunk_id, citation);
+    citationById.set(citation.chunk_id.toLowerCase(), citation);
+    citationById.set(citation.doc_id, citation);
+    citationById.set(citation.doc_id.toLowerCase(), citation);
+    citationById.set(citation.citation, citation);
+    citationById.set(citation.citation.toLowerCase(), citation);
+
+    if (
+      citation.citation.startsWith(`${citation.doc_id}:${citation.doc_id}:`)
+    ) {
+      const single = citation.citation.slice(citation.doc_id.length + 1);
+      citationById.set(single, citation);
+      citationById.set(single.toLowerCase(), citation);
+    }
+    const double = `${citation.doc_id}:${citation.citation}`;
+    citationById.set(double, citation);
+    citationById.set(double.toLowerCase(), citation);
+
+    const headerMatch = citation.text.match(
+      /^\[DOC:([^|]+)\s*\|\s*CLAUSE:([^|]+)\s*\|\s*NORMATIVE:([^\]]+)\]/i,
+    );
+    if (headerMatch !== null && headerMatch[2] !== undefined) {
+      const clause = headerMatch[2].trim();
+      const docId = citation.doc_id;
+      citationById.set(`${docId} | CLAUSE:${clause}`, citation);
+      citationById.set(`${docId} | CLAUSE:${clause}`.toLowerCase(), citation);
+      citationById.set(`${docId}:${docId} | CLAUSE:${clause}`, citation);
+      citationById.set(
+        `${docId}:${docId} | CLAUSE:${clause}`.toLowerCase(),
+        citation,
+      );
+      citationById.set(`${docId}:${clause}`, citation);
+      citationById.set(`${docId}:${clause}`.toLowerCase(), citation);
+      citationById.set(`DOC:${docId} | CLAUSE:${clause}`, citation);
+      citationById.set(
+        `DOC:${docId} | CLAUSE:${clause}`.toLowerCase(),
+        citation,
+      );
+      citationById.set(clause, citation);
+      citationById.set(clause.toLowerCase(), citation);
+    }
+  }
+
+  for (const decision of pendingDecisions) {
+    if (Array.isArray(decision.findings)) {
+      for (const finding of decision.findings) {
+        registerCitation(finding);
+      }
+    }
+    if (
+      decision.proposal !== null &&
+      decision.proposal !== undefined &&
+      typeof decision.proposal === "object" &&
+      Array.isArray((decision.proposal as Record<string, unknown>).citations)
+    ) {
+      const citations = (decision.proposal as Record<string, unknown>)
+        .citations as unknown[];
+      for (const rawCitation of citations) {
+        if (typeof rawCitation === "string" && deps.ragService !== undefined) {
+          try {
+            const { chunk } = deps.ragService.getPassageByCitation(rawCitation);
+            registerCitation({
+              citation: rawCitation,
+              doc_id: chunk.doc_id,
+              chunk_id: chunk.chunk_id,
+              lines: chunk.lines,
+              chunk_sha256: chunk.sha256,
+              dense_score: null,
+              bm25_rank: null,
+              rrf_score: 1.0,
+              rerank_score: 1.0,
+              text: chunk.text,
+            });
+          } catch {
+            // Unindexed proposal citation; skip registration
+          }
+        }
+      }
+    }
+  }
+
   let ragCitations: { passages: RetrievalPassage[]; citations: string[] } = {
     passages: [],
     citations: [],
@@ -399,41 +486,7 @@ export async function handleChat(
       citationEntries.push(
         ...chatCitations.map((citation, index) => {
           const citationId = `C${index + 1}`;
-          citationById.set(citationId, citation);
-          citationById.set(citationId.toLowerCase(), citation);
-          citationById.set(citation.chunk_id, citation);
-          citationById.set(citation.chunk_id.toLowerCase(), citation);
-          citationById.set(citation.doc_id, citation);
-          citationById.set(citation.doc_id.toLowerCase(), citation);
-          citationById.set(citation.citation, citation);
-          citationById.set(citation.citation.toLowerCase(), citation);
-
-          const headerMatch = citation.text.match(
-            /^\[DOC:([^|]+)\s*\|\s*CLAUSE:([^|]+)\s*\|\s*NORMATIVE:([^\]]+)\]/i,
-          );
-          if (headerMatch !== null && headerMatch[2] !== undefined) {
-            const clause = headerMatch[2].trim();
-            const docId = citation.doc_id;
-            citationById.set(`${docId} | CLAUSE:${clause}`, citation);
-            citationById.set(
-              `${docId} | CLAUSE:${clause}`.toLowerCase(),
-              citation,
-            );
-            citationById.set(`${docId}:${docId} | CLAUSE:${clause}`, citation);
-            citationById.set(
-              `${docId}:${docId} | CLAUSE:${clause}`.toLowerCase(),
-              citation,
-            );
-            citationById.set(`${docId}:${clause}`, citation);
-            citationById.set(`${docId}:${clause}`.toLowerCase(), citation);
-            citationById.set(`DOC:${docId} | CLAUSE:${clause}`, citation);
-            citationById.set(
-              `DOC:${docId} | CLAUSE:${clause}`.toLowerCase(),
-              citation,
-            );
-            citationById.set(clause, citation);
-            citationById.set(clause.toLowerCase(), citation);
-          }
+          registerCitation(citation, citationId);
 
           return {
             citation_id: citationId,
@@ -454,6 +507,47 @@ export async function handleChat(
       } else {
         throw err;
       }
+    }
+  }
+
+  if (citationEntries.length === 0 && deps.ragService !== undefined) {
+    const ragService = deps.ragService;
+    try {
+      const generalRag = await instrumentSpan(
+        "query_rag_knowledge",
+        "tool",
+        { query: request.message },
+        () => ragService.query(request.message),
+        (res) => ({
+          citations_count: res.citations.length,
+          passages_count: res.passages.length,
+        }),
+      );
+      toolCalls.push("query_rag_knowledge");
+      const chatCitations = toChatCitations(
+        generalRag.passages,
+        generalRag.citations,
+      );
+      citationEntries.push(
+        ...chatCitations.map((citation, index) => {
+          const citationId = `C${citationEntries.length + index + 1}`;
+          registerCitation(citation, citationId);
+
+          return {
+            citation_id: citationId,
+            doc_id: citation.doc_id,
+            chunk_id: citation.chunk_id,
+            chunk_sha256: citation.chunk_sha256,
+            dense_score: citation.dense_score,
+            bm25_rank: citation.bm25_rank,
+            rrf_score: citation.rrf_score,
+            rerank_score: citation.rerank_score,
+            text: citation.text,
+          };
+        }),
+      );
+    } catch {
+      // General RAG query failed or corpus empty; proceed without fatal interruption
     }
   }
 
@@ -577,6 +671,68 @@ export async function handleChat(
       const stripped = trimmed.replace(/^\[+|\]+$/g, "").trim();
       citation =
         citationById.get(stripped) ?? citationById.get(stripped.toLowerCase());
+    }
+    if (citation === undefined && deps.ragService !== undefined) {
+      const candidates: string[] = [
+        trimmed,
+        trimmed.replace(/^\[+|\]+$/g, "").trim(),
+      ];
+      const doubleMatch = trimmed.match(/^([a-z0-9_-]+):\1:(.+)$/i);
+      if (doubleMatch?.[1] && doubleMatch[2]) {
+        candidates.push(`${doubleMatch[1]}:${doubleMatch[2]}`);
+      }
+      const singleMatch = trimmed.match(/^([a-z0-9_-]+):(\d{4}):(.+)$/i);
+      if (singleMatch?.[1] && singleMatch[2] && singleMatch[3]) {
+        candidates.push(
+          `${singleMatch[1]}:${singleMatch[1]}:${singleMatch[2]}:${singleMatch[3]}`,
+        );
+      }
+
+      for (const candidate of candidates) {
+        try {
+          const { chunk } = deps.ragService.getPassageByCitation(candidate);
+          citation = {
+            citation: candidate,
+            doc_id: chunk.doc_id,
+            chunk_id: chunk.chunk_id,
+            lines: chunk.lines,
+            chunk_sha256: chunk.sha256,
+            dense_score: null,
+            bm25_rank: null,
+            rrf_score: 1.0,
+            rerank_score: 1.0,
+            text: chunk.text,
+          };
+          registerCitation(citation);
+          break;
+        } catch {
+          // Candidate citation could not be resolved from RAG corpus
+        }
+      }
+
+      if (citation === undefined) {
+        const directChunk =
+          deps.ragService.getChunk(trimmed) ??
+          (trimmed.includes(":")
+            ? undefined
+            : (deps.ragService.getChunk(`gdpr-full:${trimmed}`) ??
+              deps.ragService.getChunk(`iso27701:${trimmed}`)));
+        if (directChunk !== undefined) {
+          citation = {
+            citation: `${directChunk.doc_id}:${directChunk.chunk_id}:${directChunk.lines}`,
+            doc_id: directChunk.doc_id,
+            chunk_id: directChunk.chunk_id,
+            lines: directChunk.lines,
+            chunk_sha256: directChunk.sha256,
+            dense_score: null,
+            bm25_rank: null,
+            rrf_score: 1.0,
+            rerank_score: 1.0,
+            text: directChunk.text,
+          };
+          registerCitation(citation);
+        }
+      }
     }
     if (citation === undefined) {
       throw new CitationFabricatedError(
