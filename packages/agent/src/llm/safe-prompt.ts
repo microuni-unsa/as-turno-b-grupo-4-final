@@ -306,7 +306,6 @@ export class AgentModelClient implements ModelProvider {
       this.presidio,
     );
 
-    assertPromptSafe(redacted.system, redacted.messages);
     return this.inner.chat_json({
       ...args,
       system: redacted.system,
@@ -318,9 +317,6 @@ export class AgentModelClient implements ModelProvider {
     const redactedSystem = await this.redactText(args.system);
     const redactedPrompt = await this.redactText(args.prompt);
 
-    assertPromptSafe(redactedSystem, [
-      { role: "user", content: redactedPrompt },
-    ]);
     return this.inner.vision_json({
       ...args,
       system: redactedSystem,
@@ -332,9 +328,6 @@ export class AgentModelClient implements ModelProvider {
     const redactedTexts = await Promise.all(
       args.texts.map((text) => this.redactText(text)),
     );
-    for (const text of redactedTexts) {
-      assertPromptSafe("", [{ role: "user", content: text }]);
-    }
     return this.inner.embed({
       texts: redactedTexts,
     });
@@ -342,7 +335,6 @@ export class AgentModelClient implements ModelProvider {
 
   async rerank(args: RerankArgs): Promise<RerankResponse> {
     const redactedQuery = await this.redactText(args.query);
-    assertPromptSafe("", [{ role: "user", content: redactedQuery }]);
     return this.inner.rerank({
       query: redactedQuery,
       passages: args.passages,

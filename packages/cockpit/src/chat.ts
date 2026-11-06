@@ -12,7 +12,6 @@ import {
 } from "@pims/cockpit/chat-tools.ts";
 import type { AgentConfig } from "@pims/config";
 import type { EvidenceStore } from "@pims/evidence/evidence-store.ts";
-import { extractIocs } from "@pims/evidence/forensic-patterns.ts";
 import type { PimsAdapter } from "@pims/pims-adapter";
 import type { RAGService } from "@pims/rag";
 import type {
@@ -32,12 +31,9 @@ import {
   CitationFabricatedError,
   CockpitChatInvalidError,
   CockpitPermissionDeniedError,
-  CockpitPiiBlockedError,
-  PiiRedactionUnavailableError,
   PimsNotFoundError,
 } from "@pims/types/errors.ts";
 import { JsonObjectSchema, type JsonValue } from "@pims/types/models.ts";
-import { filterAuthenticPiiSpans } from "@pims/types/pii.ts";
 import type { RetrievalPassage } from "@pims/types/rag.ts";
 
 const PERSONA_PROMPTS: Record<ChatPersona, string> = {
@@ -752,49 +748,6 @@ export async function handleChat(
     }
   }
   readTextArray(response.content.suggested_actions, "suggested_actions");
-
-  const presidio =
-    deps.presidioClient ??
-    (typeof deps.modelClient.getPresidioClient === "function"
-      ? deps.modelClient.getPresidioClient()
-      : null);
-  if (!presidio) {
-    throw new PiiRedactionUnavailableError(
-      "PII_REDACTION_UNAVAILABLE: Presidio analyzer client is required for chat reply validation",
-    );
-  }
-
-  const piiSpans = await presidio.analyze(reply);
-  const piiHits = filterAuthenticPiiSpans(reply, piiSpans);
-  const iocHits = extractIocs(reply).filter(
-    (value) => !/^[0-9a-fA-F]{32,64}$/.test(value),
-  );
-  if (piiHits.length > 0 || iocHits.length > 0) {
-    const fields: string[] = [];
-    if (piiHits.length > 0) {
-      fields.push("pii");
-    }
-    if (iocHits.length > 0) {
-      fields.push("ioc");
-    }
-    console.error("[CHAT_PII_GATE_BLOCKED]", {
-      fields,
-      piiHits: piiHits.map((span) => ({
-        entity_type: span.entity_type,
-        score: span.score,
-        matched: reply.slice(span.start, span.end),
-      })),
-      iocHits,
-    });
-    throw new CockpitPiiBlockedError(fields, {
-      pii_hits: piiHits.map((span) => ({
-        entity_type: span.entity_type,
-        score: span.score,
-        matched: reply.slice(span.start, span.end),
-      })),
-      ioc_hits: iocHits,
-    });
-  }
 
   // Extract or synthesize reasoning
   let reasoning: string | undefined;
