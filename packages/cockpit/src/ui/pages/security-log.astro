@@ -126,13 +126,17 @@ import {
 <script>
   import { eventStore } from "@pims/cockpit/ui/lib/event-store.ts";
   import { getSession, hasPermission } from "@pims/cockpit/ui/lib/session.ts";
-  import type { AgentEvent } from "@pims/types/agent.ts";
+  import type {
+    AgentEvent,
+    RoleTransitionAgentEvent,
+    ToolMutationAgentEvent,
+  } from "@pims/types/agent.ts";
 
   function getEl<T extends HTMLElement>(id: string): T | null {
     return document.getElementById(id) as T | null;
   }
 
-  let mutations: any[] = [];
+  let mutations: ToolMutationAgentEvent[] = [];
   let roleTransitionsCount = 0;
 
   function initSecurityLogPage() {
@@ -163,7 +167,7 @@ import {
   document.addEventListener("astro:page-load", initSecurityLogPage);
   initSecurityLogPage();
 
-  function addMutation(event: any) {
+  function addMutation(event: ToolMutationAgentEvent) {
     mutations.unshift(event);
     if (mutations.length > 100) mutations.pop();
 
@@ -229,7 +233,7 @@ import {
       .join("");
   }
 
-  function addRoleTransition(event: any) {
+  function addRoleTransition(event: RoleTransitionAgentEvent) {
     roleTransitionsCount += 1;
     const statRoles = getEl("stat-role-transitions");
     const roleContainer = getEl("role-transitions-container");

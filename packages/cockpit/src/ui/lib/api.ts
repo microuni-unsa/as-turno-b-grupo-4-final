@@ -13,6 +13,9 @@ import type {
   ExemptionAttestationResponse,
   RevisionRequest,
 } from "@pims/types/cockpit.ts";
+import type { ExemptionScope } from "@pims/types/notices.ts";
+
+export type { ExemptionAttestationRequest, ExemptionScope, RevisionRequest };
 
 export class SessionExpiredError extends Error {
   constructor(message = "La sesión ha expirado o no es válida") {

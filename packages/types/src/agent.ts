@@ -202,6 +202,14 @@ export const AgentEventSchema = z.discriminatedUnion("type", [
   }),
 ]);
 export type AgentEvent = z.infer<typeof AgentEventSchema>;
+export type ToolMutationAgentEvent = Extract<
+  AgentEvent,
+  { type: "tool:mutation" }
+>;
+export type RoleTransitionAgentEvent = Extract<
+  AgentEvent,
+  { type: "role:transition" }
+>;
 
 export const WATCHER_STAGES = [
   "detected",

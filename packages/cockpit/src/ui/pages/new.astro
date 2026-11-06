@@ -1334,7 +1334,7 @@ import {
         const data = await res.json();
         if (data.type === "enum" && data.options) {
           let html = `<div class="markdown-content mb-2 text-slate-400">${renderMarkdown(data.explanation)}</div><ul class="space-y-1.5">`;
-          data.options.forEach((opt: any) => {
+          data.options.forEach((opt: { code: string; label: string; description?: string }) => {
             const desc = opt.description ? `<div class="markdown-content text-[11px] text-slate-400 mt-0.5">${renderMarkdownInline(opt.description)}</div>` : "";
             html += `<li class="p-2 rounded bg-slate-950 border border-slate-800"><span class="font-bold text-blue-400">${opt.code}</span> - <span class="text-white">${opt.label}</span>${desc}</li>`;
           });
@@ -1350,7 +1350,7 @@ import {
             modalExplainCitations
           ) {
             let citHtml = "<p class='font-semibold mt-2'>Citas normativas:</p>";
-            data.citations.forEach((c: any) => {
+            data.citations.forEach((c: { citation: string; text?: string }) => {
               const citText = typeof c.text === "string" ? c.text.slice(0, 150) : "";
               citHtml += `<div class="p-1.5 rounded bg-blue-950/30 border border-blue-900/50 mt-1">${c.citation}: ${citText}...</div>`;
             });
@@ -1412,7 +1412,7 @@ import {
 
     // Collect dynamic action cards (if any were added)
     const actionCards = document.querySelectorAll(".action-card");
-    const actions: any[] = [];
+    const actions: Array<{ action_type: string; responsible: string; action_date: string; description: string; evidence: string | null; }> = [];
     actionCards.forEach((card) => {
       const typeEl = card.querySelector(".action-type") as HTMLSelectElement | null;
       const respEl = card.querySelector(".action-responsible") as HTMLInputElement | null;
@@ -1447,7 +1447,7 @@ import {
           errorMsg +=
             "\n" +
             errorData.details
-              .map((d: any) => `• ${d.path.join(".")}: ${d.message}`)
+              .map((d: { path: (string | number)[]; message: string }) => `• ${d.path.join(".")}: ${d.message}`)
               .join("\n");
         }
         alert(`Error al crear incidente:\n${errorMsg}`);

@@ -7,6 +7,12 @@
       "skillPath": "archify/SKILL.md",
       "computedHash": "e9ef0923cda908886e667eb48e36b29e81d0a7a7b9fe2bc05f3779be271e5119"
     },
+    "codebase-cleanup": {
+      "source": "darkmatter/skills",
+      "sourceType": "github",
+      "skillPath": "skills/codebase-cleanup/SKILL.md",
+      "computedHash": "0b7160c6ba228ab5975b3e8bfc3a831d2ad0a5cb89166b5952c1ae6219ad5ded"
+    },
     "humanizer": {
       "source": "blader/humanizer",
       "sourceType": "github",

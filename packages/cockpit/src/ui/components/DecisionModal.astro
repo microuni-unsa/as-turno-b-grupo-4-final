@@ -205,7 +205,9 @@ import { CheckCircle2, ShieldAlert, X } from "lucide-astro";
 <script>
   import { approveIncident, attestExemption, requestRevision } from "@pims/cockpit/ui/lib/api.ts";
   import { renderMarkdown, renderMarkdownInline } from "@pims/cockpit/ui/lib/markdown.ts";
+  import type { RevisionRequest } from "@pims/types/cockpit.ts";
   import { CONSTANTS } from "@pims/types/constants.ts";
+  import type { ExemptionScope } from "@pims/types/notices.ts";
 
   const modal = document.getElementById("cockpit-decision-modal") as HTMLDialogElement | null;
   const modalAlert = document.getElementById("modal-alert");
@@ -318,7 +320,7 @@ import { CheckCircle2, ShieldAlert, X } from "lucide-astro";
               <div class="space-y-1">
                 <span class="font-semibold text-slate-200">Medidas Adoptadas:</span>
                 <ul class="list-disc pl-4 text-slate-400 space-y-0.5">
-                  ${prop.item_d_measures_taken.map((m: any) => `<li>${renderMarkdownInline(String(m))}</li>`).join("")}
+                  ${prop.item_d_measures_taken.map((m: unknown) => `<li>${renderMarkdownInline(String(m))}</li>`).join("")}
                 </ul>
               </div>
             `;
@@ -331,7 +333,7 @@ import { CheckCircle2, ShieldAlert, X } from "lucide-astro";
               <div class="space-y-1">
                 <span class="font-semibold text-slate-200">Medidas Propuestas:</span>
                 <ul class="list-disc pl-4 text-slate-400 space-y-0.5">
-                  ${prop.item_d_measures_proposed.map((m: any) => `<li>${renderMarkdownInline(String(m))}</li>`).join("")}
+                  ${prop.item_d_measures_proposed.map((m: unknown) => `<li>${renderMarkdownInline(String(m))}</li>`).join("")}
                 </ul>
               </div>
             `;
@@ -355,7 +357,7 @@ import { CheckCircle2, ShieldAlert, X } from "lucide-astro";
               <div class="space-y-1">
                 <span class="font-semibold text-slate-200">Recomendaciones:</span>
                 <ul class="list-disc pl-4 text-slate-400 space-y-0.5">
-                  ${prop.safety_recommendations.map((r: any) => `<li>${renderMarkdownInline(String(r))}</li>`).join("")}
+                  ${prop.safety_recommendations.map((r: unknown) => `<li>${renderMarkdownInline(String(r))}</li>`).join("")}
                 </ul>
               </div>
             `;
@@ -366,7 +368,7 @@ import { CheckCircle2, ShieldAlert, X } from "lucide-astro";
               <div class="space-y-1 pt-1 border-t border-slate-800">
                 <span class="font-semibold text-slate-300">Citas Normativas:</span>
                 <div class="flex flex-wrap gap-1 mt-1">
-                  ${prop.citations.map((c: any) => `<span class="px-1.5 py-0.5 rounded bg-blue-950 text-blue-300 border border-blue-900 text-[10px] font-mono">${escapeHtml(String(c))}</span>`).join("")}
+                  ${prop.citations.map((c: unknown) => `<span class="px-1.5 py-0.5 rounded bg-blue-950 text-blue-300 border border-blue-900 text-[10px] font-mono">${escapeHtml(String(c))}</span>`).join("")}
                 </div>
               </div>
             `;
@@ -461,7 +463,7 @@ import { CheckCircle2, ShieldAlert, X } from "lucide-astro";
       if (!packTypeEl || !reasonEl) {
         throw new Error("Campos del formulario de revisión no encontrados en el DOM");
       }
-      const packType = packTypeEl.value as any;
+      const packType = packTypeEl.value as RevisionRequest["pack_type"];
       const reason = reasonEl.value.trim();
       if (reason.length === 0) {
         showAlert("Debe ingresar el motivo de la revisión requerida", true);
@@ -502,7 +504,7 @@ import { CheckCircle2, ShieldAlert, X } from "lucide-astro";
         throw new Error("Campos del formulario de exención no encontrados en el DOM");
       }
 
-      const scope = scopeEl.value as any;
+      const scope = scopeEl.value as ExemptionScope;
       const algorithm = algorithmEl.value.trim();
       const kms = kmsEl.value.trim();
       const sha256 = sha256El.value.trim();

@@ -144,6 +144,7 @@ const navItems = [
 
 <script>
   import { clearSession, getSession, hasPermission } from "@pims/cockpit/ui/lib/session.ts";
+  import type { CockpitPermission } from "@pims/types/cockpit.ts";
   import { CONSTANTS } from "@pims/types/constants.ts";
 
   const NAV_ACTIVE_CLASS =
@@ -182,7 +183,7 @@ const navItems = [
       // Filter nav items based on permissions
       const navLinks = document.querySelectorAll("#cockpit-nav a[data-permission]");
       for (const link of navLinks) {
-        const permission = link.getAttribute("data-permission") as any;
+        const permission = link.getAttribute("data-permission") as CockpitPermission | null;
         if (permission) {
           if (hasPermission(session, permission)) {
             (link as HTMLElement).style.display = "";

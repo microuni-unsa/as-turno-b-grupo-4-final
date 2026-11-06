@@ -169,11 +169,14 @@ export type PlainLanguageValidationOptions = z.input<
   typeof PlainLanguageValidationOptionsSchema
 >;
 
+export const ExemptionScopeSchema = z.enum(["encrypt_rest", "encrypt_transit"]);
+export type ExemptionScope = z.infer<typeof ExemptionScopeSchema>;
+
 export const EncryptionProofAttestationSchema = z
   .object({
     incident_code: z.string().min(1),
     source_file_sha256: z.string().length(CONSTANTS.SHA256_HEX_LENGTH),
-    scope: z.enum(["encrypt_rest", "encrypt_transit"]),
+    scope: ExemptionScopeSchema,
     algorithm: z.string().min(1),
     key_management_ref: z.string().min(1),
     applies_to_affected_data: z.boolean(),

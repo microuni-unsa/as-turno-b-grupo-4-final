@@ -104,9 +104,6 @@ export function decryptPayload(encrypted: Buffer, keyHex: string): Buffer {
   }
 }
 
-export const encryptData = encryptPayload;
-export const decryptData = decryptPayload;
-
 export function timingSafeEqualBuffers(a: Buffer, b: Buffer): boolean {
   if (a.length !== b.length) {
     return false;

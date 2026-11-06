@@ -110,13 +110,6 @@ export function formatDisplayString(
   return val.trim();
 }
 
-export function formatNullableText(val: string | null | undefined): string {
-  if (val === null || val === undefined || val.trim() === "") {
-    return "No disponible";
-  }
-  return val.trim();
-}
-
 export function formatSafeAttribute(val: string | null | undefined): string {
   if (val === null || val === undefined) {
     return "";

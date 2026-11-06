@@ -135,13 +135,13 @@ export function parseSpanishPersonName(fullName: string): {
   };
 }
 
-export interface IndexedSpanToken {
+interface IndexedSpanToken {
   token: string;
   original: string;
   entityType: string;
 }
 
-export async function redactForGuidedDraft(
+async function redactForGuidedDraft(
   text: string,
   presidioClient: PresidioClient,
 ): Promise<{
