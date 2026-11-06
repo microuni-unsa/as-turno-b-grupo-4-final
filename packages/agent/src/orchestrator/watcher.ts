@@ -355,6 +355,16 @@ export class IncidentWatcherDaemon {
     const currentHash = computeIncidentInputHash(incident);
 
     if (!stored || stored.hash !== currentHash) {
+      // Incidents that reached drafting without a stored root cause (e.g.
+      // inferred straight to awaiting_approval from pre-existing packs)
+      // regress to triaged so investigate() runs exactly once; healthy
+      // incidents with an RCA only regenerate drafts.
+      const rootCause = await this.evidenceStore.getRootCause(
+        incident.incident_code,
+      );
+      if (rootCause === null) {
+        return this.saveState(incident, "triaged");
+      }
       return this.saveState(incident, "investigated");
     }
 
@@ -523,6 +533,12 @@ export class IncidentWatcherDaemon {
 
     const packs = await this.latestPacks(incident.incident_code);
     if (packs.length > 0) {
+      const packRootCause = await this.evidenceStore.getRootCause(
+        incident.incident_code,
+      );
+      if (packRootCause === null) {
+        return this.buildState(incident, "triaged");
+      }
       return this.buildState(
         incident,
         this.config.AUTO_NOTIFY ? "drafted" : "awaiting_approval",
