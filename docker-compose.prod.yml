@@ -15,7 +15,7 @@ services:
       retries: 20
 
   presidio:
-    image: ${GHCR_IMAGE_PREFIX:-ghcr.io/cricro/pims-final}/presidio-analyzer:2.2.x-es
+    image: ${GHCR_IMAGE_PREFIX:-ghcr.io/microuni-unsa/as-turno-b-grupo-4-final}/presidio-analyzer:2.2.x-es
     restart: unless-stopped
     environment:
       PORT: "3000"
@@ -28,7 +28,7 @@ services:
       retries: 20
 
   app:
-    image: ${GHCR_IMAGE_PREFIX:-ghcr.io/cricro/pims-final}/app:${APP_TAG:-latest}
+    image: ${GHCR_IMAGE_PREFIX:-ghcr.io/microuni-unsa/as-turno-b-grupo-4-final}/app:${APP_TAG:-latest}
     restart: unless-stopped
     env_file:
       - .env
