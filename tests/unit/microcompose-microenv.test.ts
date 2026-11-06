@@ -31,23 +31,39 @@ describe("Microenv & Microcompose Adoption Suite", () => {
     const custom = createStack({
       defaultRange: [46000, 46100],
       includePresidio: false,
+      envFile: ".env.custom",
     });
     expect(custom).toBeDefined();
     expect(typeof custom.up).toBe("function");
     expect(typeof custom.down).toBe("function");
     expect(custom.env).toBeUndefined();
+    expect(custom.envFile).toBe(".env.custom");
   });
 
-  it("default stack uses declared default port range", () => {
+  it("default stack uses declared default port range and configures .env.local", () => {
     expect(DEFAULT_STACK_PORT_RANGE).toEqual([43000, 43999]);
     expect(stack).toBeDefined();
     expect(typeof stack.up).toBe("function");
+    expect(stack.envFile).toBe(".env.local");
   });
 
-  it("ensures no legacy .enc.env or .env file exists on disk", () => {
+  it("ensures no legacy .enc.env, .env, or docker-compose files exist in root", () => {
     const rootDir = process.cwd();
     expect(fs.existsSync(path.resolve(rootDir, ".enc.env"))).toBe(false);
     expect(fs.existsSync(path.resolve(rootDir, ".env"))).toBe(false);
+    expect(fs.existsSync(path.resolve(rootDir, "docker-compose.yml"))).toBe(
+      false,
+    );
+    expect(fs.existsSync(path.resolve(rootDir, "docker-compose.dev.yml"))).toBe(
+      false,
+    );
+    expect(
+      fs.existsSync(path.resolve(rootDir, "docker-compose.prod.yml")),
+    ).toBe(false);
+    expect(fs.existsSync(path.resolve(rootDir, "traefik.dev.yml"))).toBe(false);
+    expect(
+      fs.existsSync(path.resolve(rootDir, "dev-config/traefik.dev.yml")),
+    ).toBe(true);
   });
 
   it("resolves encrypted dev and prod configurations through microenv without .env", async () => {

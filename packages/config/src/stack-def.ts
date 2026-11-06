@@ -10,6 +10,7 @@ export interface CreateStackOptions {
   projectRoot?: string;
   defaultRange?: PortRange;
   includePresidio?: boolean;
+  envFile?: string;
 }
 
 export const DEFAULT_STACK_PORT_RANGE: PortRange = [43000, 43999] as const;
@@ -53,6 +54,10 @@ export function createStack(options?: CreateStackOptions): StackHandle {
       },
     ]);
 
+  if (options?.envFile !== undefined) {
+    builder.envFile(options.envFile);
+  }
+
   const envTemplates: Record<string, string> = {
     EVIDENCE_DB_URL:
       "postgres://pims:pims@{{host:evidence_db}}:{{port:evidence_db:5432}}/pims_evidence",
@@ -73,11 +78,50 @@ export function createStack(options?: CreateStackOptions): StackHandle {
     delete envTemplates.PRESIDIO_URL;
   }
 
+  builder
+    .service("traefik", {
+      image: "traefik:v3.3",
+      ports: [{ container: 80 }, { container: 8082 }],
+      waitFor: Wait.forHealthCheck(),
+    })
+    .withExtraHosts([
+      { host: "host.docker.internal", ipAddress: "host-gateway" },
+    ])
+    .withCommand([
+      "--global.checknewversion=false",
+      "--global.sendanonymoususage=false",
+      "--entrypoints.web.address=:80",
+      "--entrypoints.traefik.address=:8082",
+      "--api.dashboard=true",
+      "--api.insecure=true",
+      "--ping=true",
+      "--ping.entrypoint=traefik",
+      "--providers.file.filename=/etc/traefik/dynamic.yml",
+      "--providers.file.watch=true",
+    ])
+    .withHealthCheck({
+      test: ["CMD-SHELL", "traefik healthcheck --ping || exit 1"],
+      interval: 500,
+      timeout: 1000,
+      retries: 30,
+    })
+    .withBindMounts([
+      {
+        source: path.resolve(projectRoot, "dev-config/traefik.dev.yml"),
+        target: "/etc/traefik/dynamic.yml",
+        mode: "ro",
+      },
+    ]);
+
+  envTemplates.TRAEFIK_URL = "http://{{host:traefik}}:{{port:traefik:80}}";
+  envTemplates.TRAEFIK_DASHBOARD_URL =
+    "http://{{host:traefik}}:{{port:traefik:8082}}";
+
   builder.env(envTemplates);
 
   return builder.build();
 }
 
-export const stack: StackHandle = createStack();
+export const stack: StackHandle = createStack({ envFile: ".env.local" });
 export default stack;
 export type { PortRange, StackHandle };

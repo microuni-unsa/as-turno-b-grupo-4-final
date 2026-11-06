@@ -5,7 +5,7 @@
     "": {
       "name": "incident-agent",
       "dependencies": {
-        "@microx-technologies/microcompose": "0.1.0",
+        "@microx-technologies/microcompose": "^0.1.1",
         "@microx-technologies/microenv": "0.1.1",
       },
       "devDependencies": {
@@ -417,7 +417,7 @@
 
     "@kwsites/file-exists": ["@kwsites/file-exists@1.1.1", "", { "dependencies": { "debug": "^4.1.1" } }, "sha512-m9/5YGR18lIwxSFDwfE3oA7bWuq9kdau6ugN4H2rJeyhFQZcG9AgSHkQtSD15a8WvTgfz9aikZMrKPHvbpqFiw=="],
 
-    "@microx-technologies/microcompose": ["@microx-technologies/microcompose@0.1.0", "https://gitlab.com/api/v4/projects/87883498/packages/npm/@microx-technologies/microcompose/-/@microx-technologies/microcompose-0.1.0.tgz", { "dependencies": { "testcontainers": "^12", "zod": "^3" } }, "sha1-Qd39yU13dzHXncJ8dq5W1hxAgzk="],
+    "@microx-technologies/microcompose": ["@microx-technologies/microcompose@0.1.1", "https://gitlab.com/api/v4/projects/87883498/packages/npm/@microx-technologies/microcompose/-/@microx-technologies/microcompose-0.1.1.tgz", { "dependencies": { "testcontainers": "^12", "zod": "^3" } }, "sha1-CufVTKEtmYYSZtGvB9kemX3nyQY="],
 
     "@microx-technologies/microenv": ["@microx-technologies/microenv@0.1.1", "https://gitlab.com/api/v4/projects/88011785/packages/npm/@microx-technologies/microenv/-/@microx-technologies/microenv-0.1.1.tgz", { "dependencies": { "jiti": "^2.4.2", "yaml": "^2.8.1", "zod": "^4.6.7" }, "bin": { "microenv": "dist/cli.js" } }, "sha1-b12qbpE/loH0GPE3wQLE2xMj59c="],
 
