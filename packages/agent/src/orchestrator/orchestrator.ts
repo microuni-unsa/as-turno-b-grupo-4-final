@@ -1920,9 +1920,30 @@ export class IncidentOrchestrator {
       const storedHash = await this.deps.evidenceStore.getAgentState(
         `RESOLUTION_HASH:${code}`,
       );
-      const hashState = ResolutionHashStateSchema.safeParse(storedHash);
+      let hashState = ResolutionHashStateSchema.safeParse(storedHash);
       if (!hashState.success) {
-        throw new EvidenceNotFoundError("resolution_hash", code);
+        // The R action predates the hash (human-written or older run): bind
+        // the close approval to the existing resolution text instead of failing.
+        const existingR = epochActions.find(
+          (action) => action.action_type === "R",
+        );
+        if (existingR === undefined) {
+          throw new EvidenceNotFoundError("resolution_hash", code);
+        }
+        const bodyText = existingR.description ?? "";
+        const derived = {
+          content_sha256: sha256HexBytes(Buffer.from(bodyText, "utf8")),
+          body_text: bodyText,
+          citations: [] as string[],
+        };
+        await this.deps.evidenceStore.setAgentState(
+          `RESOLUTION_HASH:${code}`,
+          derived,
+        );
+        hashState = ResolutionHashStateSchema.safeParse(derived);
+        if (!hashState.success) {
+          throw new EvidenceNotFoundError("resolution_hash", code);
+        }
       }
 
       const closeMarkers = readMarkers(incident.evidence_refs).filter(
