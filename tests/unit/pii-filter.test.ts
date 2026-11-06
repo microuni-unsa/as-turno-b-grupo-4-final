@@ -1,5 +1,8 @@
 import type { PresidioRecognizerResult } from "@pims/types/cockpit.ts";
-import { filterAuthenticPiiSpans } from "@pims/types/pii.ts";
+import {
+  filterAuthenticPiiSpans,
+  stripCitationOverlappingSpans,
+} from "@pims/types/pii.ts";
 import { describe, expect, it } from "vitest";
 
 describe("filterAuthenticPiiSpans", () => {
@@ -93,5 +96,51 @@ describe("filterAuthenticPiiSpans", () => {
     ];
     const filtered = filterAuthenticPiiSpans(text, spans);
     expect(filtered).toHaveLength(0);
+  });
+
+  it("drops phone/location spans overlapping normative citations", () => {
+    const text =
+      "C1 = gdpr-full:gdpr-full:0134:2411-2475 y C2 = iso27701:iso27701:0026:347-380.";
+    const phoneStart = text.indexOf("347-380");
+    const locationStart = text.indexOf("gdpr-full:0134:2411-2475");
+    const spans: PresidioRecognizerResult[] = [
+      {
+        entity_type: "PHONE_NUMBER",
+        score: 0.85,
+        start: phoneStart,
+        end: phoneStart + "347-380".length,
+      },
+      {
+        entity_type: "LOCATION",
+        score: 0.85,
+        start: locationStart,
+        end: locationStart + "gdpr-full:0134:2411-2475".length,
+      },
+    ];
+    expect(stripCitationOverlappingSpans(text, spans)).toHaveLength(0);
+    expect(filterAuthenticPiiSpans(text, spans)).toHaveLength(0);
+  });
+
+  it("keeps standalone phone spans outside citations", () => {
+    const text = "Llame al 987654321 según gdpr-full:gdpr-full:0134:2411-2475.";
+    const phoneStart = text.indexOf("987654321");
+    const citationPhoneStart = text.indexOf("2411-2475");
+    const spans: PresidioRecognizerResult[] = [
+      {
+        entity_type: "PHONE_NUMBER",
+        score: 0.85,
+        start: phoneStart,
+        end: phoneStart + "987654321".length,
+      },
+      {
+        entity_type: "PHONE_NUMBER",
+        score: 0.85,
+        start: citationPhoneStart,
+        end: citationPhoneStart + "2411-2475".length,
+      },
+    ];
+    const filtered = filterAuthenticPiiSpans(text, spans);
+    expect(filtered).toHaveLength(1);
+    expect(filtered[0]?.start).toBe(phoneStart);
   });
 });

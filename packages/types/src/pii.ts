@@ -1,11 +1,33 @@
 import type { PresidioRecognizerResult } from "@pims/types/cockpit.ts";
 import { CONSTANTS } from "@pims/types/constants.ts";
 
+const CITATION_PATTERN =
+  /\b[A-Za-z0-9][A-Za-z0-9_-]*(?::[A-Za-z0-9][A-Za-z0-9_-]*)+:\d+-\d+\b/g;
+
+export function stripCitationOverlappingSpans(
+  text: string,
+  spans: readonly PresidioRecognizerResult[],
+): PresidioRecognizerResult[] {
+  const ranges: Array<{ start: number; end: number }> = [];
+  for (const match of text.matchAll(CITATION_PATTERN)) {
+    const start = match.index ?? 0;
+    ranges.push({ start, end: start + match[0].length });
+  }
+  if (ranges.length === 0) {
+    return [...spans];
+  }
+  return spans.filter(
+    (span) =>
+      !ranges.some((range) => span.start < range.end && span.end > range.start),
+  );
+}
+
 export function filterAuthenticPiiSpans(
   text: string,
   rawSpans: readonly PresidioRecognizerResult[],
 ): PresidioRecognizerResult[] {
-  return rawSpans.filter((span) => {
+  const citationSafe = stripCitationOverlappingSpans(text, rawSpans);
+  return citationSafe.filter((span) => {
     if (
       !(CONSTANTS.PII_ENTITIES as readonly string[]).includes(
         span.entity_type,

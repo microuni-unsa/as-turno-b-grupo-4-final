@@ -4,6 +4,7 @@ import {
 } from "@pims/types/cockpit.ts";
 import { CONSTANTS } from "@pims/types/constants.ts";
 import { PiiRedactionUnavailableError } from "@pims/types/errors.ts";
+import { stripCitationOverlappingSpans } from "@pims/types/pii.ts";
 import { z } from "zod";
 
 export interface PresidioClientOptions {
@@ -120,7 +121,8 @@ export class PresidioClient {
       return { redactedText: text, spans: [] };
     }
 
-    const spans = await this.analyze(text);
+    const analyzed = await this.analyze(text);
+    const spans = stripCitationOverlappingSpans(text, analyzed);
     if (spans.length === 0) {
       return { redactedText: text, spans: [] };
     }
