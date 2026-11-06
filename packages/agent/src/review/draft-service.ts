@@ -142,7 +142,7 @@ export const DRAFT_AUTHORITY_SYSTEM =
   "You draft a GDPR Article 33(3) notification pack for the supervisory authority. Ground every legal statement in the supplied RAG citations. Return strict JSON with item_a_nature, item_a_categories_subjects, item_a_approx_subjects, item_a_categories_records, item_a_approx_records, item_a_unknown, item_c_consequences, item_d_measures_taken, item_d_measures_proposed and citations. In item_a_categories_records and item_a_categories_subjects, explicitly enumerate concrete categories of personal data involved (e.g. identifying data, contact data, financial, academic or special category data) based on the incident. When the incident specifies affected subjects (e.g. 350 students), provide the approximate records count (at least equal to the number of subjects, e.g. 350 student records) and state both counts in item_a_nature and the respective count fields. Approximate counts must be non-negative integers; when a count cannot yet be determined emit 0 and list it in item_a_unknown with reason PHASED_PENDING. Never include reporter or DPO contact values in the prose; the pack carries those fields structurally. Never include individual person names, employee names, student names, phone numbers, email addresses or personal identification numbers in the notice text; all personal data must remain strictly aggregated, anonymised or referenced by role/entity only.";
 
 export const DRAFT_SUBJECT_SYSTEM =
-  "You draft a GDPR Article 34 communication to affected data subjects. Use clear and plain language, short sentences and no legal jargon. Ground every legal statement in the supplied RAG citations. Explicitly describe the categories of personal data affected and practical recommendations for the individual. Return strict JSON with body_plain, item_c_consequences, item_d_measures, recommendations and citations. Never include reporter or DPO contact values in the body; the pack carries the contact block structurally. Never include individual person names, employee names, student names, phone numbers, email addresses or personal identification numbers in the notice text.";
+  "You draft a GDPR Article 34 communication to affected data subjects. Use clear and plain language, short sentences and no legal jargon. Ground every legal statement in the supplied RAG citations. body_plain MUST explicitly name each affected-data category from the incident prose (e.g. names, surnames, ID numbers, emails, phones, addresses) so the reader knows exactly what data was compromised; a body that only says personal information was exposed without naming the categories is a defect. body_plain MUST NOT contradict the structured items: never deny unauthorized access when item_c lists compromised data, and every consequence or measure in the body must be consistent with item_c_consequences and item_d_measures. Explicitly describe the categories of personal data affected and practical recommendations for the individual; recommendations must contain at least one concrete action the subject can take. Return strict JSON with body_plain, item_c_consequences, item_d_measures, recommendations and citations. Never include reporter or DPO contact values in the body; the pack carries the contact block structurally. Never include individual person names, employee names, student names, phone numbers, email addresses or personal identification numbers in the notice text.";
 
 export const RESOLUTION_SYSTEM =
   "You summarise the resolution of a handled incident for the closure record. Return strict JSON with summary, remediation and citations. The summary must state what happened and how it was contained; the remediation must state the corrective actions taken or planned and cite the supporting legal requirements.";
@@ -540,6 +540,7 @@ export class NoticeDraftService {
       fetchedAt: Date;
       exemption: ExemptionEvaluationResult | null;
       phase: number;
+      feedback?: string;
     },
   ): Promise<{
     pack: AuthorityNoticePack;
@@ -558,12 +559,16 @@ export class NoticeDraftService {
       AUTHORITY_RAG_QUERY,
     );
 
+    const feedbackBlock =
+      context.feedback !== undefined && context.feedback.trim().length > 0
+        ? `\n\nReviewer feedback on the previous rejected draft (address it first, keep every other requirement):\n${context.feedback.trim()}`
+        : "";
     const response = await this.modelClient.chat_json({
       system: DRAFT_AUTHORITY_SYSTEM,
       messages: [
         {
           role: "user",
-          content: `${await renderIncidentProse(incident)}\nAllowed normative citations (return citations[] using ONLY the identifiers C1..Cn; never invent):\n${rag.citations.map((citation, index) => `C${index + 1} = ${citation}`).join("\n")}\n\n${SPANISH_OUTPUT_CONTRACT}`,
+          content: `${await renderIncidentProse(incident)}\nAllowed normative citations (return citations[] using ONLY the identifiers C1..Cn; never invent):\n${rag.citations.map((citation, index) => `C${index + 1} = ${citation}`).join("\n")}${feedbackBlock}\n\n${SPANISH_OUTPUT_CONTRACT}`,
         },
       ],
       json_schema: AUTHORITY_JSON_SCHEMA,
@@ -685,6 +690,7 @@ export class NoticeDraftService {
     gate: HighRiskGateResult,
     exemption: ExemptionEvaluationResult | null,
     numericApprovals: NumericApproval[],
+    feedback?: string,
   ): Promise<{
     pack: SubjectNoticePack;
     contentSha: string;
@@ -758,12 +764,16 @@ export class NoticeDraftService {
         ? this.config.PLAIN_LANG_MAX_WORDS
         : CONSTANTS.PLAIN_LANGUAGE_MAX_WORDS;
 
+    const feedbackBlock =
+      feedback !== undefined && feedback.trim().length > 0
+        ? `\n\nReviewer feedback on the previous rejected draft (address it first, keep every other requirement):\n${feedback.trim()}`
+        : "";
     const response = await this.modelClient.chat_json({
       system: DRAFT_SUBJECT_SYSTEM,
       messages: [
         {
           role: "user",
-          content: `${await renderIncidentProse(incident)}\nAllowed normative citations (return citations[] using ONLY the identifiers C1..Cn; never invent):\n${rag.citations.map((citation, index) => `C${index + 1} = ${citation}`).join("\n")}\nConstraints: write body_plain in Spanish; every sentence must have at most ${maxWords} words; do not include digits or numeric literals in body_plain; keep every field concrete and free of legal jargon.\n\n${SPANISH_OUTPUT_CONTRACT}`,
+          content: `${await renderIncidentProse(incident)}\nAllowed normative citations (return citations[] using ONLY the identifiers C1..Cn; never invent):\n${rag.citations.map((citation, index) => `C${index + 1} = ${citation}`).join("\n")}\nConstraints: write body_plain in Spanish; every sentence must have at most ${maxWords} words; do not include digits or numeric literals in body_plain; keep every field concrete and free of legal jargon.${feedbackBlock}\n\n${SPANISH_OUTPUT_CONTRACT}`,
         },
       ],
       json_schema: SUBJECT_JSON_SCHEMA,

@@ -1721,29 +1721,31 @@ export class IncidentOrchestrator {
         }
       }
 
-      const subject = await this.deps.draftService.draftSubject(
+      const numericApprovals = opts?.numericApprovals ?? [];
+      const reviewed = await this.reviewWithRetries(
         incident,
-        gate,
-        exemption,
-        opts?.numericApprovals ?? [],
-      );
-      const subjectReviewed = await this.reviewWithRetries(
-        incident,
-        {
-          pack_type: "subject",
-          content_sha256: subject.contentSha,
-          body_text: subject.pack.body_plain,
-          citations: subject.citations,
-          numeric_approvals: opts?.numericApprovals ?? [],
-          plain_language_waiver: null,
-          checklist: null,
+        "subject",
+        numericApprovals,
+        async (feedback) => {
+          const draft = await this.deps.draftService.draftSubject(
+            incident,
+            gate,
+            exemption,
+            numericApprovals,
+            feedback ?? undefined,
+          );
+          return {
+            packId: draft.pack.pack_id,
+            contentSha: draft.contentSha,
+            bodyText: draft.pack.body_plain,
+            citations: draft.citations,
+            payload: draft.pack,
+          };
         },
-        subject.pack.pack_id,
-        subject.contentSha,
-        subject.pack,
       );
-      subjectPackId = subject.pack.pack_id;
-      subjectApprovalId = subjectReviewed;
+      const subject = reviewed.attempt.payload;
+      subjectPackId = subject.pack_id;
+      subjectApprovalId = reviewed.approvalId;
 
       if (gate.verdict) {
         await this.armTimerIfAbsent(
@@ -1756,9 +1758,9 @@ export class IncidentOrchestrator {
         );
       }
 
-      if (subject.pack.state === "exempted") {
+      if (subject.state === "exempted") {
         await this.emitEvent("notice_exempted", incident, "drafter", {
-          exemption: subject.pack.exemption?.letter ?? null,
+          exemption: subject.exemption?.letter ?? null,
           reason: "ART34_3_EXEMPTION",
         });
       }
@@ -1790,98 +1792,119 @@ export class IncidentOrchestrator {
     approvalId: string;
   }> {
     const fetchedAt = this.deps.clock();
-    const draft = await this.deps.draftService.draftAuthority(incident, {
-      fetchedAt,
-      exemption,
-      phase: 1,
-    });
-    const rawBodyText = [
-      `Naturaleza de la brecha: ${draft.pack.item_a_nature}`,
-      `Categorías de interesados: ${draft.pack.item_a_categories_subjects.join(", ")}`,
-      `Número aproximado de interesados: ${draft.pack.item_a_approx_subjects}`,
-      `Categorías de registros: ${draft.pack.item_a_categories_records.join(", ")}`,
-      `Número aproximado de registros: ${draft.pack.item_a_approx_records}`,
-      `Consecuencias probables: ${draft.pack.item_c_consequences}`,
-      `Medidas adoptadas: ${draft.pack.item_d_measures_taken.join("; ")}`,
-      `Medidas propuestas: ${draft.pack.item_d_measures_proposed.join("; ")}`,
-    ]
-      .filter((segment) => segment.trim().length > 0)
-      .join("\n");
-    const bodyText = await redactForPrompt(rawBodyText);
-
-    const approvalId = await this.reviewWithRetries(
+    const reviewed = await this.reviewWithRetries(
       incident,
-      {
-        pack_type: "authority",
-        content_sha256: draft.contentSha,
-        body_text: bodyText,
-        citations: draft.citations,
-        numeric_approvals: opts?.numericApprovals ?? [],
-        plain_language_waiver: null,
-        checklist: null,
+      "authority",
+      opts?.numericApprovals ?? [],
+      async (feedback) => {
+        const draft = await this.deps.draftService.draftAuthority(incident, {
+          fetchedAt,
+          exemption,
+          phase: 1,
+          ...(feedback === null ? {} : { feedback }),
+        });
+        const rawBodyText = [
+          `Naturaleza de la brecha: ${draft.pack.item_a_nature}`,
+          `Categorías de interesados: ${draft.pack.item_a_categories_subjects.join(", ")}`,
+          `Número aproximado de interesados: ${draft.pack.item_a_approx_subjects}`,
+          `Categorías de registros: ${draft.pack.item_a_categories_records.join(", ")}`,
+          `Número aproximado de registros: ${draft.pack.item_a_approx_records}`,
+          `Consecuencias probables: ${draft.pack.item_c_consequences}`,
+          `Medidas adoptadas: ${draft.pack.item_d_measures_taken.join("; ")}`,
+          `Medidas propuestas: ${draft.pack.item_d_measures_proposed.join("; ")}`,
+        ]
+          .filter((segment) => segment.trim().length > 0)
+          .join("\n");
+        const bodyText = await redactForPrompt(rawBodyText);
+        return {
+          packId: draft.pack.pack_id,
+          contentSha: draft.contentSha,
+          bodyText,
+          citations: draft.citations,
+          payload: draft.pack,
+        };
       },
-      draft.pack.pack_id,
-      draft.contentSha,
-      draft.pack,
     );
 
     return {
-      pack: draft.pack,
-      packId: draft.pack.pack_id,
-      approvalId,
+      pack: reviewed.attempt.payload,
+      packId: reviewed.attempt.payload.pack_id,
+      approvalId: reviewed.approvalId,
     };
   }
 
-  private async reviewWithRetries(
+  private async reviewWithRetries<T extends object>(
     incident: PimsIncident,
-    ctx: {
-      pack_type: "authority" | "subject";
-      content_sha256: string;
-      body_text: string;
+    packType: "authority" | "subject",
+    numericApprovals: NumericApproval[],
+    draftAttempt: (feedback: string | null) => Promise<{
+      packId: string;
+      contentSha: string;
+      bodyText: string;
       citations: string[];
-      numeric_approvals: NumericApproval[];
-      plain_language_waiver: null;
-      checklist: null;
-    },
-    packId: string,
-    contentSha: string,
-    payload: object,
-  ): Promise<string> {
+      payload: T;
+    }>,
+  ): Promise<{
+    approvalId: string;
+    attempt: {
+      packId: string;
+      contentSha: string;
+      bodyText: string;
+      citations: string[];
+      payload: T;
+    };
+  }> {
     const code = incident.incident_code;
     this.announceRole(code, "compliance_reviewer");
+    let feedback: string | null = null;
+    let lastAttempt: {
+      packId: string;
+      contentSha: string;
+      bodyText: string;
+      citations: string[];
+      payload: T;
+    } | null = null;
     for (let cycle = 0; cycle < this.deps.config.MAX_REVIEW_CYCLES; cycle++) {
+      const attempt = await draftAttempt(feedback);
+      lastAttempt = attempt;
       const result: ReviewResult = await this.deps.reviewer.review(
         {
           incident_code: code,
-          pack_type: ctx.pack_type,
-          content_sha256: ctx.content_sha256,
-          body_text: ctx.body_text,
-          citations: ctx.citations,
-          numeric_approvals: ctx.numeric_approvals,
-          plain_language_waiver: ctx.plain_language_waiver,
-          checklist: ctx.checklist,
+          pack_type: packType,
+          content_sha256: attempt.contentSha,
+          body_text: attempt.bodyText,
+          citations: attempt.citations,
+          numeric_approvals: numericApprovals,
+          plain_language_waiver: null,
+          checklist: null,
         },
         incident,
       );
       if (result.approved && result.approval_id !== null) {
-        return result.approval_id;
+        return { approvalId: result.approval_id, attempt };
       }
       await this.deps.evidenceStore.saveDraftPack(
         code,
-        ctx.pack_type,
-        toJsonObject(payload),
-        contentSha,
+        packType,
+        toJsonObject(attempt.payload),
+        attempt.contentSha,
         null,
         "draft",
       );
+      const rejection = result.rejection;
       if (cycle === this.deps.config.MAX_REVIEW_CYCLES - 1) {
         throw new EscalateStuckReviewError(
-          `Pack ${packId} rejected ${this.deps.config.MAX_REVIEW_CYCLES} times; last rejection ${result.rejection?.judge ?? "unknown"}:${result.rejection?.required_fix ?? "unknown"}`,
+          `Pack ${attempt.packId} rejected ${this.deps.config.MAX_REVIEW_CYCLES} times; last rejection ${rejection?.judge ?? "unknown"}:${rejection?.required_fix ?? "unknown"}`,
         );
       }
+      feedback =
+        rejection === null || rejection === undefined
+          ? "The reviewer rejected the draft without a specific fix; regenerate with strictly concrete, contradiction-free prose."
+          : `Rejected by ${rejection.judge} on item "${rejection.item}": ${rejection.required_fix}`;
     }
+    const finalPackId = lastAttempt?.packId ?? "unknown";
     throw new EscalateStuckReviewError(
-      `Pack ${packId} never produced an approval`,
+      `Pack ${finalPackId} never produced an approval`,
     );
   }
 

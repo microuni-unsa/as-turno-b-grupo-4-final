@@ -368,6 +368,17 @@ describe("Phase 4 autonomous lifecycle loop (§6, §9, §14.2)", {
           citations: [authorityCitation],
         });
       }
+      // Challenge routing precedes resolution routing: the resolution-challenge
+      // system prompt contains the word "resolution" and would otherwise be
+      // hijacked by the resolution-draft branch below.
+      if (
+        args.system.startsWith(REVIEW_CHALLENGE_SYSTEM) ||
+        args.system.startsWith(REVIEW_CHALLENGE_AUTHORITY_SYSTEM) ||
+        args.system.includes("challenge") ||
+        args.system.includes("You review")
+      ) {
+        return respond(reviewChallengePayload);
+      }
       if (
         args.system.startsWith(RESOLUTION_SYSTEM) ||
         args.system.includes("resolution")
@@ -379,14 +390,6 @@ describe("Phase 4 autonomous lifecycle loop (§6, §9, §14.2)", {
             "Least-privilege review of every export endpoint and continuous egress monitoring.",
           citations: [authorityCitation],
         });
-      }
-      if (
-        args.system.startsWith(REVIEW_CHALLENGE_SYSTEM) ||
-        args.system.startsWith(REVIEW_CHALLENGE_AUTHORITY_SYSTEM) ||
-        args.system.includes("challenge") ||
-        args.system.includes("You review")
-      ) {
-        return respond(reviewChallengePayload);
       }
       throw new Error(
         `Unrouted chat_json system prompt: ${args.system.slice(0, 60)}`,
