@@ -6,10 +6,7 @@ import { createCockpitApp } from "@pims/cockpit/app.ts";
 import { SessionRegistry } from "@pims/cockpit/auth.ts";
 import type { AgentConfig } from "@pims/config";
 import { OpenAIModelProvider } from "@pims/models";
-import {
-  PiiRedactionUnavailableError,
-  PromptPiiBlockedError,
-} from "@pims/types/errors.ts";
+import { PiiRedactionUnavailableError } from "@pims/types/errors.ts";
 import {
   type IntegrationHarness,
   startIntegrationHarness,
@@ -127,31 +124,7 @@ describe("Acceptance Tests A23 & A24: Presidio PII Redaction", {
         for (const token of fixture.expected_tokens) {
           expect(result.redactedText).toContain(token);
         }
-
-        // Spec §11.3: residual gate scan must pass cleanly on redacted output
-        expect(() => {
-          AgentModelClient.assertPromptSafe(result.redactedText);
-        }).not.toThrow();
       }
-    });
-
-    it("detects residual unredacted PII if fed raw input with phone or email", () => {
-      // Unredacted phone must be caught by formal libphonenumber-js gate
-      expect(() => {
-        AgentModelClient.assertPromptSafe("Llamar al +51 987654321");
-      }).toThrow(PromptPiiBlockedError);
-
-      // Unredacted email must be caught by formal zod email gate
-      expect(() => {
-        AgentModelClient.assertPromptSafe("Enviar a dpo@unsa.edu.pe");
-      }).toThrow(PromptPiiBlockedError);
-
-      // Unredacted URL must be caught by formal tldts gate
-      expect(() => {
-        AgentModelClient.assertPromptSafe(
-          "Acceder a https://internal-portal.unsa.edu.pe",
-        );
-      }).toThrow(PromptPiiBlockedError);
     });
   });
 

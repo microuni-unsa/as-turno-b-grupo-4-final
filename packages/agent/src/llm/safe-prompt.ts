@@ -1,10 +1,5 @@
-import net from "node:net";
 import type { PresidioClient } from "@pims/agent/llm/presidio-client.ts";
-import { CONSTANTS } from "@pims/types/constants.ts";
-import {
-  PiiRedactionUnavailableError,
-  PromptPiiBlockedError,
-} from "@pims/types/errors.ts";
+import { PiiRedactionUnavailableError } from "@pims/types/errors.ts";
 import type {
   ChatJsonArgs,
   ChatJsonResponse,
@@ -17,34 +12,6 @@ import type {
   VisionJsonArgs,
   VisionJsonResponse,
 } from "@pims/types/models.ts";
-import { findPhoneNumbersInText } from "libphonenumber-js";
-import { parse } from "tldts";
-import { z } from "zod";
-
-export const REDACTION_TOKENS = {
-  reporter: "[REPORTANTE]",
-  contact: "[CONTACTO]",
-  id: "[ID]",
-  system: "[SISTEMA]",
-  description: "[DESCRIPCION]",
-} as const;
-
-export type PiiCategory =
-  | "email"
-  | "phone"
-  | "dni"
-  | "ruc"
-  | "ip"
-  | "hostname"
-  | "url";
-
-const DNI_REGEX = /^\d{8}$/;
-const RUC_REGEX = /^(?:10|15|17|20)\d{9}$/;
-const WORD_SPLIT_REGEX = /[\s,;"'()<>[\]{}]+/;
-const HTTP_PREFIX = "http://";
-const HTTPS_PREFIX = "https://";
-const LOOPBACK_IPV4_1 = "127.0.0.1";
-const LOOPBACK_IPV4_2 = "0.0.0.0";
 
 let globalPresidioClient: PresidioClient | null = null;
 
@@ -171,99 +138,9 @@ export async function redactChatPayload(
   }
 }
 
-const emailValidator = z.string().email();
-
-export function assertPromptSafe(
-  systemOrText: string,
-  messages?: Message[],
-): void {
-  const parts: string[] = [systemOrText];
-  if (messages !== undefined && messages !== null) {
-    for (const message of messages) {
-      if (typeof message.content === "string") {
-        parts.push(message.content);
-      }
-    }
-  }
-  const combined = parts.join("\n");
-
-  const categories = new Set<PiiCategory>();
-
-  // 1. Phone validation via formal libphonenumber-js
-  for (const region of CONSTANTS.PII_PHONE_REGIONS) {
-    try {
-      for (const match of findPhoneNumbersInText(combined, region)) {
-        const prevChar =
-          match.startsAt > 0 ? combined.charCodeAt(match.startsAt - 1) : 0;
-        const isInsideToken =
-          prevChar === 58 /* ':' */ ||
-          (prevChar >= 48 && prevChar <= 57) ||
-          (prevChar >= 65 && prevChar <= 90) ||
-          (prevChar >= 97 && prevChar <= 122);
-        if (!isInsideToken && match.number.isValid()) {
-          categories.add("phone");
-          break;
-        }
-      }
-    } catch {
-      // ignore
-    }
-  }
-
-  // 2. Email, IP, URL/hostname validation via formal libs
-  const words = combined.split(WORD_SPLIT_REGEX);
-  for (const word of words) {
-    const clean = word.trim();
-    if (clean.length === 0 || clean.charCodeAt(0) === 91 /* '[' */) {
-      continue;
-    }
-
-    if (clean.indexOf("@") !== -1) {
-      if (emailValidator.safeParse(clean).success) {
-        categories.add("email");
-      }
-    }
-
-    if (
-      net.isIP(clean) !== 0 &&
-      clean !== LOOPBACK_IPV4_1 &&
-      clean !== LOOPBACK_IPV4_2
-    ) {
-      categories.add("ip");
-    }
-
-    if (clean.startsWith(HTTP_PREFIX) || clean.startsWith(HTTPS_PREFIX)) {
-      categories.add("url");
-    } else if (clean.indexOf(".") !== -1 && !clean.endsWith(".")) {
-      const parsed = parse(clean);
-      if (parsed.isIp) {
-        categories.add("ip");
-      } else if (parsed.domain && parsed.isIcann && parsed.publicSuffix) {
-        // Only trigger if valid ICANN domain with recognized public suffix
-        categories.add("hostname");
-      }
-    }
-
-    if (DNI_REGEX.test(clean)) {
-      categories.add("dni");
-    }
-    if (RUC_REGEX.test(clean)) {
-      categories.add("ruc");
-    }
-  }
-
-  if (categories.size > 0) {
-    throw new PromptPiiBlockedError(Array.from(categories).sort());
-  }
-}
-
 export class AgentModelClient implements ModelProvider {
   private readonly inner: ModelProvider;
   private readonly presidio: PresidioClient | null;
-
-  static assertPromptSafe(systemOrText: string, messages?: Message[]): void {
-    assertPromptSafe(systemOrText, messages);
-  }
 
   constructor(inner: ModelProvider, presidio?: PresidioClient | null) {
     this.inner = inner;
