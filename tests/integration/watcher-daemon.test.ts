@@ -12,7 +12,7 @@ import {
   startIntegrationHarness,
 } from "@tests/helpers/integration-harness.ts";
 import { TEST_DPO_EMAIL } from "@tests/helpers/test-constants.ts";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 describe("Autonomous watcher daemon lifecycle", { timeout: 240_000 }, () => {
   let harness: IntegrationHarness;
@@ -208,5 +208,102 @@ describe("Autonomous watcher daemon lifecycle", { timeout: 240_000 }, () => {
           attachment.original_name === CONSTANTS.BUNDLE_ATTACHMENT_NAME,
       ),
     ).toHaveLength(1);
+  });
+
+  it("gates proposal regeneration on incident evidence/status change and manual regenerate", async () => {
+    const { adapter, agent, config, store, events, ragService, now } = harness;
+
+    const intake = await agent.orchestrator.intake(
+      intakeFixture({
+        title: "Proposal regeneration gating fixture",
+        description:
+          "Independent breach fixture for proposal regeneration test.",
+      }),
+    );
+    const incidentId = intake.incident.id;
+    const code = intake.incident.incident_code;
+
+    const watcher = new IncidentWatcherDaemon({
+      adapter,
+      orchestrator: agent.orchestrator,
+      evidenceStore: store,
+      events,
+      config,
+      clock: () => now,
+    });
+
+    // 1. Initial poll advances to awaiting_approval
+    await watcher.pollOnce();
+    const rawState = await store.getAgentState(`WATCHER:${code}`);
+    const state = WatcherStateSchema.parse(rawState);
+    expect(state.stage).toBe("awaiting_approval");
+
+    const draftSpy = vi.spyOn(agent.orchestrator, "draftAndReview");
+    const initialAuthPack = await store.getDraftPack(code, "authority");
+    expect(initialAuthPack).not.toBeNull();
+
+    // 2. Poll 3x with unchanged PIMS data -> 0 draftAndReview calls
+    await watcher.pollOnce();
+    await watcher.pollOnce();
+    await watcher.pollOnce();
+    expect(draftSpy).toHaveBeenCalledTimes(0);
+
+    const packAfter3Polls = await store.getDraftPack(code, "authority");
+    expect(packAfter3Polls?.id).toBe(initialAuthPack?.id);
+
+    // 3. Edit evidence_refs on the incident -> 1x pollOnce() -> exactly one new draftAndReview
+    await adapter.updateIncident(incidentId, {
+      evidence_refs: "new-forensic-evidence-token-1234",
+    });
+    await watcher.pollOnce();
+    expect(draftSpy).toHaveBeenCalledTimes(1);
+
+    draftSpy.mockClear();
+
+    // 4. Another poll without changes -> 0 calls
+    await watcher.pollOnce();
+    expect(draftSpy).toHaveBeenCalledTimes(0);
+
+    // 5. Explicit POST /api/incidents/:id/regenerate -> next poll regenerates once
+    const sessions = new SessionRegistry(() => now);
+    const session: CockpitSession = {
+      access_token: "regen-test-token",
+      expires_at_utc: new Date("2030-01-01T00:00:00.000Z").toISOString(),
+      user_id: 1,
+      username: "operator",
+      schema: config.PIMS_SCHEMA,
+      native_role: "Operador",
+      permissions: ["view_incident", "change_incident"],
+      default_persona: "executive",
+      can_switch_persona: true,
+    };
+    sessions.add(session);
+
+    const app = createCockpitApp({
+      config,
+      adapter,
+      store,
+      agent,
+      ragService,
+      events,
+      sessions,
+      clock: () => now,
+    });
+
+    const regenRes = await app.request(
+      `/api/incidents/${incidentId}/regenerate`,
+      {
+        method: "POST",
+        headers: { Authorization: "Bearer regen-test-token" },
+      },
+    );
+    expect(regenRes.status).toBe(200);
+
+    await watcher.pollOnce();
+    expect(draftSpy).toHaveBeenCalledTimes(1);
+
+    draftSpy.mockClear();
+    await watcher.pollOnce();
+    expect(draftSpy).toHaveBeenCalledTimes(0);
   });
 });

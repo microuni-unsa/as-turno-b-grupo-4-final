@@ -202,10 +202,27 @@ export class RAGService {
     });
 
     const rrfMap = this.calculateRRF(denseRankings, bm25Rankings);
-    const fusedCandidateIds = Array.from(rrfMap.entries())
+    const sortedFusedIds = Array.from(rrfMap.entries())
       .sort((a, b) => b[1] - a[1])
-      .map(([id]) => id)
-      .slice(0, this.topK);
+      .map(([id]) => id);
+
+    let prioritizedCandidateIds = sortedFusedIds;
+    if (options.prefer_doc_ids && options.prefer_doc_ids.length > 0) {
+      const preferSet = new Set(options.prefer_doc_ids);
+      const preferred: string[] = [];
+      const others: string[] = [];
+      for (const cid of sortedFusedIds) {
+        const chunk = this.indexer.getChunk(cid);
+        if (chunk && preferSet.has(chunk.doc_id)) {
+          preferred.push(cid);
+        } else {
+          others.push(cid);
+        }
+      }
+      prioritizedCandidateIds = [...preferred, ...others];
+    }
+
+    const fusedCandidateIds = prioritizedCandidateIds.slice(0, this.topK);
 
     const candidatePassages: Passage[] = [];
     for (const cid of fusedCandidateIds) {

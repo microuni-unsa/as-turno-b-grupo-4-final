@@ -737,5 +737,82 @@ Notify the designated Incident Commander within 30 minutes.
         CitationFabricatedError,
       );
     });
+
+    it("prioritizes preferred doc_ids after RRF fusion when prefer_doc_ids is specified", async () => {
+      const sqlStub = Object.assign(
+        vi.fn().mockImplementation((_strings, ..._values) => {
+          return [
+            { chunk_id: "gdpr:0001", similarity: 0.95 },
+            { chunk_id: "iso:0001", similarity: 0.9 },
+          ];
+        }),
+        { unsafe: vi.fn().mockResolvedValue([]) },
+      );
+
+      const indexer = new RagIndexer({
+        modelProvider: dummyProvider,
+        pgClient: sqlStub as unknown as postgres.Sql,
+      });
+
+      vi.spyOn(dummyProvider, "embed").mockImplementation(async (req) => ({
+        vectors: req.texts.map(() => [0.1, 0.2]),
+      }));
+
+      await indexer.indexCorpus(
+        [
+          {
+            chunk_id: "gdpr:0001",
+            doc_id: "gdpr-full",
+            article_or_clause: "art33",
+            lines: "1-10",
+            text: "Article 33 notification obligation",
+            normative: true,
+            header: "[DOC:gdpr-full | CLAUSE:art33 | NORMATIVE:true]",
+            token_count: 10,
+            sha256: "a".repeat(CONSTANTS.SHA256_HEX_LENGTH),
+          },
+          {
+            chunk_id: "iso:0001",
+            doc_id: "iso27701",
+            article_or_clause: "B.3.12",
+            lines: "1-10",
+            text: "ISO 27701 B.3.12 incident response obligation",
+            normative: true,
+            header: "[DOC:iso27701 | CLAUSE:B.3.12 | NORMATIVE:true]",
+            token_count: 10,
+            sha256: "b".repeat(CONSTANTS.SHA256_HEX_LENGTH),
+          },
+        ],
+        "v-pref",
+      );
+
+      let capturedPassages: string[] = [];
+      vi.spyOn(dummyProvider, "rerank").mockImplementation(async (req) => {
+        capturedPassages = req.passages.map((p) => p.chunk_id);
+        return {
+          ranked: req.passages.map((p, i) => ({
+            ...p,
+            score: 0.9 - i * 0.1,
+            rank: i + 1,
+          })),
+        };
+      });
+
+      const ragService = new RAGService({
+        modelProvider: dummyProvider,
+        indexer,
+        config: testRagConfig,
+      });
+
+      // 1. Without prefer_doc_ids: gdpr is higher similarity and ranks first
+      await ragService.query("notification obligation");
+      expect(capturedPassages).toEqual(["gdpr:0001", "iso:0001"]);
+
+      // 2. With prefer_doc_ids: ["iso27701"]: iso comes first
+      await ragService.query("notification obligation", {
+        prefer_doc_ids: ["iso27701"],
+      });
+      expect(capturedPassages).toEqual(["iso:0001", "gdpr:0001"]);
+    });
   });
 });

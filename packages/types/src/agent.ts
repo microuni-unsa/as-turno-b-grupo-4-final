@@ -502,6 +502,7 @@ export const RagQueryArgsSchema = z
     top_k: z.number().int().positive().optional(),
     min_score: z.number().min(0).max(1).optional(),
     normative_only: z.boolean().default(false),
+    prefer_doc_ids: z.array(z.string()).optional(),
   })
   .strict();
 export type RagQueryArgs = z.infer<typeof RagQueryArgsSchema>;

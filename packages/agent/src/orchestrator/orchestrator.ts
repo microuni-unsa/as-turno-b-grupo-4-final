@@ -88,6 +88,7 @@ import {
   PimsNotFoundError,
   PimsUnknownCodeError,
   PimsValidationError,
+  RagNoEvidenceError,
   RestoreFailedError,
   TimerMissingError,
   TransitionForbiddenError,
@@ -115,6 +116,7 @@ import {
   type PimsIncidentHistory,
   PimsIncidentSchema,
 } from "@pims/types/pims.ts";
+import type { RetrievalPassage } from "@pims/types/rag.ts";
 import { z } from "zod";
 
 export const TRIAGE_SYSTEM =
@@ -1033,11 +1035,95 @@ export class IncidentOrchestrator {
         });
       }
 
-      const gateRag = await this.deps.ragService.query(
-        "personal data breach risk to the rights and freedoms of natural persons under GDPR Article 34 and ISO 27701 B.3.12",
-        { normative_only: true, incident_code: incident.incident_code },
-      );
-      const gateCitations = gateRag.citations;
+      let gateIsoRag: {
+        passages: RetrievalPassage[];
+        citations: string[];
+      } | null = null;
+      let gateGdprRag: {
+        passages: RetrievalPassage[];
+        citations: string[];
+      } | null = null;
+      let gateIsoErr: unknown = null;
+      let gateGdprErr: unknown = null;
+
+      try {
+        gateIsoRag = await this.deps.ragService.query(
+          "ISO 27701 B.3.12 breach response and privacy risk to PII principals",
+          {
+            normative_only: true,
+            incident_code: incident.incident_code,
+            prefer_doc_ids: ["iso27701"],
+          },
+        );
+      } catch (err) {
+        if (err instanceof RagNoEvidenceError) {
+          gateIsoErr = err;
+        } else {
+          throw err;
+        }
+      }
+
+      try {
+        gateGdprRag = await this.deps.ragService.query(
+          "GDPR Article 34 personal data breach risk to the rights and freedoms of natural persons",
+          {
+            normative_only: true,
+            incident_code: incident.incident_code,
+          },
+        );
+      } catch (err) {
+        if (err instanceof RagNoEvidenceError) {
+          gateGdprErr = err;
+        } else {
+          throw err;
+        }
+      }
+
+      if (gateIsoErr && gateGdprErr) {
+        throw gateIsoErr;
+      }
+      if (!gateIsoRag && !gateGdprRag) {
+        if (gateIsoErr instanceof Error) {
+          throw gateIsoErr;
+        }
+        if (gateGdprErr instanceof Error) {
+          throw gateGdprErr;
+        }
+        throw new RagNoEvidenceError("No normative evidence returned for gate");
+      }
+
+      const rawGatePassages = [
+        ...(gateIsoRag?.passages ?? []),
+        ...(gateGdprRag?.passages ?? []),
+      ];
+      const seenGateChunkIds = new Set<string>();
+      const gatePassages: RetrievalPassage[] = [];
+      for (const p of rawGatePassages) {
+        if (!seenGateChunkIds.has(p.chunk_id)) {
+          seenGateChunkIds.add(p.chunk_id);
+          gatePassages.push(p);
+        }
+      }
+
+      const rawGateCitations = [
+        ...(gateIsoRag?.citations ?? []),
+        ...(gateGdprRag?.citations ?? []),
+      ];
+      const seenGateCitations = new Set<string>();
+      const gateCitations: string[] = [];
+      for (const c of rawGateCitations) {
+        if (!seenGateCitations.has(c)) {
+          seenGateCitations.add(c);
+          gateCitations.push(c);
+        }
+      }
+
+      if (gatePassages.length === 0) {
+        throw new RagNoEvidenceError(
+          "No normative evidence available for Article 34 gate",
+        );
+      }
+
       const gate = await this.deps.modelClient.chat_json({
         route: CONSTANTS.MODEL_ROUTE_FAST,
         system: B3_12_SYSTEM,
@@ -1052,7 +1138,7 @@ export class IncidentOrchestrator {
               affected_cid: incident.affected_cid,
               affected_data_types: incident.affected_data_types,
               retrieval_citations: gateCitations,
-              retrieval_passages: gateRag.passages.map((passage) => ({
+              retrieval_passages: gatePassages.map((passage) => ({
                 citation: `${passage.doc_id}:${passage.chunk_id}:${passage.lines}`,
                 text: passage.text,
               })),
@@ -2023,6 +2109,36 @@ export class IncidentOrchestrator {
     await this.deps.evidenceStore.setAgentState(`VETO_PARKED:${incidentCode}`, {
       parked_until_utc: null,
       timer_id: null,
+    });
+    await this.deps.evidenceStore.setAgentState(
+      `PROPOSAL_INPUT_HASH:${incidentCode}`,
+      {
+        hash: "STALE",
+        pack_content_sha256: null,
+        updated_at_utc: new Date().toISOString(),
+      },
+    );
+  }
+
+  async regenerateProposal(incidentId: number): Promise<void> {
+    const incident = await this.deps.adapter.getIncident(incidentId);
+    const code = incident.incident_code;
+    for (const packType of CONSTANTS.NOTICE_PACK_TYPES) {
+      const row = await this.deps.evidenceStore.getDraftPack(code, packType);
+      if (row !== null) {
+        await this.deps.evidenceStore.setDraftPackState(
+          code,
+          packType,
+          "draft",
+          null,
+        );
+        await this.deps.evidenceStore.revokeReviewApprovals(code, packType);
+      }
+    }
+    await this.deps.evidenceStore.setAgentState(`PROPOSAL_INPUT_HASH:${code}`, {
+      hash: "STALE",
+      pack_content_sha256: null,
+      updated_at_utc: new Date().toISOString(),
     });
   }
 

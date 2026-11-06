@@ -289,7 +289,9 @@ describe("Phase 4 autonomous lifecycle loop (§6, §9, §14.2)", {
       }
       if (
         args.system.startsWith(B3_12_SYSTEM) ||
-        args.system.includes("breach")
+        (args.system.includes("breach") &&
+          !args.system.includes("challenge") &&
+          !args.system.includes("You review"))
       ) {
         return respond({
           breach_requiring_response: !isNonPii,

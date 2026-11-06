@@ -248,4 +248,7 @@ export const CONSTANTS = {
   DEFAULT_CIPHER_ALGORITHM: "AES-256-GCM",
 } as const;
 
+export const SPANISH_OUTPUT_CONTRACT =
+  "Responde íntegramente en español. All prose fields in your JSON response must be written in Spanish (es). Normative citations stay as exact doc_id:chunk_id:lines identifiers; you may add a short Spanish gloss after any verbatim English quote.";
+
 export type Constants = typeof CONSTANTS;

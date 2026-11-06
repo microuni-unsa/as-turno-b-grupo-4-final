@@ -12,6 +12,7 @@ import type {
   CockpitIncidentSummary,
   CockpitSession,
   CockpitTimer,
+  ComplianceFinding,
   GuidedReporting,
   PendingDecision,
 } from "@pims/types/cockpit.ts";
@@ -239,6 +240,43 @@ async function loadWatcherState(
   return parsed.data;
 }
 
+export function blockedReasonToSpanish(code: string | null): string {
+  if (!code) {
+    return "El ciclo autónomo se detuvo con error.";
+  }
+  if (code.startsWith("MODEL_UNAVAILABLE")) {
+    return "El modelo de lenguaje no respondió (tiempo de espera o servicio no disponible). Se conserva la última propuesta válida.";
+  }
+  if (code.startsWith("MODEL_SCHEMA_VIOLATION")) {
+    return "El modelo devolvió un formato inválido. Se conserva la última propuesta válida.";
+  }
+  if (code.startsWith("RAG_NO_EVIDENCE")) {
+    return "Sin evidencia normativa sobre el umbral mínimo.";
+  }
+  if (code.startsWith("PACK_STALE_RETRY")) {
+    return "La propuesta quedó desactualizada durante la generación.";
+  }
+  return "El ciclo autónomo se detuvo con error.";
+}
+
+export function anchorFindingToIncident(
+  passage: RetrievalPassage,
+  _incident?: unknown,
+): string {
+  const target =
+    `${passage.article_or_clause} ${passage.text.slice(0, 150)}`.toLowerCase();
+  if (/risk|assessment/i.test(target)) {
+    return "Evaluación de riesgo (severidad/impacto)";
+  }
+  if (/breach|notification/i.test(target)) {
+    return "Notificación y plazos";
+  }
+  if (/encrypt|security measure/i.test(target)) {
+    return "Medidas de seguridad adoptadas";
+  }
+  return "Descripción del incidente";
+}
+
 export async function checkPendingDecisions(
   adapter: PimsAdapter,
   store: EvidenceStore,
@@ -282,11 +320,14 @@ export async function checkPendingDecisions(
 
       // Breached deadlines stay visible: a fired T72/T_REVIEW_SLA with no
       // sent pack is the highest-priority operator signal, not silence.
-      const [authRow, subjRow, timers] = await Promise.all([
-        store.getDraftPack(incident.incident_code, "authority"),
-        store.getDraftPack(incident.incident_code, "subject"),
-        store.listTimers(incident.incident_code),
-      ]);
+      const [authRow, subjRow, timers, rootCause, ragRecords] =
+        await Promise.all([
+          store.getDraftPack(incident.incident_code, "authority"),
+          store.getDraftPack(incident.incident_code, "subject"),
+          store.listTimers(incident.incident_code),
+          store.getRootCause(incident.incident_code),
+          store.listRagRetrievals(incident.incident_code, 20),
+        ]);
       const breached = timers.filter(
         (timer) =>
           (timer.timer_type === "T72_AUTHORITY" ||
@@ -305,54 +346,10 @@ export async function checkPendingDecisions(
           ? !authoritySent
           : !subjectTerminal,
       );
-      if (unmetBreach.length > 0) {
-        out.push({
-          incident_id: incident.id,
-          incident_code: incident.incident_code,
-          kind: "deadline_breached" as const,
-          pack_type: null,
-          approval_id: null,
-          blocked_reason: unmetBreach
-            .map((timer) => timer.timer_type)
-            .join(","),
-          actionable,
-        });
-      }
 
-      if (state === null) {
-        return out.length > 0 ? out : null;
-      }
-
-      // A watcher parked in blocked stage is operator-actionable: the retry
-      // loop alone may never converge (e.g. deterministic model failure).
-      if (state.stage === "blocked") {
-        out.push({
-          incident_id: incident.id,
-          incident_code: incident.incident_code,
-          kind: "agent_blocked" as const,
-          pack_type: null,
-          approval_id: null,
-          blocked_reason:
-            state.last_error_code ?? state.blocked_reason ?? "UNKNOWN",
-          actionable,
-        });
-        return out;
-      }
-
-      if (state.blocked_reason === "NOTIFY_NO_RECIPIENTS") {
-        return [
-          {
-            incident_id: incident.id,
-            incident_code: incident.incident_code,
-            kind: "recipient_required" as const,
-            pack_type: null,
-            approval_id: null,
-            blocked_reason: state.blocked_reason,
-            actionable,
-          },
-        ];
-      }
-      // authRow/subjRow already fetched above for the breach check.
+      const allPassages: RetrievalPassage[] = ragRecords.flatMap(
+        (record) => record.passages,
+      );
 
       const draftPacks: Array<{
         pack_type: "authority" | "subject";
@@ -391,18 +388,131 @@ export async function checkPendingDecisions(
 
       const activeProposal =
         draftPacks.find((p) => p.proposal !== null)?.proposal ?? null;
+      const activeProposalState =
+        draftPacks.find((p) => p.proposal !== null)?.state ?? null;
+
+      function resolvePackFindings(
+        proposal: JsonObject | null,
+      ): ComplianceFinding[] {
+        if (!proposal || !Array.isArray(proposal.citations)) {
+          return [];
+        }
+        const citations = proposal.citations as string[];
+        const findings: ComplianceFinding[] = [];
+        for (const citation of citations) {
+          try {
+            const [chatCite] = toChatCitations(allPassages, [citation]);
+            if (chatCite) {
+              const passage = allPassages.find(
+                (p) =>
+                  `${p.doc_id}:${p.chunk_id}:${p.lines}` === citation ||
+                  p.chunk_id === chatCite.chunk_id,
+              );
+              const anchor = passage
+                ? anchorFindingToIncident(passage, incident)
+                : "Descripción del incidente";
+              findings.push({
+                citation: chatCite.citation,
+                doc_id: chatCite.doc_id,
+                chunk_id: chatCite.chunk_id,
+                lines: chatCite.lines,
+                chunk_sha256: chatCite.chunk_sha256,
+                dense_score: chatCite.dense_score,
+                bm25_rank: chatCite.bm25_rank,
+                rrf_score: chatCite.rrf_score,
+                rerank_score: chatCite.rerank_score,
+                text: chatCite.text,
+                incident_anchor: anchor,
+                framework:
+                  chatCite.doc_id === "iso27701" ? "iso27701" : "gdpr-full",
+              });
+            }
+          } catch {
+            // CITATION_WITHOUT_PASSAGE: skip missing citation
+          }
+        }
+        return findings;
+      }
+
+      const activeFindings = resolvePackFindings(activeProposal);
+
+      if (unmetBreach.length > 0) {
+        out.push({
+          incident_id: incident.id,
+          incident_code: incident.incident_code,
+          kind: "deadline_breached" as const,
+          pack_type: null,
+          approval_id: null,
+          blocked_reason: unmetBreach
+            .map((timer) => timer.timer_type)
+            .join(","),
+          actionable,
+          proposal: activeProposal,
+          proposal_state: activeProposalState,
+          root_cause: rootCause,
+          findings: activeFindings,
+        });
+      }
+
+      if (state === null) {
+        return out.length > 0 ? out : null;
+      }
+
+      // A watcher parked in blocked stage is operator-actionable: the retry
+      // loop alone may never converge (e.g. deterministic model failure).
+      if (state.stage === "blocked") {
+        const rawCode =
+          state.last_error_code ?? state.blocked_reason ?? "UNKNOWN";
+        out.push({
+          incident_id: incident.id,
+          incident_code: incident.incident_code,
+          kind: "agent_blocked" as const,
+          pack_type: null,
+          approval_id: null,
+          blocked_reason: blockedReasonToSpanish(rawCode),
+          error_code: rawCode,
+          actionable,
+          proposal: activeProposal,
+          proposal_state: activeProposalState,
+          root_cause: rootCause,
+          findings: activeFindings,
+        });
+        return out;
+      }
+
+      if (state.blocked_reason === "NOTIFY_NO_RECIPIENTS") {
+        return [
+          {
+            incident_id: incident.id,
+            incident_code: incident.incident_code,
+            kind: "recipient_required" as const,
+            pack_type: null,
+            approval_id: null,
+            blocked_reason: state.blocked_reason,
+            actionable,
+            proposal: activeProposal,
+            proposal_state: activeProposalState,
+            root_cause: rootCause,
+            findings: activeFindings,
+          },
+        ];
+      }
 
       if (draftPacks.some((pack) => pack.state === "draft")) {
+        const draftPack = draftPacks.find((pack) => pack.state === "draft");
         return [
           {
             incident_id: incident.id,
             incident_code: incident.incident_code,
             kind: "revision_required" as const,
-            pack_type: null,
+            pack_type: draftPack?.pack_type ?? null,
             approval_id: null,
             blocked_reason: null,
             actionable,
             proposal: activeProposal,
+            proposal_state: activeProposalState ?? "draft",
+            root_cause: rootCause,
+            findings: activeFindings,
           },
         ];
       }
@@ -423,6 +533,9 @@ export async function checkPendingDecisions(
             blocked_reason: null,
             actionable,
             proposal: activeProposal,
+            proposal_state: activeProposalState,
+            root_cause: rootCause,
+            findings: activeFindings,
           },
         ];
       }
@@ -435,6 +548,9 @@ export async function checkPendingDecisions(
         blocked_reason: null,
         actionable,
         proposal: pack.proposal,
+        proposal_state: pack.state,
+        root_cause: rootCause,
+        findings: resolvePackFindings(pack.proposal),
       }));
     }),
   );

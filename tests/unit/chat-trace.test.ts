@@ -66,6 +66,7 @@ describe("Cockpit Chat Trace and Reasoning", () => {
       listActiveTimers: vi.fn().mockResolvedValue([]),
       listTimers: vi.fn().mockResolvedValue([]),
       listRagRetrievals: vi.fn().mockResolvedValue([]),
+      getRootCause: vi.fn().mockResolvedValue(null),
       getAgentState: vi.fn().mockResolvedValue(null),
       getDraftPack: vi.fn().mockResolvedValue(null),
     } as unknown as EvidenceStore;
@@ -173,6 +174,7 @@ describe("Cockpit Chat Trace and Reasoning", () => {
       listActiveTimers: vi.fn().mockResolvedValue([]),
       listTimers: vi.fn().mockResolvedValue([]),
       listRagRetrievals: vi.fn().mockResolvedValue([]),
+      getRootCause: vi.fn().mockResolvedValue(null),
       getAgentState: vi.fn().mockResolvedValue(null),
       getDraftPack: vi.fn().mockResolvedValue(null),
     } as unknown as EvidenceStore;

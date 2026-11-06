@@ -2,6 +2,7 @@ import {
   NoticePackTypeSchema,
   PimsNotifyResultSchema,
   ReviewApprovalKindSchema,
+  RootCauseSchema,
 } from "@pims/types/agent.ts";
 import { CONSTANTS } from "@pims/types/constants.ts";
 import { JsonObjectSchema } from "@pims/types/models.ts";
@@ -182,6 +183,24 @@ export const ChatCitationSchema = z.object({
 });
 export type ChatCitation = z.infer<typeof ChatCitationSchema>;
 
+export const ComplianceFindingSchema = z
+  .object({
+    citation: z.string().min(1),
+    doc_id: z.string().min(1),
+    chunk_id: z.string().min(1),
+    lines: z.string().min(1),
+    chunk_sha256: z.string().length(CONSTANTS.SHA256_HEX_LENGTH),
+    dense_score: z.number().nullable(),
+    bm25_rank: z.number().int().positive().nullable(),
+    rrf_score: z.number(),
+    rerank_score: z.number(),
+    text: z.string(),
+    incident_anchor: z.string().min(1),
+    framework: z.enum(["iso27701", "gdpr-full"]),
+  })
+  .strict();
+export type ComplianceFinding = z.infer<typeof ComplianceFindingSchema>;
+
 export const PendingDecisionSchema = z.object({
   incident_id: z.number().int().positive(),
   incident_code: z.string().min(1),
@@ -191,6 +210,10 @@ export const PendingDecisionSchema = z.object({
   blocked_reason: z.string().nullable(),
   actionable: z.boolean(),
   proposal: JsonObjectSchema.nullable().optional(),
+  root_cause: RootCauseSchema.nullable().optional(),
+  findings: z.array(ComplianceFindingSchema).optional(),
+  proposal_state: z.string().nullable().optional(),
+  error_code: z.string().nullable().optional(),
 });
 export type PendingDecision = z.infer<typeof PendingDecisionSchema>;
 

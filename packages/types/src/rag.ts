@@ -81,6 +81,7 @@ export const RagQueryOptionsSchema = z.object({
   normative_only: z.boolean().optional(),
   expected_version: z.string().optional(),
   incident_code: z.string().optional(),
+  prefer_doc_ids: z.array(z.string()).optional(),
 });
 export type RagQueryOptions = z.infer<typeof RagQueryOptionsSchema>;
 

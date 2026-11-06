@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import type { AgentEventEmitter } from "@pims/agent/events/agent-events.ts";
 import type { IncidentOrchestrator } from "@pims/agent/orchestrator/orchestrator.ts";
 import { toJsonObject } from "@pims/agent/tools/helpers.ts";
@@ -12,6 +13,7 @@ import type {
   WatcherState,
 } from "@pims/types/agent.ts";
 import { WatcherStateSchema } from "@pims/types/agent.ts";
+import { canonicalizeJson } from "@pims/types/canonical.ts";
 import { CONSTANTS } from "@pims/types/constants.ts";
 import {
   LeaseHeldError,
@@ -30,6 +32,38 @@ const TERMINAL_PACK_STATES: Readonly<Record<string, true>> = {
   not_required: true,
 };
 const MAX_STAGE_STEPS = 10;
+
+export function computeIncidentInputHash(incident: PimsIncident): string {
+  const payload = {
+    status: incident.status,
+    severity: incident.severity,
+    impact: incident.impact,
+    title: incident.title,
+    description: incident.description,
+    incident_type: incident.incident_type,
+    affected_data_types: incident.affected_data_types,
+    num_affected_subjects: incident.num_affected_subjects,
+    compromised_system: incident.compromised_system,
+    affected_url: incident.affected_url,
+    evidence_refs: incident.evidence_refs,
+    security_measures_adopted: incident.security_measures_adopted,
+    affected_cid: incident.affected_cid,
+    involves_personal_data: incident.involves_personal_data,
+    measure_updated_registry: incident.measure_updated_registry,
+    measure_new_security: incident.measure_new_security,
+    measure_improved_policies: incident.measure_improved_policies,
+    measure_considered_resolved: incident.measure_considered_resolved,
+    measure_reported_authorities: incident.measure_reported_authorities,
+    resolved_date: incident.resolved_date,
+    attachments_count: incident.attachments_count,
+    actions_count: incident.actions_count,
+    history: incident.history,
+  };
+  return crypto
+    .createHash("sha256")
+    .update(canonicalizeJson(payload))
+    .digest("hex");
+}
 
 export interface IncidentWatcherDeps {
   adapter: PimsAdapter;
@@ -198,9 +232,24 @@ export class IncidentWatcherDaemon {
             ).toISOString(),
           });
           state = await this.saveState(incident, "drafted");
+          const authPack = await this.evidenceStore.getDraftPack(
+            incident.incident_code,
+            "authority",
+          );
+          const freshIncident = await this.adapter.getIncident(incident.id);
+          const inputHash = computeIncidentInputHash(freshIncident);
+          await this.evidenceStore.setAgentState(
+            `PROPOSAL_INPUT_HASH:${incident.incident_code}`,
+            toJsonObject({
+              hash: inputHash,
+              pack_content_sha256: authPack?.contentSha256 ?? null,
+              updated_at_utc: this.clock().toISOString(),
+            }),
+          );
           if (!this.config.AUTO_NOTIFY) {
             state = await this.saveState(incident, "awaiting_approval");
             this.emitDraftApprovalRequests(incident.incident_code, result);
+            return;
           }
           break;
         }
@@ -278,14 +327,24 @@ export class IncidentWatcherDaemon {
     }
 
     const packs = await this.latestPacks(incident.incident_code);
-    if (packs.some((pack) => pack.state === "draft")) {
-      return this.saveState(incident, "investigated");
-    }
     if (
       packs.length > 0 &&
       packs.every((pack) => TERMINAL_PACK_STATES[pack.state] === true)
     ) {
       return this.saveState(incident, "notified");
+    }
+
+    const stored = (await this.evidenceStore.getAgentState(
+      `PROPOSAL_INPUT_HASH:${incident.incident_code}`,
+    )) as { hash?: string } | null;
+    const currentHash = computeIncidentInputHash(incident);
+
+    if (!stored || stored.hash !== currentHash) {
+      return this.saveState(incident, "investigated");
+    }
+
+    if (packs.some((pack) => pack.state === "draft")) {
+      return state;
     }
 
     if (this.config.AUTO_NOTIFY && state.parked_until_utc !== null) {
@@ -362,11 +421,13 @@ export class IncidentWatcherDaemon {
       code,
       message: error instanceof Error ? error.message : String(error),
     });
-    this.page({
-      incident_code: incident.incident_code,
-      kind: "T_RETRY",
-      reason: code,
-    });
+    if (lastStage !== "blocked") {
+      this.page({
+        incident_code: incident.incident_code,
+        kind: "T_RETRY",
+        reason: code,
+      });
+    }
     const attempt = this.retryByIncident.get(incident.id)?.attempt ?? 0;
     this.scheduleRetry(incident.id, this.backoffFor(attempt));
   }

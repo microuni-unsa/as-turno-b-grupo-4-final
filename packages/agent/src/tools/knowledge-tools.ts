@@ -30,6 +30,7 @@ export function createKnowledgeToolHandlers(
           ctx.incidentCode !== null && ctx.incidentCode !== undefined
             ? ctx.incidentCode
             : undefined,
+        prefer_doc_ids: args.prefer_doc_ids,
       });
 
       const minScore =

@@ -1,7 +1,6 @@
 ---
 import AppLayout from "@pims/cockpit/ui/layouts/AppLayout.astro";
 import DecisionModal from "@pims/cockpit/ui/components/DecisionModal.astro";
-import RagCitation from "@pims/cockpit/ui/components/RagCitation.astro";
 import TimerCard from "@pims/cockpit/ui/components/TimerCard.astro";
 import {
   AlertCircle,
@@ -23,10 +22,10 @@ import {
     <div>
       <h1 class="text-xl font-bold tracking-tight text-white flex items-center space-x-2">
         <ShieldCheck class="w-6 h-6 text-blue-400" />
-        <span>Cumplimiento Regulatorio & Puertas de Aprobación DPO</span>
+        <span>Cumplimiento Regulatorio & Cola de Decisiones DPO</span>
       </h1>
       <p class="text-xs text-slate-400 mt-1">
-        Supervisión de plazos legales, registro de exenciones y trazabilidad de cumplimiento
+        Supervisión de plazos legales (ISO/IEC 27701, GDPR), registro de exenciones y propuestas con trazabilidad normativa
       </p>
     </div>
 
@@ -67,23 +66,6 @@ import {
         </div>
       </div>
     </div>
-
-    <!-- Dual-Modal RAG Normative Citations Stream -->
-    <div class="space-y-3">
-      <div class="flex items-center justify-between">
-        <h2 class="text-xs font-semibold text-slate-300 uppercase tracking-wider flex items-center space-x-1.5">
-          <BookOpen class="w-4 h-4 text-emerald-400" />
-          <span>Trazabilidad Normativa (ISO 27701, GDPR, Ley 29733)</span>
-        </h2>
-        <span class="text-xs text-slate-500">Citas normativas y relevancia documental</span>
-      </div>
-
-      <div id="rag-citations-container" class="space-y-3">
-        <div class="p-6 bg-slate-900 border border-slate-800 rounded-xl text-center text-xs text-slate-500">
-          Esperando eventos de recuperación normativa...
-        </div>
-      </div>
-    </div>
   </div>
 
   <DecisionModal />
@@ -93,9 +75,8 @@ import {
   import { authenticatedFetch } from "@pims/cockpit/ui/lib/api.ts";
   import { getSession, hasPermission } from "@pims/cockpit/ui/lib/session.ts";
   import { sseClient } from "@pims/cockpit/ui/lib/sse-client.ts";
-  import type { CockpitTimer, PendingDecision, StreamSnapshot } from "@pims/types/cockpit.ts";
+  import type { CockpitTimer, ComplianceFinding, PendingDecision, StreamSnapshot } from "@pims/types/cockpit.ts";
   import type { AgentEvent } from "@pims/types/agent.ts";
-  import type { RetrievalPassage } from "@pims/types/rag.ts";
   import { formatRemainingTime } from "@pims/cockpit/ui/lib/utils.ts";
 
   const session = getSession();
@@ -107,7 +88,6 @@ import {
 
   let activeTimers: CockpitTimer[] = [];
   let pendingDecisions: PendingDecision[] = [];
-  const seenPassageKeys = new Set<string>();
 
   function renderTimers() {
     const timersGrid = getEl<HTMLDivElement>("timers-grid");
@@ -123,53 +103,69 @@ import {
 
     timersGrid.innerHTML = activeTimers
       .map((timer) => {
-        let label = timer.timer_type;
-        if (timer.timer_type === "T_AUTHORITY_72H" || timer.timer_type === "T72_AUTHORITY") label = "Plazo Legal Art. 33 GDPR (72h)";
-        if (timer.timer_type === "T_INTERNAL_SLA" || timer.timer_type === "T_REVIEW_SLA") label = "SLA de Revisión Interna (4h)";
-        if (timer.timer_type === "T_PHASE_FOLLOWUP") label = "Seguimiento por Fases (48h)";
-        if (timer.timer_type === "T_SUBJECT") label = "Notificación a Titulares Art. 34";
-        if (timer.timer_type === "T_PROCESSOR") label = "Notificación a Encargados";
+        const isUrgent = timer.remaining_ms < 12 * 3600 * 1000;
+        const typeLabels: Record<string, { label: string; desc: string; icon: string }> = {
+          T72_AUTHORITY: {
+            label: "Plazo Notificación Autoridad (Art. 33)",
+            desc: "Plazo legal estricto de 72 horas para notificar a la autoridad supervisora",
+            icon: "ShieldAlert",
+          },
+          T_REVIEW_SLA: {
+            label: "SLA de Revisión DPO",
+            desc: "Tiempo límite operacional para revisión y decisión humana",
+            icon: "Clock",
+          },
+          T_SUBJECT: {
+            label: "Plazo Comunicación a Titulares (Art. 34)",
+            desc: "Comunicación obligatoria sin dilación indebida a personas afectadas",
+            icon: "AlertCircle",
+          },
+          T_PROCESSOR: {
+            label: "Notificación de Encargado",
+            desc: "Plazo de comunicación del encargado de tratamiento al responsable",
+            icon: "Clock",
+          },
+        };
 
-        const isOverdue = timer.remaining_ms <= 0;
+        const meta = typeLabels[timer.timer_type] || {
+          label: timer.timer_type,
+          desc: "Temporizador de cumplimiento activo",
+          icon: "Clock",
+        };
 
         return `
-          <div class="bg-slate-900 border ${isOverdue ? "border-rose-900/80 bg-rose-950/20" : "border-slate-800"} rounded-xl p-4 flex flex-col justify-between space-y-3 shadow-sm hover:border-slate-700 transition-colors">
-            <div class="flex items-start justify-between">
-              <div class="space-y-1">
-                <div class="flex items-center space-x-2">
-                  <span class="px-2 py-0.5 rounded text-xs font-semibold ${isOverdue ? "bg-rose-950 text-rose-300 border border-rose-800" : "bg-blue-950 text-blue-400 border border-blue-900"}">
-                    ${timer.incident_code}
-                  </span>
-                  <span class="text-xs font-medium text-slate-300">
-                    ${label}
-                  </span>
-                </div>
-                <p class="text-xs text-slate-500">
-                  Vence: ${new Date(timer.fire_at_utc).toLocaleString("es-PE")}
-                </p>
+          <div class="p-4 rounded-xl border ${
+            isUrgent
+              ? "bg-amber-950/30 border-amber-800/80 text-amber-200"
+              : "bg-slate-900 border-slate-800 text-slate-200"
+          } space-y-3 shadow-sm transition-colors">
+            <div class="flex items-start justify-between gap-2">
+              <div class="space-y-0.5">
+                <span class="inline-block px-1.5 py-0.5 rounded text-[10px] font-mono font-bold ${
+                  isUrgent ? "bg-amber-900/60 text-amber-300" : "bg-slate-800 text-slate-300"
+                }">
+                  ${timer.incident_code}
+                </span>
+                <h3 class="text-xs font-semibold leading-tight text-white mt-1">
+                  ${meta.label}
+                </h3>
               </div>
-              <div class="p-2 rounded-lg ${isOverdue ? "bg-rose-950/80 text-rose-300" : "bg-slate-800 text-slate-300"}">
-                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-              </div>
+              <span class="px-2 py-0.5 rounded text-[10px] font-semibold uppercase ${
+                isUrgent
+                  ? "bg-amber-500/20 text-amber-300 border border-amber-500/30 animate-pulse"
+                  : "bg-blue-500/10 text-blue-400 border border-blue-500/20"
+              }">
+                ${isUrgent ? "Crítico" : "Activo"}
+              </span>
             </div>
 
-            <div class="pt-2 border-t border-slate-800/80 flex items-baseline justify-between">
-              <span class="text-xs ${isOverdue ? "text-rose-400 font-semibold" : "text-slate-400"}">
-                ${isOverdue ? "Plazo vencido:" : "Tiempo restante:"}
-              </span>
-              <span
-                data-timer-id="${timer.timer_id}"
-                data-ms="${timer.remaining_ms}"
-                class="text-xl font-bold font-mono tracking-tight tabular-nums ${
-                  isOverdue
-                    ? "text-rose-500 animate-pulse"
-                    : timer.remaining_ms < 12 * 3600 * 1000
-                    ? "text-amber-400"
-                    : "text-emerald-400"
-                }"
-              >
+            <p class="text-[11px] text-slate-400 leading-snug">
+              ${meta.desc}
+            </p>
+
+            <div class="pt-2 border-t ${isUrgent ? "border-amber-800/40" : "border-slate-800"} flex items-center justify-between">
+              <span class="text-[10px] text-slate-400 uppercase tracking-wider font-semibold">Tiempo Restante:</span>
+              <span class="text-sm font-mono font-bold tabular-nums ${isUrgent ? "text-amber-300" : "text-blue-400"}" data-timer-id="${timer.timer_id}" data-ms="${timer.remaining_ms}">
                 ${formatRemainingTime(timer.remaining_ms)}
               </span>
             </div>
@@ -177,6 +173,115 @@ import {
         `;
       })
       .join("");
+  }
+
+  function formatCitation(p: { citation?: string; doc_id: string; article_or_clause?: string; chunk_id: string }): string {
+    const rawCitation = p.citation;
+    if (typeof rawCitation === "string" && rawCitation.trim().length > 0 && rawCitation !== "undefined") {
+      return rawCitation;
+    }
+    const docMap: Record<string, string> = {
+      "gdpr-full": "GDPR (RGPD)",
+      "iso27701": "ISO/IEC 27701",
+    };
+    const doc = docMap[p.doc_id] || p.doc_id.toUpperCase();
+    const clause = p.article_or_clause || p.chunk_id;
+    return `${doc} · ${clause}`;
+  }
+
+  function cleanPassageText(text: string): string {
+    return text.replace(/^\[DOC:[^\]]+\]\s*/i, "").trim();
+  }
+
+  function renderFindingCard(f: ComplianceFinding): string {
+    const citationLabel = formatCitation(f);
+    const cleanText = cleanPassageText(f.text);
+    const shortSha = f.chunk_sha256.slice(0, 10);
+    const frameworkBadge =
+      f.framework === "iso27701"
+        ? `<span class="px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-950 text-emerald-300 border border-emerald-800">ISO/IEC 27701</span>`
+        : `<span class="px-2 py-0.5 rounded text-[10px] font-semibold bg-blue-950 text-blue-300 border border-blue-900">GDPR</span>`;
+
+    return `
+      <div class="bg-slate-900/90 border border-slate-800 rounded-lg p-3.5 space-y-2.5 shadow-sm">
+        <div class="flex items-center justify-between gap-2 flex-wrap">
+          <div class="flex items-center space-x-2 flex-wrap gap-y-1">
+            ${frameworkBadge}
+            <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-slate-800 text-slate-200 border border-slate-700">
+              ${citationLabel}
+            </span>
+            <span class="text-xs text-slate-400 font-mono">
+              Líneas: ${f.lines}
+            </span>
+          </div>
+
+          <div class="flex items-center space-x-2 shrink-0">
+            <!-- RAG Metrics Tooltip Trigger -->
+            <div class="relative group/rag inline-block">
+              <button
+                type="button"
+                tabindex="0"
+                class="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 text-xs font-mono transition-colors flex items-center space-x-1.5 cursor-help"
+                title="Inspeccionar métricas de recuperación RAG"
+              >
+                <svg class="w-3.5 h-3.5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                </svg>
+                <span>Puntajes RAG</span>
+                <span class="text-slate-400 font-sans text-[11px]">(Rerank: ${Number(f.rerank_score).toFixed(2)})</span>
+              </button>
+
+              <div class="invisible group-hover/rag:visible group-focus-within/rag:visible absolute right-0 top-full mt-1.5 z-30 w-64 p-3 bg-slate-900 border border-slate-700 rounded-lg shadow-xl text-xs space-y-2 pointer-events-none transition-all">
+                <div class="text-[11px] font-semibold text-slate-300 border-b border-slate-800 pb-1 flex items-center justify-between">
+                  <span>Métricas de Recuperación RAG</span>
+                  <span class="text-slate-400 font-mono text-[10px]">Dual-Modal</span>
+                </div>
+                <div class="space-y-1.5 text-xs">
+                  <div class="flex justify-between items-center text-slate-400">
+                    <span>Similitud Densa (Dense):</span>
+                    <span class="font-mono text-slate-200 tabular-nums">${f.dense_score !== null && f.dense_score !== undefined ? Number(f.dense_score).toFixed(4) : "—"}</span>
+                  </div>
+                  <div class="flex justify-between items-center text-slate-400">
+                    <span>Rango Léxico (BM25):</span>
+                    <span class="font-mono text-slate-200 tabular-nums">${f.bm25_rank !== null && f.bm25_rank !== undefined ? `#${f.bm25_rank}` : "—"}</span>
+                  </div>
+                  <div class="flex justify-between items-center text-slate-400">
+                    <span>Reciprocal Rank (RRF):</span>
+                    <span class="font-mono text-slate-200 tabular-nums">${Number(f.rrf_score).toFixed(4)}</span>
+                  </div>
+                  <div class="flex justify-between items-center text-slate-400">
+                    <span>Rerank Cross-Encoder:</span>
+                    <span class="font-mono text-slate-200 font-semibold tabular-nums">${Number(f.rerank_score).toFixed(4)}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Copy Hash Button -->
+            <button
+              type="button"
+              data-copy-hash="${f.chunk_sha256}"
+              class="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition-colors text-xs flex items-center space-x-1 border border-slate-700 shrink-0"
+              title="Copiar hash del fragmento"
+            >
+              <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
+              </svg>
+              <span class="font-mono text-[10px]">${shortSha}…</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="text-[11px] font-medium text-amber-300/90 flex items-center space-x-1">
+          <span>Anclaje al incidente:</span>
+          <span class="text-slate-200 font-normal">${f.incident_anchor}</span>
+        </div>
+
+        <blockquote class="text-xs text-slate-200 bg-slate-950/60 border border-slate-800/80 rounded-lg p-3 leading-relaxed font-sans">
+          "${cleanText}"
+        </blockquote>
+      </div>
+    `;
   }
 
   function renderProposalHtml(prop: Record<string, any> | null | undefined, packType: string | null): string {
@@ -312,23 +417,51 @@ import {
 
         if (item.kind === "agent_blocked") {
           return `
-          <div class="bg-rose-950/40 border border-rose-800/60 rounded-xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-            <div class="space-y-1">
-              <div class="flex items-center space-x-2">
-                <span class="px-2 py-0.5 rounded text-xs font-bold font-mono bg-rose-950 text-rose-300 border border-rose-800">
-                  ${item.incident_code}
-                </span>
-                <span class="text-sm font-semibold text-rose-200">
-                  Agente bloqueado — requiere intervención
-                </span>
+          <div class="bg-amber-950/40 border border-amber-800/60 rounded-xl p-4 flex flex-col space-y-3">
+            <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+              <div class="space-y-1">
+                <div class="flex items-center space-x-2">
+                  <span class="px-2 py-0.5 rounded text-xs font-bold font-mono bg-amber-950 text-amber-300 border border-amber-800">
+                    ${item.incident_code}
+                  </span>
+                  <span class="text-sm font-semibold text-amber-200">
+                    Propuesta no disponible temporalmente — reintentando
+                  </span>
+                </div>
+                <p class="text-xs text-amber-200/90">
+                  ${item.blocked_reason || "El ciclo autónomo se detuvo con error."}
+                </p>
               </div>
-              <p class="text-xs text-rose-300/80 font-mono">
-                ${item.blocked_reason || "UNKNOWN"}
-              </p>
-              <p class="text-xs text-slate-400">
-                El ciclo autónomo se detuvo con error y los reintentos no convergen. Revise el motivo, corrija la causa y el watcher retomará automáticamente.
-              </p>
+              <div class="flex items-center space-x-2 shrink-0">
+                <button
+                  type="button"
+                  data-action="regenerate-direct"
+                  data-inc-id="${item.incident_id}"
+                  ${disabledAttr}
+                  title="Reintentar ciclo autónomo de generación"
+                  class="px-3.5 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-500 text-white text-xs font-semibold transition-colors flex items-center space-x-1.5 shadow-sm ${disabledClasses}"
+                >
+                  <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                  <span>Reintentar</span>
+                </button>
+              </div>
             </div>
+
+            ${item.error_code ? `
+              <details class="text-[11px] text-slate-400 bg-slate-950/50 p-2 rounded border border-slate-800/60">
+                <summary class="cursor-pointer text-slate-400 hover:text-slate-200 font-medium">Detalles técnicos del operador</summary>
+                <div class="mt-1 font-mono text-slate-300 select-all">${item.error_code}</div>
+              </details>
+            ` : ""}
+
+            ${item.proposal ? `
+              <div class="pt-2 border-t border-amber-900/40">
+                <div class="text-[11px] text-slate-400 mb-1 font-semibold uppercase tracking-wider">Última propuesta válida:</div>
+                ${renderProposalHtml(item.proposal, item.pack_type)}
+              </div>
+            ` : ""}
           </div>
         `;
         }
@@ -353,6 +486,22 @@ import {
         `;
         }
 
+        const stateBadge =
+          item.proposal_state === "approved"
+            ? `<span class="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-950 text-emerald-300 border border-emerald-800 shrink-0">Aprobado</span>`
+            : item.proposal_state === "draft"
+              ? `<span class="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-950 text-amber-300 border border-amber-800 shrink-0">Borrador</span>`
+              : item.proposal_state === "sent"
+                ? `<span class="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-blue-950 text-blue-300 border border-blue-800 shrink-0">Enviado</span>`
+                : `<span class="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-slate-800 text-slate-300 border border-slate-700 shrink-0">${item.proposal_state || "Pendiente"}</span>`;
+
+        const packLabel =
+          item.pack_type === "authority"
+            ? "Autoridad Art. 33"
+            : item.pack_type === "subject"
+              ? "Titulares Art. 34"
+              : "Propuesta DPO";
+
         return `
           <div class="bg-slate-900 border border-slate-800 rounded-xl p-4 flex flex-col space-y-3 shadow-sm hover:border-slate-700 transition-colors">
             <div class="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
@@ -362,11 +511,9 @@ import {
                     ${item.incident_code}
                   </span>
                   <span class="text-sm font-semibold text-white">
-                    Paquete de Notificación listo para emisión (${item.pack_type === "authority" ? "Autoridad Art. 33" : "Titulares Art. 34"})
+                    Paquete de Notificación listo para emisión (${packLabel})
                   </span>
-                  <span class="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-950 text-emerald-300 border border-emerald-800 shrink-0">
-                    Validación completada
-                  </span>
+                  ${stateBadge}
                 </div>
                 <p class="text-xs text-slate-400">
                   ${item.blocked_reason || "Revisión completada. Esperando aprobación de la DPO."}
@@ -384,6 +531,20 @@ import {
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
                   </svg>
                   <span>Ver Detalle</span>
+                </button>
+
+                <button
+                  type="button"
+                  data-action="regenerate-direct"
+                  data-inc-id="${item.incident_id}"
+                  ${disabledAttr}
+                  title="Regenerar la propuesta en base a la evidencia actual"
+                  class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white text-xs font-medium transition-colors flex items-center space-x-1.5 border border-slate-700 ${disabledClasses}"
+                >
+                  <svg class="w-3.5 h-3.5 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                  <span>Regenerar</span>
                 </button>
 
                 <button
@@ -438,13 +599,61 @@ import {
               </div>
             </div>
 
-            <div id="${propTargetId}" class="hidden pt-3 border-t border-slate-800">
-              ${renderProposalHtml(item.proposal, item.pack_type)}
+            <div id="${propTargetId}" class="hidden pt-3 border-t border-slate-800 space-y-4">
+              <!-- (a) Root Cause Block -->
+              <div class="p-3.5 bg-slate-950/60 border border-slate-800 rounded-lg space-y-2">
+                <div class="flex items-center justify-between">
+                  <span class="text-xs font-semibold text-slate-300 flex items-center space-x-1.5">
+                    <svg class="w-3.5 h-3.5 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                    <span>Análisis de Causa Raíz</span>
+                  </span>
+                  ${item.root_cause?.systemic ? `<span class="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-rose-950 text-rose-300 border border-rose-800">Sistémico</span>` : ""}
+                </div>
+                ${item.root_cause ? `
+                  <div class="text-xs text-slate-300 space-y-1.5">
+                    <p><strong class="text-slate-400">Causa:</strong> ${item.root_cause.cause}</p>
+                    <p><strong class="text-slate-400">Método:</strong> ${item.root_cause.method}</p>
+                    <p><strong class="text-slate-400">Remediación:</strong> ${item.root_cause.remediation}</p>
+                    ${item.root_cause.root_cause_unproven ? `<p class="text-amber-400 text-[11px] font-medium">Advertencia: Causa raíz no comprobada fehacientemente.</p>` : ""}
+                  </div>
+                ` : `
+                  <p class="text-xs text-slate-500 italic">Causa raíz pendiente de investigación.</p>
+                `}
+              </div>
+
+              <!-- (b) Proposal Detail -->
+              <div class="space-y-1.5">
+                <div class="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Detalle de la Propuesta</div>
+                ${renderProposalHtml(item.proposal, item.pack_type)}
+              </div>
+
+              <!-- (c) Findings List -->
+              <div class="space-y-2 pt-2 border-t border-slate-800/80">
+                <h4 class="text-xs font-semibold text-slate-300 uppercase tracking-wider flex items-center space-x-1.5">
+                  <svg class="w-3.5 h-3.5 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                  </svg>
+                  <span>Hallazgos normativos</span>
+                </h4>
+                ${item.findings && item.findings.length > 0 ? `
+                  <div class="space-y-2.5">
+                    ${item.findings.map((f) => renderFindingCard(f)).join("")}
+                  </div>
+                ` : `
+                  <div class="p-3 bg-slate-950/40 border border-slate-800/80 rounded-lg text-xs text-slate-500 text-center">
+                    Sin hallazgos normativos vinculados a esta propuesta.
+                  </div>
+                `}
+              </div>
             </div>
           </div>
         `;
       })
       .join("");
+
+    attachCopyHashListeners();
 
     // Attach listeners for proposal toggle
     pendingContainer.querySelectorAll("button[data-toggle-prop]").forEach((btn) => {
@@ -462,11 +671,38 @@ import {
       });
     });
 
+    // Attach direct regenerate listeners
+    pendingContainer.querySelectorAll('button[data-action="regenerate-direct"]').forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        if (!canChangeIncident) return;
+        const incId = btn.getAttribute("data-inc-id");
+        if (!incId) return;
+        btn.setAttribute("disabled", "true");
+        const prevContent = btn.innerHTML;
+        btn.innerHTML = `<span class="text-xs">Regenerando...</span>`;
+        try {
+          const res = await authenticatedFetch(`/api/incidents/${incId}/regenerate`, {
+            method: "POST",
+          });
+          if (!res.ok) throw new Error("Error solicitando regeneración");
+          btn.innerHTML = `<span class="text-emerald-400 text-xs">¡Solicitado!</span>`;
+        } catch {
+          btn.innerHTML = `<span class="text-rose-400 text-xs">Error</span>`;
+        } finally {
+          setTimeout(() => {
+            btn.removeAttribute("disabled");
+            btn.innerHTML = prevContent;
+          }, 2000);
+        }
+      });
+    });
+
     // Attach listeners to trigger modal
     pendingContainer.querySelectorAll("button[data-action]").forEach((btn) => {
+      const action = btn.getAttribute("data-action");
+      if (action === "regenerate-direct") return;
       btn.addEventListener("click", () => {
         if (!canChangeIncident) return;
-        const action = btn.getAttribute("data-action");
         const incidentId = Number(btn.getAttribute("data-inc-id"));
         const incidentCode = btn.getAttribute("data-inc-code") || "";
         const itemIdx = Number(btn.getAttribute("data-item-idx") || "-1");
@@ -479,114 +715,6 @@ import {
         );
       });
     });
-  }
-
-  function formatCitation(p: RetrievalPassage): string {
-    const rawCitation = (p as any).citation;
-    if (typeof rawCitation === "string" && rawCitation.trim().length > 0 && rawCitation !== "undefined") {
-      return rawCitation;
-    }
-    const docMap: Record<string, string> = {
-      "gdpr-full": "GDPR (RGPD)",
-      "iso-27701": "ISO/IEC 27701",
-      "ley-29733": "Ley 29733",
-    };
-    const doc = docMap[p.doc_id] || p.doc_id.toUpperCase();
-    const clause = p.article_or_clause || p.chunk_id;
-    return `${doc} · ${clause}`;
-  }
-
-  function cleanPassageText(text: string): string {
-    return text.replace(/^\[DOC:[^\]]+\]\s*/i, "").trim();
-  }
-
-  function renderPassageCard(p: RetrievalPassage): string {
-    const key = `${p.doc_id}:${p.chunk_id}:${p.lines}`;
-    if (seenPassageKeys.has(key)) return "";
-    seenPassageKeys.add(key);
-
-    const citationLabel = formatCitation(p);
-    const cleanText = cleanPassageText(p.text);
-    const shortSha = p.chunk_sha256.slice(0, 10);
-
-    return `
-      <div class="bg-slate-900 border border-slate-800 rounded-xl p-4 space-y-3 shadow-sm hover:border-slate-700 transition-colors">
-        <div class="flex items-center justify-between gap-3 flex-wrap">
-          <div class="flex items-center space-x-2">
-            <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-blue-950 text-blue-300 border border-blue-900">
-              <svg class="w-3 h-3 mr-1 inline" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-              </svg>
-              ${citationLabel}
-            </span>
-            <span class="text-xs text-slate-400 font-mono">
-              Líneas: ${p.lines}
-            </span>
-          </div>
-
-          <div class="flex items-center space-x-2 shrink-0">
-            <!-- RAG Metrics Tooltip Trigger (No random colors) -->
-            <div class="relative group/rag inline-block">
-              <button
-                type="button"
-                tabindex="0"
-                class="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 text-xs font-mono transition-colors flex items-center space-x-1.5 cursor-help"
-                title="Inspeccionar métricas de recuperación RAG"
-              >
-                <svg class="w-3.5 h-3.5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                </svg>
-                <span>Puntajes RAG</span>
-                <span class="text-slate-400 font-sans text-[11px]">(Rerank: ${Number(p.rerank_score).toFixed(2)})</span>
-              </button>
-
-              <!-- Popover Tooltip with NO random colors -->
-              <div class="invisible group-hover/rag:visible group-focus-within/rag:visible absolute right-0 top-full mt-1.5 z-30 w-64 p-3 bg-slate-900 border border-slate-700 rounded-lg shadow-xl text-xs space-y-2 pointer-events-none transition-all">
-                <div class="text-[11px] font-semibold text-slate-300 border-b border-slate-800 pb-1 flex items-center justify-between">
-                  <span>Métricas de Recuperación RAG</span>
-                  <span class="text-slate-400 font-mono text-[10px]">Dual-Modal</span>
-                </div>
-                <div class="space-y-1.5 text-xs">
-                  <div class="flex justify-between items-center text-slate-400">
-                    <span>Similitud Densa (Dense):</span>
-                    <span class="font-mono text-slate-200 tabular-nums">${p.dense_score !== null && p.dense_score !== undefined ? Number(p.dense_score).toFixed(4) : "—"}</span>
-                  </div>
-                  <div class="flex justify-between items-center text-slate-400">
-                    <span>Rango Léxico (BM25):</span>
-                    <span class="font-mono text-slate-200 tabular-nums">${p.bm25_rank !== null && p.bm25_rank !== undefined ? `#${p.bm25_rank}` : "—"}</span>
-                  </div>
-                  <div class="flex justify-between items-center text-slate-400">
-                    <span>Reciprocal Rank (RRF):</span>
-                    <span class="font-mono text-slate-200 tabular-nums">${Number(p.rrf_score).toFixed(4)}</span>
-                  </div>
-                  <div class="flex justify-between items-center text-slate-400">
-                    <span>Rerank Cross-Encoder:</span>
-                    <span class="font-mono text-slate-200 font-semibold tabular-nums">${Number(p.rerank_score).toFixed(4)}</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <!-- Copy Hash Button -->
-            <button
-              type="button"
-              data-copy-hash="${p.chunk_sha256}"
-              class="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition-colors text-xs flex items-center space-x-1 border border-slate-700 shrink-0"
-              title="Copiar hash del fragmento"
-            >
-              <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
-              </svg>
-              <span class="font-mono text-[10px]">${shortSha}…</span>
-            </button>
-          </div>
-        </div>
-
-        <blockquote class="text-xs text-slate-200 bg-slate-950/60 border border-slate-800/80 rounded-lg p-3 leading-relaxed font-sans">
-          "${cleanText}"
-        </blockquote>
-      </div>
-    `;
   }
 
   function attachCopyHashListeners() {
@@ -605,27 +733,6 @@ import {
         }
       });
     });
-  }
-
-  function renderRagRetrievals(records: Array<{ passages: RetrievalPassage[] }>) {
-    const ragContainer = getEl<HTMLDivElement>("rag-citations-container");
-    if (!ragContainer || !Array.isArray(records) || records.length === 0) return;
-    let html = "";
-    for (const record of records) {
-      if (Array.isArray(record.passages)) {
-        for (const p of record.passages) {
-          html += renderPassageCard(p);
-        }
-      }
-    }
-    if (html.length > 0) {
-      if (ragContainer.textContent?.includes("Esperando eventos")) {
-        ragContainer.innerHTML = html;
-      } else {
-        ragContainer.insertAdjacentHTML("afterbegin", html);
-      }
-      attachCopyHashListeners();
-    }
   }
 
   // Timer ticker
@@ -649,9 +756,6 @@ import {
       pendingDecisions = existingSnapshot.pending_decisions;
       renderTimers();
       renderPendingDecisions();
-      if (existingSnapshot.recent_rag_retrievals) {
-        renderRagRetrievals(existingSnapshot.recent_rag_retrievals);
-      }
     }
     try {
       const response = await authenticatedFetch("/api/compliance");
@@ -659,7 +763,6 @@ import {
         const data = (await response.json()) as {
           timers: CockpitTimer[];
           pending_decisions: PendingDecision[];
-          recent_rag_retrievals?: Array<{ passages: RetrievalPassage[] }>;
         };
         if (Array.isArray(data.timers)) {
           activeTimers = data.timers;
@@ -669,9 +772,6 @@ import {
         }
         renderTimers();
         renderPendingDecisions();
-        if (Array.isArray(data.recent_rag_retrievals)) {
-          renderRagRetrievals(data.recent_rag_retrievals);
-        }
       }
     } catch {
       // SSE snapshot will hydrate
@@ -689,9 +789,6 @@ import {
     pendingDecisions = e.detail.pending_decisions;
     renderTimers();
     renderPendingDecisions();
-    if (e.detail.recent_rag_retrievals) {
-      renderRagRetrievals(e.detail.recent_rag_retrievals);
-    }
   }) as EventListener);
 
   // SSE agent event listener
@@ -711,22 +808,6 @@ import {
         });
       }
       renderTimers();
-    } else if (event.type === "rag:retrieval") {
-      const ragContainer = getEl<HTMLDivElement>("rag-citations-container");
-      if (ragContainer) {
-        let html = "";
-        for (const p of event.passages) {
-          html += renderPassageCard(p);
-        }
-        if (html.length > 0) {
-          if (ragContainer.textContent?.includes("Esperando eventos")) {
-            ragContainer.innerHTML = html;
-          } else {
-            ragContainer.insertAdjacentHTML("afterbegin", html);
-          }
-          attachCopyHashListeners();
-        }
-      }
     }
   }) as EventListener);
 </script>

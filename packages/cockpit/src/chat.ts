@@ -27,7 +27,7 @@ import type {
   CockpitSession,
   GuidedReporting,
 } from "@pims/types/cockpit.ts";
-import { CONSTANTS } from "@pims/types/constants.ts";
+import { CONSTANTS, SPANISH_OUTPUT_CONTRACT } from "@pims/types/constants.ts";
 import {
   CitationFabricatedError,
   CockpitChatInvalidError,
@@ -488,7 +488,12 @@ export async function handleChat(
       deps.modelClient.chat_json({
         route: CONSTANTS.MODEL_ROUTE_REASONING,
         system: `${getPersonaPrompt(persona)} ${RESPONSE_CONTRACT}`,
-        messages: [{ role: "user", content: serializedContext }],
+        messages: [
+          {
+            role: "user",
+            content: `${serializedContext}\n\n${SPANISH_OUTPUT_CONTRACT}`,
+          },
+        ],
         max_tokens: CONSTANTS.MAX_CHAT_MAX_TOKENS,
         temperature: deps.config.TEMP_REASONING,
       }),

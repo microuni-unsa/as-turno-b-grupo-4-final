@@ -17,9 +17,10 @@ import type {
   ExemptionEvaluationResult,
   HighRiskGateResult,
   NumericApproval,
+  RetrievalPassage,
   SubjectNoticePack,
 } from "@pims/types";
-import { CONSTANTS } from "@pims/types/constants.ts";
+import { CONSTANTS, SPANISH_OUTPUT_CONTRACT } from "@pims/types/constants.ts";
 import {
   ArtifactIncompleteError,
   ConfigError,
@@ -37,6 +38,97 @@ const AUTHORITY_RAG_QUERY =
 
 const SUBJECT_RAG_QUERY =
   "GDPR Article 34 communication to the data subject clear and plain language nature of breach recommendations to mitigate adverse effects";
+
+const ISO_ALIGNMENT_RAG_QUERY =
+  "ISO 27701 PIMS privacy information management incident response controls: privacy risk assessment 6.1.2 and 8.2, incident management, nonconformity and corrective action 10.2, Annex A and Annex B controls";
+
+async function queryDualNormative(
+  ragService: RAGService,
+  incidentCode: string,
+  isoQuery: string,
+  dutyQuery: string,
+): Promise<{ passages: RetrievalPassage[]; citations: string[] }> {
+  let isoRes: { passages: RetrievalPassage[]; citations: string[] } | null =
+    null;
+  let dutyRes: { passages: RetrievalPassage[]; citations: string[] } | null =
+    null;
+  let isoErr: unknown = null;
+  let dutyErr: unknown = null;
+
+  try {
+    isoRes = await ragService.query(isoQuery, {
+      normative_only: true,
+      incident_code: incidentCode,
+      prefer_doc_ids: ["iso27701"],
+    });
+  } catch (err) {
+    if (err instanceof RagNoEvidenceError) {
+      isoErr = err;
+    } else {
+      throw err;
+    }
+  }
+
+  try {
+    dutyRes = await ragService.query(dutyQuery, {
+      normative_only: true,
+      incident_code: incidentCode,
+    });
+  } catch (err) {
+    if (err instanceof RagNoEvidenceError) {
+      dutyErr = err;
+    } else {
+      throw err;
+    }
+  }
+
+  if (isoErr && dutyErr) {
+    throw isoErr;
+  }
+  if (!isoRes && !dutyRes) {
+    if (isoErr instanceof Error) {
+      throw isoErr;
+    }
+    if (dutyErr instanceof Error) {
+      throw dutyErr;
+    }
+    throw new RagNoEvidenceError("No normative evidence returned");
+  }
+
+  const rawPassages = [
+    ...(isoRes?.passages ?? []),
+    ...(dutyRes?.passages ?? []),
+  ];
+  const seenChunkIds = new Set<string>();
+  const passages: RetrievalPassage[] = [];
+  for (const p of rawPassages) {
+    if (!seenChunkIds.has(p.chunk_id)) {
+      seenChunkIds.add(p.chunk_id);
+      passages.push(p);
+    }
+  }
+
+  const rawCitations = [
+    ...(isoRes?.citations ?? []),
+    ...(dutyRes?.citations ?? []),
+  ];
+  const seenCitations = new Set<string>();
+  const citations: string[] = [];
+  for (const c of rawCitations) {
+    if (!seenCitations.has(c)) {
+      seenCitations.add(c);
+      citations.push(c);
+    }
+  }
+
+  if (passages.length === 0) {
+    throw new RagNoEvidenceError(
+      "No normative evidence available after merging",
+    );
+  }
+
+  return { passages, citations };
+}
 
 const STALE_PACK_MS = 300000;
 const AUTHORITY_MAX_TOKENS = 3500;
@@ -440,22 +532,19 @@ export class NoticeDraftService {
       throw new PimsValidationError("pack", "PACK_STALE_RETRY");
     }
 
-    const rag = await this.ragService.query(AUTHORITY_RAG_QUERY, {
-      normative_only: true,
-      incident_code: incident.incident_code,
-    });
-    if (rag.passages.length === 0) {
-      throw new RagNoEvidenceError(
-        "No normative evidence available for the Article 33(3) draft",
-      );
-    }
+    const rag = await queryDualNormative(
+      this.ragService,
+      incident.incident_code,
+      ISO_ALIGNMENT_RAG_QUERY,
+      AUTHORITY_RAG_QUERY,
+    );
 
     const response = await this.modelClient.chat_json({
       system: DRAFT_AUTHORITY_SYSTEM,
       messages: [
         {
           role: "user",
-          content: `${renderIncidentProse(incident)}\nAllowed normative citations (return citations[] using ONLY the identifiers C1..Cn; never invent):\n${rag.citations.map((citation, index) => `C${index + 1} = ${citation}`).join("\n")}`,
+          content: `${renderIncidentProse(incident)}\nAllowed normative citations (return citations[] using ONLY the identifiers C1..Cn; never invent):\n${rag.citations.map((citation, index) => `C${index + 1} = ${citation}`).join("\n")}\n\n${SPANISH_OUTPUT_CONTRACT}`,
         },
       ],
       json_schema: AUTHORITY_JSON_SCHEMA,
@@ -635,15 +724,12 @@ export class NoticeDraftService {
       return { pack, contentSha, citations: [] };
     }
 
-    const rag = await this.ragService.query(SUBJECT_RAG_QUERY, {
-      normative_only: true,
-      incident_code: incident.incident_code,
-    });
-    if (rag.passages.length === 0) {
-      throw new RagNoEvidenceError(
-        "No normative evidence available for the Article 34 draft",
-      );
-    }
+    const rag = await queryDualNormative(
+      this.ragService,
+      incident.incident_code,
+      ISO_ALIGNMENT_RAG_QUERY,
+      SUBJECT_RAG_QUERY,
+    );
 
     const maxWords =
       this.config.PLAIN_LANG_MAX_WORDS !== undefined
@@ -655,7 +741,7 @@ export class NoticeDraftService {
       messages: [
         {
           role: "user",
-          content: `${renderIncidentProse(incident)}\nAllowed normative citations (return citations[] using ONLY the identifiers C1..Cn; never invent):\n${rag.citations.map((citation, index) => `C${index + 1} = ${citation}`).join("\n")}\nConstraints: write body_plain in Spanish; every sentence must have at most ${maxWords} words; do not include digits or numeric literals in body_plain; keep every field concrete and free of legal jargon.`,
+          content: `${renderIncidentProse(incident)}\nAllowed normative citations (return citations[] using ONLY the identifiers C1..Cn; never invent):\n${rag.citations.map((citation, index) => `C${index + 1} = ${citation}`).join("\n")}\nConstraints: write body_plain in Spanish; every sentence must have at most ${maxWords} words; do not include digits or numeric literals in body_plain; keep every field concrete and free of legal jargon.\n\n${SPANISH_OUTPUT_CONTRACT}`,
         },
       ],
       json_schema: SUBJECT_JSON_SCHEMA,
@@ -729,7 +815,7 @@ export class NoticeDraftService {
       messages: [
         {
           role: "user",
-          content: `${renderIncidentProse(incident)}\nChecklist de cierre: ${checklist.join(", ")}\nAllowed normative citations (return citations[] using ONLY the identifiers C1..Cn; never invent):\n${rag.citations.map((citation, index) => `C${index + 1} = ${citation}`).join("\n")}\nConstraints: write summary and remediation in Spanish; every sentence must have at most ${maxWords} words; do not include digits or numeric literals.`,
+          content: `${renderIncidentProse(incident)}\nChecklist de cierre: ${checklist.join(", ")}\nAllowed normative citations (return citations[] using ONLY the identifiers C1..Cn; never invent):\n${rag.citations.map((citation, index) => `C${index + 1} = ${citation}`).join("\n")}\nConstraints: write summary and remediation in Spanish; every sentence must have at most ${maxWords} words; do not include digits or numeric literals.\n\n${SPANISH_OUTPUT_CONTRACT}`,
         },
       ],
       json_schema: RESOLUTION_JSON_SCHEMA,

@@ -616,15 +616,13 @@ export function createCockpitApp(deps: CockpitAppDeps): Hono<CockpitEnv> {
   app.get("/api/compliance", async (c) => {
     const session = c.get("session");
     requirePermission(session, "view_incident");
-    const [timers, pendingDecisions, recentRag] = await Promise.all([
+    const [timers, pendingDecisions] = await Promise.all([
       getRegulatoryTimers(deps.store, clock),
       checkPendingDecisions(deps.adapter, deps.store, session),
-      deps.store.listRecentRagRetrievals(15),
     ]);
     return c.json({
       timers,
       pending_decisions: pendingDecisions,
-      recent_rag_retrievals: recentRag,
     });
   });
 
@@ -780,6 +778,15 @@ export function createCockpitApp(deps: CockpitAppDeps): Hono<CockpitEnv> {
       session.username,
       request.reason,
     );
+    return c.json({ ok: true });
+  });
+
+  app.post("/api/incidents/:id/regenerate", async (c) => {
+    const session = c.get("session");
+    requirePermission(session, "change_incident");
+    const incidentId = parseIncidentId(c.req.param("id"));
+    const incident = await deps.adapter.getIncident(incidentId);
+    await deps.agent.orchestrator.regenerateProposal(incident.id);
     return c.json({ ok: true });
   });
 

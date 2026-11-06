@@ -122,17 +122,9 @@ export async function buildSnapshot(
     console.error("BUILD_SNAPSHOT_PENDING_DECISIONS_ERROR:", error);
   }
 
-  let recentRagRetrievals: StreamSnapshot["recent_rag_retrievals"] = [];
-  try {
-    recentRagRetrievals = await store.listRecentRagRetrievals(15);
-  } catch (error) {
-    console.error("BUILD_SNAPSHOT_RAG_ERROR:", error);
-  }
-
   return {
     incidents,
     timers,
     pending_decisions: pendingDecisions,
-    recent_rag_retrievals: recentRagRetrievals,
   };
 }
