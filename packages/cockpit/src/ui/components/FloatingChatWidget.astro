@@ -200,6 +200,7 @@ import {
 
 <script>
   import { authenticatedFetch } from "@pims/cockpit/ui/lib/api.ts";
+  import { renderMarkdown, renderMarkdownInline } from "@pims/cockpit/ui/lib/markdown.ts";
   import { chatStore, type ChatMessageNode } from "@pims/cockpit/ui/lib/chat-store.ts";
   import {
     applyFormMutationToDom,
@@ -224,39 +225,6 @@ import {
       .replace(/>/g, "&gt;")
       .replace(/"/g, "&quot;")
       .replace(/'/g, "&#039;");
-  }
-
-  function renderMarkdown(raw: string): string {
-    let escaped = escapeHtml(raw);
-
-    // Fenced code blocks
-    escaped = escaped.replace(/```([a-zA-Z0-9_-]*)\n([\s\S]*?)```/g, (_match, _lang, code) => {
-      return `<pre class="my-2 p-2 bg-slate-950 border border-slate-800 rounded-lg overflow-x-auto font-mono text-[11px] text-emerald-300 leading-relaxed"><code>${code.trim()}</code></pre>`;
-    });
-
-    // Inline code
-    escaped = escaped.replace(/`([^`]+)`/g, '<code class="bg-slate-800/90 text-amber-300 px-1 py-0.5 rounded font-mono text-[11px]">$1</code>');
-
-    // Headings
-    escaped = escaped.replace(/^### (.*$)/gim, '<h4 class="font-bold text-slate-100 text-xs mt-2.5 mb-1">$1</h4>');
-    escaped = escaped.replace(/^## (.*$)/gim, '<h3 class="font-bold text-white text-xs mt-3 mb-1.5">$1</h3>');
-    escaped = escaped.replace(/^# (.*$)/gim, '<h2 class="font-bold text-white text-sm mt-3 mb-2">$1</h2>');
-
-    // Bold & Italic
-    escaped = escaped.replace(/\*\*([^*]+)\*\*/g, '<strong class="font-semibold text-white">$1</strong>');
-    escaped = escaped.replace(/\*([^*]+)\*/g, '<em class="italic text-slate-200">$1</em>');
-
-    // Bullet lists
-    escaped = escaped.replace(/^\s*[-*]\s+(.*$)/gim, '<li class="ml-3 list-disc text-slate-200 my-0.5">$1</li>');
-
-    // Numbered lists
-    escaped = escaped.replace(/^\s*(\d+)\.\s+(.*$)/gim, '<li class="ml-3 list-decimal text-slate-200 my-0.5">$2</li>');
-
-    // Paragraphs / line breaks
-    escaped = escaped.replace(/\n\n/g, '<div class="h-1.5"></div>');
-    escaped = escaped.replace(/\n/g, '<br/>');
-
-    return escaped;
   }
 
   function formatFieldLabel(key: string, val: unknown): string {
@@ -587,8 +555,8 @@ import {
                     </div>
                     <span class="text-[9px] text-indigo-400 group-open/details:rotate-180 transition-transform">▼</span>
                   </summary>
-                  <div class="p-2.5 text-indigo-200/90 leading-relaxed border-t border-indigo-900/40 bg-indigo-950/20 whitespace-pre-wrap">
-                    ${escapeHtml(node.reasoning)}
+                  <div class="markdown-content p-2.5 text-indigo-200/90 leading-relaxed border-t border-indigo-900/40 bg-indigo-950/20">
+                    ${renderMarkdown(node.reasoning)}
                   </div>
                 </details>
               `;
@@ -662,7 +630,7 @@ import {
                     <span>✨</span>
                     <span>Propuesta para el Formulario</span>
                   </div>
-                  <p class="text-[11px] text-blue-100/90 leading-relaxed">${escapeHtml(mut.summary)}</p>
+                  <div class="markdown-content text-[11px] text-blue-100/90 leading-relaxed">${renderMarkdown(mut.summary)}</div>
                   ${badgesHtml}
                   <div class="flex items-center space-x-2 pt-1.5 border-t border-blue-900/50">
                     <button
@@ -689,7 +657,7 @@ import {
             msgDiv.innerHTML = `
               <div class="max-w-[92%] bg-slate-900/90 border border-slate-800 rounded-2xl rounded-bl-sm p-3 shadow-md space-y-2">
                 ${reasoningHtml}
-                <div class="text-slate-100 leading-relaxed">${renderMarkdown(node.text)}</div>
+                <div class="markdown-content text-slate-100 leading-relaxed">${renderMarkdown(node.text)}</div>
                 ${citationsHtml}
                 ${mutationHtml}
                 <div class="text-[9px] text-slate-500 font-mono pt-1 text-right">${node.timestamp}</div>

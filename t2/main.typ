@@ -2,7 +2,7 @@
 
 #show: standard-report.with(
   pretitle: "ACTIVIDAD PRÁCTICA",
-  title: [Trabajo de Investigación Formativa: Sistema de Gestión de Información de Privacidad, PIMS, según ISO/IEC 27701],
+  title: [TRABAJO DE INVESTIGACIÓN FORMATIVA: SISTEMA DE SOPORTE A SISTEMA DE GESTIÓN DE INFORMACIÓN DE PRIVACIDAD, PIMS, SEGÚN ISO/IEC 27701],
   course: "AUDITORÍA DE SISTEMAS",
   group: "GRUPO 4",
   teacher: "EDWARD VICENTE ZARATE CARLOS",
@@ -15,16 +15,14 @@
   ),
 )
 
-#v(-0.6em)
-
-#set text(size: 8.3pt)
+#set text(size: 10pt)
 
 #table(
   columns: (2.2fr, 4.8fr),
   stroke: 0.5pt + rgb("#b0bec5"),
   inset: (x: 7pt, y: 4.4pt),
   fill: (col, row) => if row == 0 { rgb("#1d3557") } else if calc.even(row) { rgb("#f8fafc") } else { rgb("#ffffff") },
-  
+
   table.header(
     text(weight: "bold", fill: white)[Parámetro],
     text(weight: "bold", fill: white)[Detalle y especificación técnica],
@@ -51,12 +49,11 @@
     - Cláusula 10.2: No conformidad y acción correctiva. Formula análisis de causa raíz, propone acciones preventivas y ejecuta una lista de comprobación de ocho puntos previa al cierre.
     - Control A.3.11 y B.3.11: Planificación y preparación de la gestión de incidentes. Recibe incidentes desde la interfaz de programación de aplicaciones del sistema de gestión y filtra datos personales de manera estricta antes de cualquier análisis automatizado externo.
     - Control A.3.12 y B.3.12: Respuesta a incidentes de seguridad de la información. Confirma la existencia de una brecha, redacta los informes requeridos por el artículo 33 del Reglamento General de Protección de Datos, GDPR, elabora comunicaciones para titulares en lenguaje accesible conforme al artículo 34 y analiza las condiciones de exención previstas en el artículo 34 inciso 3.
-    - Recuperación normativa fundamentada: Extrae citas textuales verificables de la norma ISO/IEC 27701:2025 mediante búsqueda vectorial combinada con búsqueda léxica y reclasificación semántica.
   ],
 
   [ Enlace del sistema ],
   [
-    #link("https://incidents-pims.mistercricro8.top")[https://incidents-pims.mistercricro8.top]
+    https://incidents-pims.mistercricro8.top
   ],
 
   [ Credenciales de acceso ],
@@ -64,4 +61,21 @@
     Usuario: grupob4 \
     Contraseña: #text("Q^*aLefm8gyBf3N^")
   ],
+
+  [ Enlace a video de demostración del sistema ],
+  [
+
+  ],
+)
+
+#set page(flipped: true)
+
+#figure(
+  image("img/architecture-ai.png", width: 95%),
+  caption: [Arquitectura Cognitiva, Orquestación Multi-Rol y Flujo de IA],
+)
+
+#figure(
+  image("img/architecture-system.png", width: 98%),
+  caption: [Arquitectura Integral del Sistema e Infraestructura],
 )

@@ -23,7 +23,9 @@
     "env:check": "microenv check --def ./packages/config/src/env-matrix.ts",
     "env:diff": "microenv diff --def ./packages/config/src/env-matrix.ts dev prod",
     "env:materialize:dev": "microenv materialize --def ./packages/config/src/env-matrix.ts --env dev --out .env --force",
-    "env:materialize:prod": "microenv materialize --def ./packages/config/src/env-matrix.ts --env prod --out .env --force"
+    "env:materialize:prod": "microenv materialize --def ./packages/config/src/env-matrix.ts --env prod --out .env --force",
+    "diagram:generate": "bun scripts/generate-architecture-diagrams.ts",
+    "report:compile": "typst compile --root . t2/main.typ t2/main.pdf"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.6.4",

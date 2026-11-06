@@ -1080,6 +1080,7 @@ import {
 
 <script>
   import { authenticatedFetch } from "@pims/cockpit/ui/lib/api.ts";
+  import { renderMarkdown, renderMarkdownInline } from "@pims/cockpit/ui/lib/markdown.ts";
   import {
     applyFormMutationToDom,
     extractCurrentFormValues,
@@ -1332,16 +1333,16 @@ import {
 
         const data = await res.json();
         if (data.type === "enum" && data.options) {
-          let html = `<p class="mb-2 text-slate-400">${formatDisplayString(data.explanation)}</p><ul class="space-y-1.5">`;
+          let html = `<div class="markdown-content mb-2 text-slate-400">${renderMarkdown(data.explanation)}</div><ul class="space-y-1.5">`;
           data.options.forEach((opt: any) => {
-            const desc = opt.description ? `<p class="text-[11px] text-slate-400 mt-0.5">${opt.description}</p>` : "";
+            const desc = opt.description ? `<div class="markdown-content text-[11px] text-slate-400 mt-0.5">${renderMarkdownInline(opt.description)}</div>` : "";
             html += `<li class="p-2 rounded bg-slate-950 border border-slate-800"><span class="font-bold text-blue-400">${opt.code}</span> - <span class="text-white">${opt.label}</span>${desc}</li>`;
           });
           html += "</ul>";
           if (modalExplainContent) modalExplainContent.innerHTML = html;
         } else {
           if (modalExplainContent) {
-            modalExplainContent.textContent = formatDisplayString(data.explanation);
+            modalExplainContent.innerHTML = `<div class="markdown-content">${renderMarkdown(data.explanation)}</div>`;
           }
           if (
             Array.isArray(data.citations) &&

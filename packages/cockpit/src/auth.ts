@@ -81,6 +81,7 @@ export function resolveNativeRole(input: NativeRoleInput): CockpitRole {
 
 export function derivePermissions(
   permissions: PimsPermission[],
+  role?: CockpitRole,
 ): CockpitPermission[] {
   const byModule = new Map<string, PimsPermission>();
   for (const permission of permissions) {
@@ -96,7 +97,13 @@ export function derivePermissions(
   if (byModule.get("Incidentes")?.editar === true) {
     granted.push("change_incident");
   }
-  add("view_securitylog", "Seguridad");
+  add(CONSTANTS.PERMISSION_VIEW_SECURITYLOG, "Seguridad");
+  if (
+    (role === "Operador" || role === "Administrador") &&
+    !granted.includes(CONSTANTS.PERMISSION_VIEW_SECURITYLOG)
+  ) {
+    granted.push(CONSTANTS.PERMISSION_VIEW_SECURITYLOG);
+  }
   add("view_audit", "Auditorías");
   add("view_riskevaluation", "Riesgos (DPIIA)");
   add("manage_users", "Usuarios y Roles");
@@ -107,6 +114,13 @@ export function requirePermission(
   session: CockpitSession,
   permission: CockpitPermission,
 ): void {
+  if (
+    permission === CONSTANTS.PERMISSION_VIEW_SECURITYLOG &&
+    (session.native_role === "Operador" ||
+      session.native_role === "Administrador")
+  ) {
+    return;
+  }
   if (!session.permissions.includes(permission)) {
     throw new CockpitPermissionDeniedError(permission);
   }
@@ -261,7 +275,7 @@ export async function loginWithPims(
     username: login.user.username,
     schema: claims.schema,
     native_role: nativeRole,
-    permissions: derivePermissions(permissionRows),
+    permissions: derivePermissions(permissionRows, nativeRole),
     default_persona: defaultPersona,
     can_switch_persona:
       nativeRole === "Administrador" || nativeRole === "Operador",

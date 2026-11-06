@@ -2,10 +2,15 @@ import crypto from "node:crypto";
 import { IncidentWatcherDaemon, readMarkers } from "@pims/agent";
 import { createCockpitApp } from "@pims/cockpit/app.ts";
 import { SessionRegistry } from "@pims/cockpit/auth.ts";
-import { type AgentEvent, WatcherStateSchema } from "@pims/types/agent.ts";
+import {
+  type AgentEvent,
+  type PageAlert,
+  WatcherStateSchema,
+} from "@pims/types/agent.ts";
 import { canonicalizeJson } from "@pims/types/canonical.ts";
 import type { CockpitSession } from "@pims/types/cockpit.ts";
 import { CONSTANTS } from "@pims/types/constants.ts";
+import { EscalateStuckReviewError } from "@pims/types/errors.ts";
 import {
   type IntegrationHarness,
   intakeFixture,
@@ -19,7 +24,7 @@ describe("Autonomous watcher daemon lifecycle", { timeout: 240_000 }, () => {
 
   beforeAll(async () => {
     harness = await startIntegrationHarness({ autoNotify: false });
-  });
+  }, 120_000);
 
   afterAll(async () => {
     if (harness) {
@@ -305,5 +310,72 @@ describe("Autonomous watcher daemon lifecycle", { timeout: 240_000 }, () => {
     draftSpy.mockClear();
     await watcher.pollOnce();
     expect(draftSpy).toHaveBeenCalledTimes(0);
+  });
+
+  it("parks incident in blocked upon EscalateStuckReviewError without repeated paging and without infinite retries", async () => {
+    const { adapter, agent, config, store, events, now } = harness;
+
+    const intake = await agent.orchestrator.intake(
+      intakeFixture({
+        title: "Stuck review test fixture",
+      }),
+    );
+    const incidentId = intake.incident.id;
+    const code = intake.incident.incident_code;
+
+    const pagedAlerts: PageAlert[] = [];
+    const watcher = new IncidentWatcherDaemon({
+      adapter,
+      orchestrator: agent.orchestrator,
+      evidenceStore: store,
+      events,
+      config,
+      clock: () => now,
+      page: (alert) => {
+        pagedAlerts.push(alert);
+      },
+    });
+
+    const draftSpy = vi
+      .spyOn(agent.orchestrator, "draftAndReview")
+      .mockRejectedValueOnce(
+        new EscalateStuckReviewError("Pack rejected 3 times"),
+      );
+
+    // First poll executes detected -> triaged -> investigated -> draftAndReview fails
+    await watcher.pollOnce();
+
+    expect(pagedAlerts).toHaveLength(1);
+    expect(pagedAlerts[0]?.incident_code).toBe(code);
+    expect(pagedAlerts[0]?.kind).toBe("T_RETRY");
+    expect(pagedAlerts[0]?.reason).toBe("ESCALATE_STUCK_REVIEW");
+
+    const rawState = await store.getAgentState(`WATCHER:${code}`);
+    const state = WatcherStateSchema.parse(rawState);
+    expect(state.stage).toBe("blocked");
+    expect(state.blocked_at_stage).toBe("investigated");
+
+    // Subsequent polls without incident update must NOT unblock, NOT call draftAndReview, and NOT page again
+    draftSpy.mockClear();
+    await watcher.pollOnce();
+    await watcher.pollOnce();
+
+    expect(pagedAlerts).toHaveLength(1);
+    expect(draftSpy).not.toHaveBeenCalled();
+
+    const stateStillBlocked = WatcherStateSchema.parse(
+      await store.getAgentState(`WATCHER:${code}`),
+    );
+    expect(stateStillBlocked.stage).toBe("blocked");
+
+    // Once the incident is updated in PIMS, the next poll unblocks it
+    await adapter.updateIncident(incidentId, {
+      title: "Updated stuck review test fixture with more details",
+    });
+
+    await watcher.pollOnce();
+    expect(draftSpy).toHaveBeenCalledTimes(1);
+
+    draftSpy.mockRestore();
   });
 });

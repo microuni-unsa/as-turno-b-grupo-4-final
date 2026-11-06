@@ -1,4 +1,5 @@
 ---
+import { renderMarkdown } from "@pims/cockpit/ui/lib/markdown.ts";
 import { CONSTANTS } from "@pims/types/constants.ts";
 import { Bot, Send, User } from "lucide-astro";
 
@@ -62,7 +63,13 @@ const title =
                   <span>·</span>
                   <span class="font-mono">{msg.timestamp}</span>
                 </div>
-                <p class="leading-relaxed whitespace-pre-wrap">{msg.text}</p>
+                {
+                  isUser ? (
+                    <p class="leading-relaxed whitespace-pre-wrap">{msg.text}</p>
+                  ) : (
+                    <div class="markdown-content leading-relaxed" set:html={renderMarkdown(msg.text)} />
+                  )
+                }
               </div>
             </div>
           );

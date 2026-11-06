@@ -73,6 +73,7 @@ import {
 
 <script>
   import { authenticatedFetch } from "@pims/cockpit/ui/lib/api.ts";
+  import { renderMarkdown, renderMarkdownInline } from "@pims/cockpit/ui/lib/markdown.ts";
   import { getSession, hasPermission } from "@pims/cockpit/ui/lib/session.ts";
   import { sseClient } from "@pims/cockpit/ui/lib/sse-client.ts";
   import type { CockpitTimer, ComplianceFinding, PendingDecision, StreamSnapshot } from "@pims/types/cockpit.ts";
@@ -274,7 +275,7 @@ import {
 
         <div class="text-[11px] font-medium text-amber-300/90 flex items-center space-x-1">
           <span>Anclaje al incidente:</span>
-          <span class="text-slate-200 font-normal">${f.incident_anchor}</span>
+          <span class="text-slate-200 font-normal">${renderMarkdownInline(f.incident_anchor)}</span>
         </div>
 
         <blockquote class="text-xs text-slate-200 bg-slate-950/60 border border-slate-800/80 rounded-lg p-3 leading-relaxed font-sans">
@@ -325,7 +326,7 @@ import {
       html += `
         <div class="space-y-1.5">
           <span class="text-xs font-semibold text-slate-300 uppercase tracking-wider block">Consecuencias Probables (Art. 33.3.c):</span>
-          <p class="text-xs text-slate-300 leading-relaxed bg-slate-900/60 p-3 rounded-lg border border-slate-800/80">${prop.item_c_consequences}</p>
+          <div class="markdown-content text-xs text-slate-300 leading-relaxed bg-slate-900/60 p-3 rounded-lg border border-slate-800/80">${renderMarkdown(prop.item_c_consequences)}</div>
         </div>
       `;
     }
@@ -335,7 +336,7 @@ import {
         <div class="space-y-1.5">
           <span class="text-xs font-semibold text-slate-300 uppercase tracking-wider block">Medidas Técnicas Adoptadas (Art. 33.3.d):</span>
           <ul class="list-disc pl-5 text-xs text-slate-300 space-y-1 bg-slate-900/60 p-3 rounded-lg border border-slate-800/80 leading-relaxed">
-            ${prop.item_d_measures_taken.map((m: any) => `<li>${m}</li>`).join("")}
+            ${prop.item_d_measures_taken.map((m: any) => `<li>${renderMarkdownInline(String(m))}</li>`).join("")}
           </ul>
         </div>
       `;
@@ -346,7 +347,7 @@ import {
         <div class="space-y-1.5">
           <span class="text-xs font-semibold text-slate-300 uppercase tracking-wider block">Medidas Adicionales Propuestas (Art. 33.3.d):</span>
           <ul class="list-disc pl-5 text-xs text-slate-300 space-y-1 bg-slate-900/60 p-3 rounded-lg border border-slate-800/80 leading-relaxed">
-            ${prop.item_d_measures_proposed.map((m: any) => `<li>${m}</li>`).join("")}
+            ${prop.item_d_measures_proposed.map((m: any) => `<li>${renderMarkdownInline(String(m))}</li>`).join("")}
           </ul>
         </div>
       `;
@@ -356,7 +357,7 @@ import {
       html += `
         <div class="space-y-1.5">
           <span class="text-xs font-semibold text-slate-300 uppercase tracking-wider block">Comunicación a los Titulares (Lenguaje Claro Art. 34):</span>
-          <div class="bg-slate-900/60 p-3 rounded-lg border border-slate-800/80 text-xs text-slate-200 leading-relaxed whitespace-pre-wrap">${prop.body_plain}</div>
+          <div class="markdown-content bg-slate-900/60 p-3 rounded-lg border border-slate-800/80 text-xs text-slate-200 leading-relaxed">${renderMarkdown(prop.body_plain)}</div>
         </div>
       `;
     }
@@ -366,7 +367,7 @@ import {
         <div class="space-y-1.5">
           <span class="text-xs font-semibold text-slate-300 uppercase tracking-wider block">Recomendaciones para los Titulares:</span>
           <ul class="list-disc pl-5 text-xs text-slate-300 space-y-1 bg-slate-900/60 p-3 rounded-lg border border-slate-800/80 leading-relaxed">
-            ${prop.safety_recommendations.map((r: any) => `<li>${r}</li>`).join("")}
+            ${prop.safety_recommendations.map((r: any) => `<li>${renderMarkdownInline(String(r))}</li>`).join("")}
           </ul>
         </div>
       `;
@@ -429,7 +430,7 @@ import {
                   </span>
                 </div>
                 <p class="text-xs text-amber-200/90">
-                  ${item.blocked_reason || "El ciclo autónomo se detuvo con error."}
+                  ${item.blocked_reason ? renderMarkdownInline(item.blocked_reason) : "El ciclo autónomo se detuvo con error."}
                 </p>
               </div>
               <div class="flex items-center space-x-2 shrink-0">
@@ -613,9 +614,9 @@ import {
                 </div>
                 ${item.root_cause ? `
                   <div class="text-xs text-slate-300 space-y-1.5">
-                    <p><strong class="text-slate-400">Causa:</strong> ${item.root_cause.cause}</p>
-                    <p><strong class="text-slate-400">Método:</strong> ${item.root_cause.method}</p>
-                    <p><strong class="text-slate-400">Remediación:</strong> ${item.root_cause.remediation}</p>
+                    <p><strong class="text-slate-400">Causa:</strong> ${renderMarkdownInline(item.root_cause.cause)}</p>
+                    <p><strong class="text-slate-400">Método:</strong> ${renderMarkdownInline(item.root_cause.method)}</p>
+                    <p><strong class="text-slate-400">Remediación:</strong> ${renderMarkdownInline(item.root_cause.remediation)}</p>
                     ${item.root_cause.root_cause_unproven ? `<p class="text-amber-400 text-[11px] font-medium">Advertencia: Causa raíz no comprobada fehacientemente.</p>` : ""}
                   </div>
                 ` : `

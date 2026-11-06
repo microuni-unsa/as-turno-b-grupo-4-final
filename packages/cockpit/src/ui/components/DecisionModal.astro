@@ -204,6 +204,7 @@ import { CheckCircle2, ShieldAlert, X } from "lucide-astro";
 
 <script>
   import { approveIncident, attestExemption, requestRevision } from "@pims/cockpit/ui/lib/api.ts";
+  import { renderMarkdown, renderMarkdownInline } from "@pims/cockpit/ui/lib/markdown.ts";
   import { CONSTANTS } from "@pims/types/constants.ts";
 
   const modal = document.getElementById("cockpit-decision-modal") as HTMLDialogElement | null;
@@ -305,7 +306,7 @@ import { CheckCircle2, ShieldAlert, X } from "lucide-astro";
             contentHtml += `
               <div class="space-y-1">
                 <span class="font-semibold text-slate-200">Consecuencias Probables:</span>
-                <p class="text-slate-400">${escapeHtml(String(prop.item_c_consequences))}</p>
+                <div class="markdown-content text-slate-300">${renderMarkdown(String(prop.item_c_consequences))}</div>
               </div>
             `;
           } else {
@@ -317,7 +318,7 @@ import { CheckCircle2, ShieldAlert, X } from "lucide-astro";
               <div class="space-y-1">
                 <span class="font-semibold text-slate-200">Medidas Adoptadas:</span>
                 <ul class="list-disc pl-4 text-slate-400 space-y-0.5">
-                  ${prop.item_d_measures_taken.map((m: any) => `<li>${escapeHtml(String(m))}</li>`).join("")}
+                  ${prop.item_d_measures_taken.map((m: any) => `<li>${renderMarkdownInline(String(m))}</li>`).join("")}
                 </ul>
               </div>
             `;
@@ -330,7 +331,7 @@ import { CheckCircle2, ShieldAlert, X } from "lucide-astro";
               <div class="space-y-1">
                 <span class="font-semibold text-slate-200">Medidas Propuestas:</span>
                 <ul class="list-disc pl-4 text-slate-400 space-y-0.5">
-                  ${prop.item_d_measures_proposed.map((m: any) => `<li>${escapeHtml(String(m))}</li>`).join("")}
+                  ${prop.item_d_measures_proposed.map((m: any) => `<li>${renderMarkdownInline(String(m))}</li>`).join("")}
                 </ul>
               </div>
             `;
@@ -342,11 +343,22 @@ import { CheckCircle2, ShieldAlert, X } from "lucide-astro";
             contentHtml += `
               <div class="space-y-1">
                 <span class="font-semibold text-slate-200">Texto de Comunicación:</span>
-                <p class="text-slate-400">${escapeHtml(String(prop.body_plain))}</p>
+                <div class="markdown-content text-slate-300">${renderMarkdown(String(prop.body_plain))}</div>
               </div>
             `;
           } else {
             contentHtml += `<div class="space-y-1"><span class="font-semibold text-slate-400">Texto de Comunicación:</span> <span class="text-slate-500 italic">Sin texto de comunicación</span></div>`;
+          }
+
+          if (Array.isArray(prop.safety_recommendations) && prop.safety_recommendations.length > 0) {
+            contentHtml += `
+              <div class="space-y-1">
+                <span class="font-semibold text-slate-200">Recomendaciones:</span>
+                <ul class="list-disc pl-4 text-slate-400 space-y-0.5">
+                  ${prop.safety_recommendations.map((r: any) => `<li>${renderMarkdownInline(String(r))}</li>`).join("")}
+                </ul>
+              </div>
+            `;
           }
 
           if (Array.isArray(prop.citations) && prop.citations.length > 0) {

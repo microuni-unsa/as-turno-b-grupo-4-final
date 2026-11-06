@@ -1,4 +1,5 @@
 import type { CockpitPermission, CockpitSession } from "@pims/types/cockpit.ts";
+import { CONSTANTS } from "@pims/types/constants.ts";
 
 export const SESSION_STORAGE_KEY = "pims_cockpit_session";
 export const EVENT_SESSION_EXPIRED = "cockpit:session-expired";
@@ -98,6 +99,13 @@ export function hasPermission(
 ): boolean {
   if (session === null) {
     return false;
+  }
+  if (
+    permission === CONSTANTS.PERMISSION_VIEW_SECURITYLOG &&
+    (session.native_role === "Operador" ||
+      session.native_role === "Administrador")
+  ) {
+    return true;
   }
   return session.permissions.includes(permission);
 }

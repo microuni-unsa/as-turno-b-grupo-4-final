@@ -1697,10 +1697,15 @@ export class IncidentOrchestrator {
       phase: 1,
     });
     const bodyText = [
+      draft.pack.item_a_nature,
+      draft.pack.item_a_categories_subjects.join(", "),
+      draft.pack.item_a_categories_records.join(", "),
       draft.pack.item_c_consequences,
       ...draft.pack.item_d_measures_taken,
       ...draft.pack.item_d_measures_proposed,
-    ].join(" ");
+    ]
+      .filter((segment) => segment.trim().length > 0)
+      .join(" ");
 
     const approvalId = await this.reviewWithRetries(
       incident,

@@ -1,17 +1,20 @@
 import {
   derivePermissions,
   normalizeRoleLabel,
+  requirePermission,
   resolveNativeRole,
   SessionRegistry,
 } from "@pims/cockpit/auth.ts";
 import { resolvePersona } from "@pims/cockpit/chat.ts";
 import { canReceiveEvent } from "@pims/cockpit/event-hub.ts";
+import { hasPermission } from "@pims/cockpit/ui/lib/session.ts";
 import type { AgentEvent } from "@pims/types/agent.ts";
 import type {
   CockpitPermission,
   CockpitRole,
   CockpitSession,
 } from "@pims/types/cockpit.ts";
+import { CONSTANTS } from "@pims/types/constants.ts";
 import {
   CockpitPermissionDeniedError,
   CockpitRoleUnknownError,
@@ -160,6 +163,40 @@ describe("Cockpit native role adaptation", () => {
   it("does not invent permissions for missing modules", () => {
     expect(derivePermissions([])).toEqual([]);
   });
+
+  it("grants view_securitylog to Operador and Administrador even if module Seguridad is absent", () => {
+    const operatorPermissions = derivePermissions(
+      [permission("Incidentes", { ver: true })],
+      "Operador",
+    );
+    expect(operatorPermissions).toContain(
+      CONSTANTS.PERMISSION_VIEW_SECURITYLOG,
+    );
+
+    const adminPermissions = derivePermissions(
+      [permission("Incidentes", { ver: true })],
+      "Administrador",
+    );
+    expect(adminPermissions).toContain(CONSTANTS.PERMISSION_VIEW_SECURITYLOG);
+  });
+
+  it("does not grant view_securitylog to Editor or Lector if module Seguridad is absent", () => {
+    const editorPermissions = derivePermissions(
+      [permission("Incidentes", { ver: true })],
+      "Editor",
+    );
+    expect(editorPermissions).not.toContain(
+      CONSTANTS.PERMISSION_VIEW_SECURITYLOG,
+    );
+
+    const lectorPermissions = derivePermissions(
+      [permission("Incidentes", { ver: true })],
+      "Lector",
+    );
+    expect(lectorPermissions).not.toContain(
+      CONSTANTS.PERMISSION_VIEW_SECURITYLOG,
+    );
+  });
 });
 
 describe("Cockpit persona authorization", () => {
@@ -206,6 +243,72 @@ describe("Cockpit SSE event filtering", () => {
       false,
     );
     expect(canReceiveEvent(operator, mutationEvent)).toBe(true);
+  });
+
+  it("streams tool mutations to operators even without view_securitylog in permissions list", () => {
+    const operator = session("Operador", ["view_incident"], false);
+    expect(canReceiveEvent(operator, mutationEvent)).toBe(true);
+  });
+
+  it("streams tool mutations to administrators even without view_securitylog in permissions list", () => {
+    const admin = session("Administrador", ["view_incident"], true);
+    expect(canReceiveEvent(admin, mutationEvent)).toBe(true);
+  });
+});
+
+describe("Cockpit permission checks and session helpers", () => {
+  it("requirePermission allows view_securitylog for Operador and Administrador", () => {
+    const operator = session("Operador", ["view_incident"], false);
+    const admin = session("Administrador", ["view_incident"], true);
+
+    expect(() =>
+      requirePermission(operator, CONSTANTS.PERMISSION_VIEW_SECURITYLOG),
+    ).not.toThrow();
+    expect(() =>
+      requirePermission(admin, CONSTANTS.PERMISSION_VIEW_SECURITYLOG),
+    ).not.toThrow();
+  });
+
+  it("requirePermission rejects view_securitylog for Editor and Lector without permission", () => {
+    const editor = session("Editor", ["view_incident"], false);
+    const lector = session("Lector", ["view_incident"], false);
+
+    expect(() =>
+      requirePermission(editor, CONSTANTS.PERMISSION_VIEW_SECURITYLOG),
+    ).toThrow(CockpitPermissionDeniedError);
+    expect(() =>
+      requirePermission(lector, CONSTANTS.PERMISSION_VIEW_SECURITYLOG),
+    ).toThrow(CockpitPermissionDeniedError);
+  });
+
+  it("hasPermission allows view_securitylog for Operador and Administrador", () => {
+    const operator = session("Operador", ["view_incident"], false);
+    const admin = session("Administrador", ["view_incident"], true);
+
+    expect(hasPermission(operator, CONSTANTS.PERMISSION_VIEW_SECURITYLOG)).toBe(
+      true,
+    );
+    expect(hasPermission(admin, CONSTANTS.PERMISSION_VIEW_SECURITYLOG)).toBe(
+      true,
+    );
+  });
+
+  it("hasPermission rejects view_securitylog for Editor and Lector without permission", () => {
+    const editor = session("Editor", ["view_incident"], false);
+    const lector = session("Lector", ["view_incident"], false);
+
+    expect(hasPermission(editor, CONSTANTS.PERMISSION_VIEW_SECURITYLOG)).toBe(
+      false,
+    );
+    expect(hasPermission(lector, CONSTANTS.PERMISSION_VIEW_SECURITYLOG)).toBe(
+      false,
+    );
+  });
+
+  it("hasPermission returns false for null session", () => {
+    expect(hasPermission(null, CONSTANTS.PERMISSION_VIEW_SECURITYLOG)).toBe(
+      false,
+    );
   });
 });
 

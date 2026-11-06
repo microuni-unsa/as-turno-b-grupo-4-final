@@ -15,6 +15,7 @@ import type {
   PendingDecision,
   StreamSnapshot,
 } from "@pims/types/cockpit.ts";
+import { CONSTANTS } from "@pims/types/constants.ts";
 
 export interface CockpitHubSubscriber {
   session: CockpitSession;
@@ -30,7 +31,9 @@ export function canReceiveEvent(
   }
   if (
     event.type === "tool:mutation" &&
-    !session.permissions.includes("view_securitylog")
+    !session.permissions.includes(CONSTANTS.PERMISSION_VIEW_SECURITYLOG) &&
+    session.native_role !== "Operador" &&
+    session.native_role !== "Administrador"
   ) {
     return false;
   }

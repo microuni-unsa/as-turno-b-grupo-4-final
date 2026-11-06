@@ -16,6 +16,7 @@ import { WatcherStateSchema } from "@pims/types/agent.ts";
 import { canonicalizeJson } from "@pims/types/canonical.ts";
 import { CONSTANTS } from "@pims/types/constants.ts";
 import {
+  EscalateStuckReviewError,
   LeaseHeldError,
   NotifyNoRecipientsError,
   PimsBaseError,
@@ -288,6 +289,15 @@ export class IncidentWatcherDaemon {
           return;
         }
         case "blocked": {
+          const stored = (await this.evidenceStore.getAgentState(
+            `PROPOSAL_INPUT_HASH:${incident.incident_code}`,
+          )) as { hash?: string } | null;
+          const currentHash = computeIncidentInputHash(incident);
+
+          if (stored !== null && stored.hash === currentHash) {
+            return;
+          }
+
           const resume = state.blocked_at_stage;
           if (resume === null) {
             throw new PimsValidationError(
@@ -295,7 +305,10 @@ export class IncidentWatcherDaemon {
               "BLOCKED_WITHOUT_STAGE",
             );
           }
-          state = await this.saveState(incident, resume);
+          state = await this.saveState(incident, resume, {
+            blocked_at_stage: null,
+            blocked_reason: null,
+          });
           break;
         }
         default: {
@@ -408,12 +421,40 @@ export class IncidentWatcherDaemon {
       return;
     }
 
-    const lastStage = await this.currentStage(incident);
+    const rawState = await this.evidenceStore.getAgentState(
+      `WATCHER:${incident.incident_code}`,
+    );
+    const parsedState =
+      rawState !== null ? WatcherStateSchema.safeParse(rawState) : null;
+    const wasAlreadyBlocked =
+      parsedState?.success === true && parsedState.data.stage === "blocked";
+    const lastStage =
+      parsedState?.success === true
+        ? parsedState.data.stage === "blocked"
+          ? (parsedState.data.blocked_at_stage ?? "detected")
+          : parsedState.data.stage
+        : (await this.inferState(incident)).stage;
+
     await this.saveState(incident, "blocked", {
       blocked_at_stage: lastStage,
       blocked_reason: error instanceof Error ? error.message : String(error),
       last_error_code: code,
     });
+    const existingHash = (await this.evidenceStore.getAgentState(
+      `PROPOSAL_INPUT_HASH:${incident.incident_code}`,
+    )) as { hash?: string } | null;
+    if (existingHash === null) {
+      const freshIncident = await this.adapter.getIncident(incident.id);
+      const currentHash = computeIncidentInputHash(freshIncident);
+      await this.evidenceStore.setAgentState(
+        `PROPOSAL_INPUT_HASH:${incident.incident_code}`,
+        toJsonObject({
+          hash: currentHash,
+          pack_content_sha256: null,
+          updated_at_utc: now.toISOString(),
+        }),
+      );
+    }
     this.events.emit({
       type: "agent:blocked",
       at_utc: now.toISOString(),
@@ -421,13 +462,19 @@ export class IncidentWatcherDaemon {
       code,
       message: error instanceof Error ? error.message : String(error),
     });
-    if (lastStage !== "blocked") {
+    if (!wasAlreadyBlocked) {
       this.page({
         incident_code: incident.incident_code,
         kind: "T_RETRY",
         reason: code,
       });
     }
+
+    if (error instanceof EscalateStuckReviewError) {
+      this.retryByIncident.delete(incident.id);
+      return;
+    }
+
     const attempt = this.retryByIncident.get(incident.id)?.attempt ?? 0;
     this.scheduleRetry(incident.id, this.backoffFor(attempt));
   }
@@ -528,23 +575,6 @@ export class IncidentWatcherDaemon {
       toJsonObject(state),
     );
     return state;
-  }
-
-  private async currentStage(incident: PimsIncident): Promise<WatcherStage> {
-    const raw = await this.evidenceStore.getAgentState(
-      `WATCHER:${incident.incident_code}`,
-    );
-    if (raw === null) {
-      return (await this.inferState(incident)).stage;
-    }
-    const parsed = WatcherStateSchema.safeParse(raw);
-    if (!parsed.success) {
-      throw new PimsValidationError("watcher_state", "INVALID_WATCHER_STATE");
-    }
-    if (parsed.data.stage === "blocked" && parsed.data.blocked_at_stage) {
-      return parsed.data.blocked_at_stage;
-    }
-    return parsed.data.stage;
   }
 
   private async latestPacks(incidentCode: string): Promise<

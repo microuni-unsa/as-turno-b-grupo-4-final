@@ -509,6 +509,7 @@ import {
 
 <script>
   import { sendChat } from "@pims/cockpit/ui/lib/api.ts";
+  import { renderMarkdown, renderMarkdownInline } from "@pims/cockpit/ui/lib/markdown.ts";
   import { chatStore, type ChatMessageNode } from "@pims/cockpit/ui/lib/chat-store.ts";
   import { traceStore, type AxisMode } from "@pims/cockpit/ui/lib/trace-store.ts";
   import { canSwitchPersona, getSession } from "@pims/cockpit/ui/lib/session.ts";
@@ -922,8 +923,8 @@ import {
                   </div>
                   <span class="text-[10px] text-indigo-400 group-open/details:rotate-180 transition-transform">▼</span>
                 </summary>
-                <div class="p-3 text-[11px] text-indigo-200/90 leading-relaxed border-t border-indigo-900/40 bg-indigo-950/20 font-sans">
-                  ${escapeHtml(node.reasoning)}
+                <div class="markdown-content p-3 text-[11px] text-indigo-200/90 leading-relaxed border-t border-indigo-900/40 bg-indigo-950/20 font-sans">
+                  ${renderMarkdown(node.reasoning)}
                 </div>
               </details>
             `;
@@ -1030,7 +1031,7 @@ import {
                   </svg>
                   <span>Propuesta de Incidente para el Formulario</span>
                 </div>
-                ${fm.summary ? `<p class="text-xs text-slate-300 leading-relaxed">${escapeHtml(fm.summary)}</p>` : ""}
+                ${fm.summary ? `<div class="markdown-content text-xs text-slate-300 leading-relaxed">${renderMarkdown(fm.summary)}</div>` : ""}
                 ${chips.length > 0 ? `<div class="flex flex-wrap gap-1.5 pt-0.5">${chips.join("")}</div>` : ""}
                 <div class="pt-1.5">
                   <button
@@ -1056,7 +1057,7 @@ import {
             <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 max-w-2xl space-y-2 shadow-md">
               ${reasoningHtml}
               ${toolsHtml}
-              <div class="text-slate-100 leading-relaxed whitespace-pre-wrap">${escapeHtml(node.text)}</div>
+              <div class="markdown-content text-slate-100 leading-relaxed">${renderMarkdown(node.text)}</div>
               ${formMutationHtml}
               ${citationsHtml}
               

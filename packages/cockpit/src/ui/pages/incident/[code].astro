@@ -128,7 +128,7 @@ const incidentCode = isCodeValid ? code.trim() : null;
 
           <div class="bg-slate-900 border border-slate-800 rounded-xl p-4 space-y-2">
             <span class="text-slate-500 font-semibold uppercase tracking-wider">Descripción de los Hechos</span>
-            <p id="inc-description" class="text-xs text-slate-300 leading-relaxed">—</p>
+            <div id="inc-description" class="markdown-content text-xs text-slate-300 leading-relaxed">—</div>
           </div>
         </div>
       </div>
@@ -138,6 +138,7 @@ const incidentCode = isCodeValid ? code.trim() : null;
 
 <script>
   import { authenticatedFetch } from "@pims/cockpit/ui/lib/api.ts";
+  import { renderMarkdown } from "@pims/cockpit/ui/lib/markdown.ts";
   import { sseClient } from "@pims/cockpit/ui/lib/sse-client.ts";
   import {
     formatDateTime,
@@ -199,7 +200,13 @@ const incidentCode = isCodeValid ? code.trim() : null;
       if (incDetectionDate) incDetectionDate.textContent = formatDateTime(inc.detection_date);
       if (incReportedBy) incReportedBy.textContent = formatDisplayString(inc.reported_by);
       if (incAssignedTo) incAssignedTo.textContent = formatDisplayString(inc.assigned_to);
-      if (incDescription) incDescription.textContent = formatDisplayString(inc.description, "Sin descripción registrada.");
+      if (incDescription) {
+        if (inc.description && inc.description.trim().length > 0) {
+          incDescription.innerHTML = renderMarkdown(inc.description);
+        } else {
+          incDescription.innerHTML = '<span class="text-slate-500 italic">Sin descripción registrada.</span>';
+        }
+      }
     }
 
     // Try finding in active snapshot first
