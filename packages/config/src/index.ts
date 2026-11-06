@@ -271,12 +271,14 @@ export function loadConfig(
   }
   const jurisdictionDeadlines = valid.data;
 
-  const reasoningModel = parseModelConfig("REASONING_MODEL", env, 30000);
+  // Reasoning generations (multi-thousand-token Spanish packs) take minutes on
+  // small models; the old 30s default killed every large call with MODEL_UNAVAILABLE.
+  const reasoningModel = parseModelConfig("REASONING_MODEL", env, 300000);
   const fastModel = parseModelConfig("FAST_MODEL", env, 15000);
   const visionModel =
     env.VISION_MODEL === undefined || env.VISION_MODEL === ""
       ? undefined
-      : parseModelConfig("VISION_MODEL", env, 30000);
+      : parseModelConfig("VISION_MODEL", env, 300000);
   const embeddingsModel = parseModelConfig("EMBEDDINGS_MODEL", env, 10000);
   const rerankerModel = parseModelConfig("RERANKER_MODEL", env, 15000);
 
