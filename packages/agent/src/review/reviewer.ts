@@ -281,9 +281,9 @@ export class NoticeReviewer {
       const rawSpans = await presidio.analyze(ctx.body_text);
       const piiSpans = rawSpans.filter(
         (span) =>
-          span.entity_type !== "URL" &&
-          span.entity_type !== "IP_ADDRESS" &&
-          span.entity_type !== "LOCATION",
+          (CONSTANTS.PII_ENTITIES as readonly string[]).includes(
+            span.entity_type,
+          ) && span.score >= CONSTANTS.PRESIDIO_MIN_SCORE,
       );
       if (piiSpans.length > 0) {
         const piiTypes = Array.from(

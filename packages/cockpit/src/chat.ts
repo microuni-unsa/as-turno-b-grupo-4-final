@@ -765,7 +765,10 @@ export async function handleChat(
 
   const piiSpans = await presidio.analyze(reply);
   const piiHits = piiSpans.filter(
-    (span) => span.entity_type !== "URL" && span.entity_type !== "IP_ADDRESS",
+    (span) =>
+      (CONSTANTS.PII_ENTITIES as readonly string[]).includes(
+        span.entity_type,
+      ) && span.score >= CONSTANTS.PRESIDIO_MIN_SCORE,
   );
   const iocHits = extractIocs(reply).filter(
     (value) => !/^[0-9a-fA-F]{32,64}$/.test(value),

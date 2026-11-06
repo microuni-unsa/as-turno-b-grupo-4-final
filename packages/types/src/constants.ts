@@ -154,6 +154,21 @@ export const CONSTANTS = {
   PRESIDIO_MODEL: "es_core_news_md",
   PRESIDIO_TIMEOUT_MS: 1500,
   PRESIDIO_MIN_SCORE: 0.5,
+  PII_ENTITIES: [
+    "PERSON",
+    "EMAIL_ADDRESS",
+    "PHONE_NUMBER",
+    "PE_DNI",
+    "PE_RUC",
+    "ES_NIF",
+    "ES_NIE",
+    "ES_PASSPORT",
+    "IBAN_CODE",
+    "CREDIT_CARD",
+    "US_SSN",
+    "MEDICAL_LICENSE",
+    "DRIVER_LICENSE",
+  ] as const,
   DEPLOY_PORT: 3000,
   // Bun.serve kills responses idle longer than this (seconds); agent
   // approve/review calls legitimately run for minutes (LLM + RAG chain).
