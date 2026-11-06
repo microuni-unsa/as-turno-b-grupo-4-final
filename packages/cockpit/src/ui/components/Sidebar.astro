@@ -218,14 +218,14 @@ const navItems = [
       if (isActive) {
         link.className = NAV_ACTIVE_CLASS;
         if (icon) {
-          icon.className = "w-4 h-4 shrink-0 text-white";
+          icon.setAttribute("class", "w-4 h-4 shrink-0 text-white");
         } else {
           throw new Error("SVG icon missing in nav link");
         }
       } else {
         link.className = NAV_INACTIVE_CLASS;
         if (icon) {
-          icon.className = "w-4 h-4 shrink-0 text-slate-400";
+          icon.setAttribute("class", "w-4 h-4 shrink-0 text-slate-400");
         } else {
           throw new Error("SVG icon missing in nav link");
         }

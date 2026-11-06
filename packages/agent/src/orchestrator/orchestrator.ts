@@ -53,6 +53,7 @@ import {
   PimsNotifyResultSchema,
   type ReviewResult,
   RiskCatalogCodesSchema,
+  type RootCause,
   RootCauseSchema,
   SchedulerArmResultSchema,
   type TimerKind,
@@ -61,6 +62,7 @@ import {
   type TotEvidence,
   type TriageCalibrationMode,
   type TriageResult,
+  WatcherStateSchema,
 } from "@pims/types/agent.ts";
 import { assertAttachmentMeta } from "@pims/types/attachments.ts";
 import { canonicalizeJson } from "@pims/types/canonical.ts";
@@ -711,11 +713,11 @@ export class IncidentOrchestrator {
     return this.armTimer(kind, incident, fireAt, payload);
   }
 
-  private async ensureAwarenessTimers(incident: PimsIncident): Promise<void> {
-    const active = await this.deps.evidenceStore.listActiveTimers(
+  async ensureAwarenessTimers(incident: PimsIncident): Promise<void> {
+    const allTimers = await this.deps.evidenceStore.listTimers(
       incident.incident_code,
     );
-    const kinds = new Set(active.map((timer) => timer.timer_type));
+    const kinds = new Set(allTimers.map((timer) => timer.timer_type));
     const awareness = awarenessFromIncident(incident);
 
     if (incident.involves_personal_data && !kinds.has("T72_AUTHORITY")) {
@@ -736,6 +738,26 @@ export class IncidentOrchestrator {
         ),
       );
     }
+  }
+
+  async armReviewSlaTimerIfAbsent(incident: PimsIncident): Promise<string> {
+    const active = await this.deps.evidenceStore.listActiveTimers(
+      incident.incident_code,
+    );
+    const existing = active.find(
+      (timer) => timer.timer_type === "T_REVIEW_SLA",
+    );
+    if (existing !== undefined) {
+      return existing.timer_id;
+    }
+    return this.armTimer(
+      "T_REVIEW_SLA",
+      incident,
+      new Date(
+        this.deps.clock().getTime() +
+          this.deps.config.SLA_REVIEW_H * CONSTANTS.MS_PER_HOUR,
+      ),
+    );
   }
 
   async triage(incidentId: number): Promise<TriageResult> {
@@ -956,10 +978,55 @@ export class IncidentOrchestrator {
     return this.withLease(incident.incident_code, async () => {
       this.announceRole(incident.incident_code, "investigator");
 
-      const storedRootCause = await this.deps.evidenceStore.getRootCause(
+      let storedRootCause = await this.deps.evidenceStore.getRootCause(
         incident.incident_code,
       );
       const existingActions = incident.actions ?? [];
+
+      if (storedRootCause === null) {
+        const rootCauseAction = existingActions.find(
+          (a) => a.action_type === "A" && /^Root cause \(/i.test(a.description),
+        );
+        if (rootCauseAction) {
+          const match = rootCauseAction.description.match(
+            /^Root cause \(([^)]+)\):\s*([\s\S]+)$/i,
+          );
+          const methodRaw =
+            match !== null && match[1] !== undefined
+              ? match[1].trim()
+              : "fault-tree";
+          const causeText =
+            match !== null && match[2] !== undefined
+              ? match[2].trim()
+              : rootCauseAction.description;
+          const evidenceRefs =
+            typeof rootCauseAction.evidence === "string" &&
+            rootCauseAction.evidence.trim().length > 0
+              ? rootCauseAction.evidence.trim().split(/\s+/).filter(Boolean)
+              : [];
+          const candidate: RootCause = {
+            method:
+              methodRaw === "5-whys" || methodRaw === "fishbone"
+                ? methodRaw
+                : "fault-tree",
+            cause: causeText,
+            evidence_refs: evidenceRefs,
+            systemic: /sistémico|sistemico|systemic/i.test(causeText),
+            remediation:
+              "Remediación y fortalecimiento de controles técnicos y de autenticación",
+            root_cause_unproven: false,
+          };
+          const parsed = RootCauseSchema.safeParse(candidate);
+          if (parsed.success) {
+            await this.deps.evidenceStore.saveRootCause(
+              incident.incident_code,
+              parsed.data,
+            );
+            storedRootCause = parsed.data;
+          }
+        }
+      }
+
       if (
         storedRootCause !== null &&
         existingActions.some((action) => action.action_type === "A")
@@ -978,61 +1045,83 @@ export class IncidentOrchestrator {
 
       const history = await this.deps.adapter.getIncidentHistory(incident.id);
 
-      const containment = await this.deps.modelClient.chat_json({
-        route: CONSTANTS.MODEL_ROUTE_REASONING,
-        system: CONTAINMENT_SYSTEM,
-        messages: [
-          {
-            role: "user",
-            content: JSON.stringify({
-              incident_code: incident.incident_code,
-              title: await redactForPrompt(incident.title),
-              description: await redactForPrompt(incident.description ?? ""),
-              compromised_system: await redactOptionalForPrompt(
-                incident.compromised_system,
-              ),
-              affected_url: await redactOptionalForPrompt(
-                incident.affected_url,
-              ),
-              affected_cid: incident.affected_cid,
-            }),
-          },
-        ],
-        json_schema: containmentJsonSchema(),
-        max_tokens: 800,
-        temperature: this.deps.config.TEMP_REASONING,
-      });
-      const containmentParsed = ContainmentModelSchema.safeParse(
-        containment.content,
+      const hasExistingContainment = existingActions.some(
+        (action) => action.action_type === "C",
       );
-      if (!containmentParsed.success) {
-        throw new ModelSchemaViolationError(
-          CONSTANTS.MODEL_ROUTE_REASONING,
-          `Containment plan violated its schema: ${containmentParsed.error.message}`,
+      const hasExistingAnalysis = existingActions.some(
+        (action) => action.action_type === "A",
+      );
+
+      let containmentCount = hasExistingContainment ? 1 : 0;
+      let containmentActionsForText: Array<{
+        description: string;
+        evidence?: string | null;
+      }> = [];
+
+      if (!hasExistingContainment && !hasExistingAnalysis) {
+        const containment = await this.deps.modelClient.chat_json({
+          route: CONSTANTS.MODEL_ROUTE_REASONING,
+          system: CONTAINMENT_SYSTEM,
+          messages: [
+            {
+              role: "user",
+              content: JSON.stringify({
+                incident_code: incident.incident_code,
+                title: await redactForPrompt(incident.title),
+                description: await redactForPrompt(incident.description ?? ""),
+                compromised_system: await redactOptionalForPrompt(
+                  incident.compromised_system,
+                ),
+                affected_url: await redactOptionalForPrompt(
+                  incident.affected_url,
+                ),
+                affected_cid: incident.affected_cid,
+              }),
+            },
+          ],
+          json_schema: containmentJsonSchema(),
+          max_tokens: 800,
+          temperature: this.deps.config.TEMP_REASONING,
+        });
+        const containmentParsed = ContainmentModelSchema.safeParse(
+          containment.content,
         );
-      }
-
-      let containmentCount = 0;
-      for (const action of containmentParsed.data.actions) {
-        await this.appendAction(incident, {
-          action_type: "C",
-          description: action.description,
-          responsible: action.responsible,
-          evidence: action.evidence ?? null,
-        });
-        containmentCount += 1;
-      }
-
-      if (containmentCount === 0) {
-        if (opts?.containmentWaiver === undefined) {
-          throw new PimsValidationError("containment", "CONTAINMENT_REQUIRED");
+        if (!containmentParsed.success) {
+          throw new ModelSchemaViolationError(
+            CONSTANTS.MODEL_ROUTE_REASONING,
+            `Containment plan violated its schema: ${containmentParsed.error.message}`,
+          );
         }
-        await this.appendAction(incident, {
-          action_type: "A",
-          description: `no_containment_needed:${opts.containmentWaiver.reason}`,
-          responsible: "investigator",
-          evidence: `review_approval:${opts.containmentWaiver.reviewer_approval_id}`,
-        });
+
+        for (const action of containmentParsed.data.actions) {
+          await this.appendAction(incident, {
+            action_type: "C",
+            description: action.description,
+            responsible: action.responsible,
+            evidence: action.evidence ?? null,
+          });
+          containmentCount += 1;
+        }
+        containmentActionsForText = containmentParsed.data.actions;
+
+        if (containmentCount === 0) {
+          if (opts?.containmentWaiver === undefined) {
+            throw new PimsValidationError(
+              "containment",
+              "CONTAINMENT_REQUIRED",
+            );
+          }
+          await this.appendAction(incident, {
+            action_type: "A",
+            description: `no_containment_needed:${opts.containmentWaiver.reason}`,
+            responsible: "investigator",
+            evidence: `review_approval:${opts.containmentWaiver.reviewer_approval_id}`,
+          });
+        }
+      } else {
+        containmentActionsForText = existingActions
+          .filter((a) => a.action_type === "C")
+          .map((a) => ({ description: a.description, evidence: a.evidence }));
       }
 
       let gateIsoRag: {
@@ -1162,12 +1251,17 @@ export class IncidentOrchestrator {
         this.deps.ragService.validateCitation(citation, true);
       }
 
-      await this.appendAction(incident, {
-        action_type: "A",
-        description: `Breach review assessment: breach requiring response: ${gateParsed.data.breach_requiring_response ? "yes" : "no"} — ${gateParsed.data.rationale}`,
-        responsible: "investigator",
-        evidence: gateParsed.data.citations.join(" "),
-      });
+      const hasBreachReviewAction = existingActions.some(
+        (a) => a.action_type === "A" && /breach review/i.test(a.description),
+      );
+      if (!hasBreachReviewAction) {
+        await this.appendAction(incident, {
+          action_type: "A",
+          description: `Breach review assessment: breach requiring response: ${gateParsed.data.breach_requiring_response ? "yes" : "no"} — ${gateParsed.data.rationale}`,
+          responsible: "investigator",
+          evidence: gateParsed.data.citations.join(" "),
+        });
+      }
 
       const staged = await this.deps.evidenceStore.listStagedAttachments(
         incident.incident_code,
@@ -1277,12 +1371,17 @@ export class IncidentOrchestrator {
         analysis,
       );
 
-      await this.appendAction(incident, {
-        action_type: "A",
-        description: `Root cause (${analysis.method}): ${analysis.cause}`,
-        responsible: "investigator",
-        evidence: analysis.evidence_refs.join(" "),
-      });
+      const hasRootCauseAction = existingActions.some(
+        (a) => a.action_type === "A" && /^Root cause/i.test(a.description),
+      );
+      if (!hasRootCauseAction) {
+        await this.appendAction(incident, {
+          action_type: "A",
+          description: `Root cause (${analysis.method}): ${analysis.cause}`,
+          responsible: "investigator",
+          evidence: analysis.evidence_refs.join(" "),
+        });
+      }
 
       if (analysis.root_cause_unproven) {
         await this.appendMarker(incident, "ROOT_CAUSE_UNPROVEN");
@@ -1297,7 +1396,7 @@ export class IncidentOrchestrator {
         current.security_measures_adopted ?? [],
       );
       const actionTexts = [
-        ...containmentParsed.data.actions.map(
+        ...containmentActionsForText.map(
           (a) => `${a.description} ${a.evidence ?? ""}`,
         ),
         analysis.cause,
@@ -1696,16 +1795,19 @@ export class IncidentOrchestrator {
       exemption,
       phase: 1,
     });
-    const bodyText = [
-      draft.pack.item_a_nature,
-      draft.pack.item_a_categories_subjects.join(", "),
-      draft.pack.item_a_categories_records.join(", "),
-      draft.pack.item_c_consequences,
-      ...draft.pack.item_d_measures_taken,
-      ...draft.pack.item_d_measures_proposed,
+    const rawBodyText = [
+      `Naturaleza de la brecha: ${draft.pack.item_a_nature}`,
+      `Categorías de interesados: ${draft.pack.item_a_categories_subjects.join(", ")}`,
+      `Número aproximado de interesados: ${draft.pack.item_a_approx_subjects}`,
+      `Categorías de registros: ${draft.pack.item_a_categories_records.join(", ")}`,
+      `Número aproximado de registros: ${draft.pack.item_a_approx_records}`,
+      `Consecuencias probables: ${draft.pack.item_c_consequences}`,
+      `Medidas adoptadas: ${draft.pack.item_d_measures_taken.join("; ")}`,
+      `Medidas propuestas: ${draft.pack.item_d_measures_proposed.join("; ")}`,
     ]
       .filter((segment) => segment.trim().length > 0)
-      .join(" ");
+      .join("\n");
+    const bodyText = await redactForPrompt(rawBodyText);
 
     const approvalId = await this.reviewWithRetries(
       incident,
@@ -2145,6 +2247,23 @@ export class IncidentOrchestrator {
       pack_content_sha256: null,
       updated_at_utc: new Date().toISOString(),
     });
+    const watcherRaw = await this.deps.evidenceStore.getAgentState(
+      `WATCHER:${code}`,
+    );
+    if (watcherRaw !== null) {
+      const parsed = WatcherStateSchema.safeParse(watcherRaw);
+      if (parsed.success && parsed.data.stage === "blocked") {
+        const resumeStage = parsed.data.blocked_at_stage ?? "triaged";
+        await this.deps.evidenceStore.setAgentState(`WATCHER:${code}`, {
+          ...parsed.data,
+          stage: resumeStage,
+          blocked_at_stage: null,
+          blocked_reason: null,
+          last_error_code: null,
+          updated_at_utc: new Date().toISOString(),
+        });
+      }
+    }
   }
 
   async processVetoExpiry(now: Date): Promise<number> {

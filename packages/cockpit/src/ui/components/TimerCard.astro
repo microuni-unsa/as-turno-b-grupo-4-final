@@ -15,10 +15,18 @@ const { timerId, incidentCode, timerKind, fireAtUtc, remainingMs } =
 
 function getTimerFriendlyName(kind: string): string {
   switch (kind) {
+    case "T72_AUTHORITY":
     case "T_AUTHORITY_72H":
       return "Plazo Legal Art. 33 (72h)";
+    case "T_REVIEW_SLA":
     case "T_INTERNAL_SLA":
-      return `Revisión Interna (${CONSTANTS.SLA_REVIEW_H}h)`;
+      return `SLA Revisión DPO (${CONSTANTS.SLA_REVIEW_H}h)`;
+    case "T_SUBJECT":
+      return `Plazo Comunicación Titulares Art. 34 (${CONSTANTS.SLA_SUBJECT_H}h)`;
+    case "T_PROCESSOR":
+      return "Plazo Notificación Encargado";
+    case "T_PERU_ADVISORY":
+      return `Aviso Preventivo Perú (${CONSTANTS.PERU_ADVISORY_H}h)`;
     case "T_PHASE_FOLLOWUP":
       return "Seguimiento de Notificación por Fases";
     case "T_RETRY":

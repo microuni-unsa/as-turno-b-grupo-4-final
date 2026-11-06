@@ -375,8 +375,14 @@ export function createRiskAuditToolHandlers(
         throw new AuditLinkFailedError("post_write_missing");
       }
 
-      const findingId = writtenFinding.id ?? writtenFindingIndex;
-      const actionPlanId = writtenAction.id ?? writtenActionIndex;
+      const findingId =
+        typeof writtenFinding.id === "number" && writtenFinding.id > 0
+          ? writtenFinding.id
+          : writtenFindingIndex + 1;
+      const actionPlanId =
+        typeof writtenAction.id === "number" && writtenAction.id > 0
+          ? writtenAction.id
+          : writtenActionIndex + 1;
 
       await appendEvidenceMarker(
         deps.adapter,

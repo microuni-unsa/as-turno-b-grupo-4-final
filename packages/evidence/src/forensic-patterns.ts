@@ -1,150 +1,123 @@
 import crypto from "node:crypto";
 import net from "node:net";
-import { CONSTANTS } from "@pims/types/constants.ts";
 import { AttachmentRejectedError } from "@pims/types/errors.ts";
-import { findPhoneNumbersInText } from "libphonenumber-js";
 import { parse as parseDomain } from "tldts";
-import { z } from "zod";
 
-const IPV4_CANDIDATE = /\b(?:\d{1,3}\.){3}\d{1,3}\b/;
-const IPV6_CANDIDATE = /\b(?:[0-9a-fA-F]{0,4}:){2,7}[0-9a-fA-F]{0,4}\b/;
-const DOMAIN_CANDIDATE =
-  /\b(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}\b/;
-const EMAIL_CANDIDATE = /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/;
-const DNI_NIE_CANDIDATE = /\b(?:[XYZxyz]\d{7}|\d{8})[A-Za-z]\b/;
-const HASH_CANDIDATE = /\b[a-fA-F0-9]{32,64}\b/;
-const PII_TOKEN_CANDIDATE =
-  /\[(?:REPORTANTE|CONTACTO|ID|SISTEMA|DESCRIPCION)\]/;
-
-const SPANISH_ID_LETTERS = "TRWAGMYFPDXBNJZSQVHLCKE";
 const ACCEPTED_HASH_LENGTHS: ReadonlySet<number> = new Set([32, 40, 64]);
-const NIE_PREFIX_DIGITS: Record<string, string> = { X: "0", Y: "1", Z: "2" };
-const EMAIL_SCHEMA = z.string().email();
 
 export function sha256HexBytes(data: Buffer | Uint8Array): string {
   return crypto.createHash("sha256").update(data).digest("hex");
 }
 
-function collectAll(pattern: RegExp, text: string): RegExpExecArray[] {
-  return Array.from(text.matchAll(new RegExp(pattern.source, "g")));
+function isDelimiter(code: number): boolean {
+  return (
+    code <= 32 ||
+    code === 34 || // "
+    code === 39 || // '
+    code === 40 || // (
+    code === 41 || // )
+    code === 44 || // ,
+    code === 59 || // ;
+    code === 60 || // <
+    code === 62 || // >
+    code === 91 || // [
+    code === 92 || // \
+    code === 93 || // ]
+    code === 123 || // {
+    code === 124 || // |
+    code === 125 // }
+  );
 }
 
-function isValidSpanishId(value: string): boolean {
-  const normalized = value.toUpperCase();
-  const dniMatch = /^(\d{8})([A-Z])$/.exec(normalized);
-  const nieMatch = /^([XYZ])(\d{7})([A-Z])$/.exec(normalized);
+function tokenize(text: string): string[] {
+  const tokens: string[] = [];
+  let start = -1;
+  for (let i = 0; i < text.length; i++) {
+    const code = text.charCodeAt(i);
+    if (isDelimiter(code)) {
+      if (start !== -1) {
+        tokens.push(text.slice(start, i));
+        start = -1;
+      }
+    } else {
+      if (start === -1) {
+        start = i;
+      }
+    }
+  }
+  if (start !== -1) {
+    tokens.push(text.slice(start));
+  }
+  return tokens;
+}
 
-  let number: string;
-  let letter: string;
-  if (dniMatch?.[1] !== undefined && dniMatch[2] !== undefined) {
-    number = dniMatch[1];
-    letter = dniMatch[2];
-  } else if (
-    nieMatch?.[1] !== undefined &&
-    nieMatch[2] !== undefined &&
-    nieMatch[3] !== undefined
-  ) {
-    const prefix = NIE_PREFIX_DIGITS[nieMatch[1]];
-    if (prefix === undefined) {
+function isHex(str: string): boolean {
+  for (let i = 0; i < str.length; i++) {
+    const code = str.charCodeAt(i);
+    const isDigit = code >= 48 && code <= 57; // 0-9
+    const isLower = code >= 97 && code <= 102; // a-f
+    const isUpper = code >= 65 && code <= 70; // A-F
+    if (!isDigit && !isLower && !isUpper) {
       return false;
     }
-    number = `${prefix}${nieMatch[2]}`;
-    letter = nieMatch[3];
-  } else {
-    return false;
   }
-
-  const expected = SPANISH_ID_LETTERS[Number(number) % 23];
-  return expected === letter;
+  return true;
 }
 
-function isInsideSpan(index: number, spans: RegExpExecArray[]): boolean {
-  return spans.some(
-    (span) => index >= span.index && index < span.index + span[0].length,
-  );
+function trimPunctuation(str: string): string {
+  let start = 0;
+  let end = str.length;
+  while (
+    start < end &&
+    (str.charCodeAt(start) === 46 || str.charCodeAt(start) === 58)
+  ) {
+    start++;
+  }
+  while (
+    end > start &&
+    (str.charCodeAt(end - 1) === 46 || str.charCodeAt(end - 1) === 58)
+  ) {
+    end--;
+  }
+  return str.slice(start, end);
 }
 
 export function extractIocs(text: string): string[] {
   const found = new Set<string>();
+  const tokens = tokenize(text);
 
-  for (const pattern of [IPV4_CANDIDATE, IPV6_CANDIDATE]) {
-    for (const match of collectAll(pattern, text)) {
-      if (net.isIP(match[0]) !== 0) {
-        found.add(match[0]);
-      }
-    }
-  }
-
-  const emailSpans = collectAll(EMAIL_CANDIDATE, text);
-  for (const match of collectAll(DOMAIN_CANDIDATE, text)) {
-    const index = match.index;
-    if (text[index - 1] === "@" || isInsideSpan(index, emailSpans)) {
+  for (const rawToken of tokens) {
+    const clean = trimPunctuation(rawToken);
+    if (clean.length === 0) {
       continue;
     }
-    const parsed = parseDomain(match[0], {
-      allowPrivateDomains: true,
-      detectSpecialUse: true,
-      validateHostname: true,
-    });
-    if (
-      parsed.hostname !== null &&
-      parsed.isIp === false &&
-      (parsed.isIcann === true ||
-        parsed.isPrivate === true ||
-        parsed.isSpecialUse === true)
-    ) {
-      found.add(parsed.hostname);
+
+    if (net.isIP(clean) !== 0) {
+      found.add(clean);
+      continue;
     }
-  }
 
-  for (const match of collectAll(HASH_CANDIDATE, text)) {
-    const candidate = match[0];
-    if (
-      ACCEPTED_HASH_LENGTHS.has(candidate.length) &&
-      Buffer.from(candidate, "hex").length === candidate.length / 2
-    ) {
-      found.add(candidate.toLowerCase());
+    if (ACCEPTED_HASH_LENGTHS.has(clean.length) && isHex(clean)) {
+      found.add(clean.toLowerCase());
+      continue;
     }
-  }
 
-  return Array.from(found);
-}
-
-export function extractPii(text: string): string[] {
-  const found = new Set<string>();
-
-  for (const match of collectAll(EMAIL_CANDIDATE, text)) {
-    if (EMAIL_SCHEMA.safeParse(match[0]).success) {
-      found.add(match[0]);
-    }
-  }
-
-  for (const match of collectAll(DNI_NIE_CANDIDATE, text)) {
-    if (isValidSpanishId(match[0])) {
-      found.add(match[0].toUpperCase());
-    }
-  }
-
-  const ipSpans = [
-    ...collectAll(IPV4_CANDIDATE, text),
-    ...collectAll(IPV6_CANDIDATE, text),
-  ].filter((span) => net.isIP(span[0]) !== 0);
-
-  for (const region of CONSTANTS.PII_PHONE_REGIONS) {
-    for (const match of findPhoneNumbersInText(text, region)) {
-      const overlapsIp = ipSpans.some(
-        (span) =>
-          match.startsAt < span.index + span[0].length &&
-          span.index < match.endsAt,
-      );
-      if (!overlapsIp && match.number.isValid()) {
-        found.add(match.number.number);
+    if (!clean.includes("@") && clean.includes(".")) {
+      const parsed = parseDomain(clean, {
+        allowPrivateDomains: true,
+        detectSpecialUse: true,
+        validateHostname: true,
+      });
+      if (
+        parsed.hostname !== null &&
+        parsed.isIp === false &&
+        (parsed.isIcann === true ||
+          parsed.isPrivate === true ||
+          parsed.isSpecialUse === true)
+      ) {
+        found.add(parsed.hostname);
       }
     }
-  }
-
-  for (const match of collectAll(PII_TOKEN_CANDIDATE, text)) {
-    found.add(match[0]);
   }
 
   return Array.from(found);

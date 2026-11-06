@@ -127,7 +127,7 @@ export async function startIntegrationHarness(options?: {
 }): Promise<IntegrationHarness> {
   const projectRoot = process.cwd();
   const now = new Date("2026-10-01T20:00:00.000Z");
-  const includePresidio = options?.includePresidio ?? true;
+  const includePresidio = options?.includePresidio ?? !options?.presidioUrl;
   const stack = createStack({ projectRoot, includePresidio });
   const stackEnv = await stack.up();
 
@@ -332,19 +332,19 @@ export async function startIntegrationHarness(options?: {
     ) {
       return respond({
         item_a_nature:
-          "Exfiltration of admissions records through the portal export endpoint.",
-        item_a_categories_subjects: ["applicants"],
+          "Exfiltración de registros de admisiones mediante el endpoint de exportación del portal.",
+        item_a_categories_subjects: ["postulantes"],
         item_a_approx_subjects: 500,
-        item_a_categories_records: ["identification", "contact"],
+        item_a_categories_records: ["identificación", "contacto"],
         item_a_approx_records: 500,
         item_a_unknown: [],
         item_c_consequences:
-          "Unauthorised parties could impersonate applicants in admissions processes.",
+          "Terceros no autorizados podrían suplantar a postulantes en el proceso de admisión.",
         item_d_measures_taken: [
-          "The portal export endpoint was disabled and credentials were rotated.",
+          "El endpoint de exportación del portal fue deshabilitado y se rotaron credenciales.",
         ],
         item_d_measures_proposed: [
-          "Egress monitoring will be extended to every portal export.",
+          "La monitorización de salida se extenderá a todas las exportaciones del portal.",
         ],
         citations: [authorityCitation],
       });
@@ -356,15 +356,15 @@ export async function startIntegrationHarness(options?: {
     ) {
       return respond({
         body_plain:
-          "An unauthorised party accessed some of your admissions records. We stopped the access and rotated the credentials. Please watch for unexpected messages about your application.",
+          "Un tercero no autorizado accedió a parte de sus registros de admisión. Detuvimos el acceso y rotamos las credenciales. Por favor esté atento a mensajes sospechosos sobre su postulación.",
         item_c_consequences:
-          "Someone could try to impersonate you during the admissions process.",
+          "Alguien podría intentar suplantarlo durante el proceso de admisión.",
         item_d_measures: [
-          "We disabled the affected export endpoint.",
-          "We rotated every credential that could reach it.",
+          "Deshabilitamos el endpoint de exportación afectado.",
+          "Rotamos todas las credenciales que podían acceder al mismo.",
         ],
         recommendations: [
-          "Report unexpected messages about your application to the admissions office.",
+          "Reporte cualquier mensaje sospechoso sobre su postulación a la oficina de admisiones.",
         ],
         citations: [authorityCitation],
       });

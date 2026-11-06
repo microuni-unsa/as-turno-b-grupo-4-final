@@ -65,7 +65,7 @@ export function createStack(options?: CreateStackOptions): StackHandle {
       env: {
         PORT: "3000",
       },
-      waitFor: Wait.forHttp("/health", 3000),
+      waitFor: Wait.forHttp("/health", 3000).withStartupTimeout(120_000),
     });
     envTemplates.PRESIDIO_URL =
       "http://{{host:presidio}}:{{port:presidio:3000}}";

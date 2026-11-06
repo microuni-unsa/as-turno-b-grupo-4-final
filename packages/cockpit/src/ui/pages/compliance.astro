@@ -126,6 +126,21 @@ import {
             desc: "Plazo de comunicación del encargado de tratamiento al responsable",
             icon: "Clock",
           },
+          T_PERU_ADVISORY: {
+            label: "Aviso Preventivo Perú (LPDP)",
+            desc: "Plazo preventivo para comunicación bajo marco peruano",
+            icon: "AlertCircle",
+          },
+          T_PHASE_FOLLOWUP: {
+            label: "Seguimiento Notificación por Fases",
+            desc: "Plazo para envío de información complementaria (Art. 33.4)",
+            icon: "Clock",
+          },
+          T_RETRY: {
+            label: "Reintento de Notificación Automático",
+            desc: "Próximo intento de emisión programado",
+            icon: "Clock",
+          },
         };
 
         const meta = typeLabels[timer.timer_type] || {

@@ -1,8 +1,8 @@
+import type { PresidioClient } from "@pims/agent/llm/presidio-client.ts";
 import type { AgentModelClient } from "@pims/agent/llm/safe-prompt.ts";
 import { redactForPrompt } from "@pims/agent/llm/safe-prompt.ts";
 import type { AgentConfig } from "@pims/config";
 import type { EvidenceStore } from "@pims/evidence/evidence-store.ts";
-import { extractPii } from "@pims/evidence/forensic-patterns.ts";
 import { PlainLanguageValidator } from "@pims/notices/plain-language.ts";
 import type { RAGService } from "@pims/rag";
 import type {
@@ -22,6 +22,7 @@ import {
   CitationInvalidError,
   EvidenceNotFoundError,
   ModelSchemaViolationError,
+  PiiRedactionUnavailableError,
   PlainLanguageViolationError,
   SubjectCountForbiddenError,
 } from "@pims/types/errors.ts";
@@ -31,13 +32,17 @@ export const REVIEW_CHALLENGE_SYSTEM =
   "You review a breach notice pack for legal completeness, ungrounded claims, plain-language failures, and personal data leakage. Return one challenge per weakness with target, challenge, severity (low, medium, high), and the evidence a human reviewer must supply. Never invent facts absent from the pack; severity high blocks approval.";
 
 export const REVIEW_CHALLENGE_AUTHORITY_SYSTEM =
-  "You review an Article 33 supervisory-authority notification pack for legal completeness, ungrounded claims, and personal data leakage. The addressee is the supervisory authority, so do NOT reject for data-subject plain-language style. Scope is strictly the Article 33(3)(a)-(d) items present in body_text: nature/categories/approx counts of the breach, DPO contact, consequences, measures taken and proposed. Do NOT demand proof that data subjects were notified (that is Article 34, a separate pack); do NOT demand evidence beyond what an Article 33 notification must contain. A severity of high is allowed ONLY when you quote the exact pack sentence that is missing, contradictory, or ungrounded, and name which of the (a)-(d) items it violates. Return one challenge per weakness with target, challenge, severity (low, medium, high), and the evidence a human reviewer must supply. Never invent facts absent from the pack; severity high blocks approval.";
+  "You review an Article 33 supervisory-authority notification pack for legal completeness, ungrounded claims, and personal data leakage. The addressee is the supervisory authority, so do NOT reject for data-subject plain-language style. Scope is strictly the Article 33(3)(a), (c), and (d) items present in body_text: nature, categories, and approximate numbers of data subjects and records; likely consequences; and measures taken and proposed. Note that GDPR Article 33(3)(b) DPO contact details are structured and validated separately in item_b_dpo; do NOT challenge body_text for omitting DPO contact details. Furthermore, Article 33(3)(c) requires describing the likely consequences and breach risk exposure (e.g. unauthorized access, credential misuse, fraud); do NOT challenge forward-looking risk descriptions as speculative merely because post-breach harm is not yet confirmed. Do NOT demand proof that data subjects were notified (that is Article 34, a separate pack); do NOT demand evidence beyond what an Article 33 notification must contain. When approximate counts of data subjects or records are stated in body_text (e.g. 350), that satisfies Article 33(3)(a); do NOT challenge numbers as missing when numeric approximations are provided. A severity of high is allowed ONLY when you quote the exact pack sentence that is missing, contradictory, or ungrounded, and name which of the (a), (c), or (d) items it violates. Return one challenge per weakness with target, challenge, severity (low, medium, high), and the evidence a human reviewer must supply. Never invent facts absent from the pack; severity high blocks approval.";
+
+export const REVIEW_CHALLENGE_SUBJECT_SYSTEM =
+  "You review a GDPR Article 34 data-subject breach communication for legal completeness, ungrounded claims, plain-language accessibility, and personal data leakage. Scope is strictly the Article 34(2) elements present in body_text: clear and plain language describing the nature of the breach, likely consequences, and measures taken or proposed to address the breach. Do NOT demand general privacy policy elements (such as legal basis of processing under Article 6, data retention periods under Article 13/14, or the full Article 15–22 rights catalog) as this is a specific breach communication, not a general privacy notice. Note that GDPR Article 34(2) DPO contact details are structured and validated separately in the pack contact block; do NOT challenge body_text for omitting DPO contact details. When approximate counts or categories of data are stated in body_text, that satisfies the requirement; do NOT challenge numbers as missing when approximations are provided. A severity of high is allowed ONLY when you quote the exact pack sentence that is missing, contradictory, or ungrounded, or when essential Article 34 breach facts (nature of breach, consequences, mitigations) are completely absent. Return one challenge per weakness with target, challenge, severity (low, medium, high), and the evidence a human reviewer must supply. Never invent facts absent from the pack; severity high blocks approval.";
 
 export interface ReviewerDeps {
   modelClient: AgentModelClient;
   ragService: RAGService;
   evidenceStore: EvidenceStore;
   config: AgentConfig;
+  presidioClient?: PresidioClient;
 }
 
 export class NoticeReviewer {
@@ -260,12 +265,31 @@ export class NoticeReviewer {
     }
 
     if (ctx.body_text.trim().length > 0) {
-      const pii = extractPii(ctx.body_text);
-      if (pii.length > 0) {
+      const presidio =
+        this.deps.presidioClient ??
+        (typeof this.deps.modelClient.getPresidioClient === "function"
+          ? this.deps.modelClient.getPresidioClient()
+          : null);
+      if (!presidio) {
+        throw new PiiRedactionUnavailableError(
+          "PII_REDACTION_UNAVAILABLE: Presidio analyzer client is required for notice review",
+        );
+      }
+      const rawSpans = await presidio.analyze(ctx.body_text);
+      const piiSpans = rawSpans.filter(
+        (span) =>
+          span.entity_type !== "URL" &&
+          span.entity_type !== "IP_ADDRESS" &&
+          span.entity_type !== "LOCATION",
+      );
+      if (piiSpans.length > 0) {
+        const piiTypes = Array.from(
+          new Set(piiSpans.map((span) => span.entity_type)),
+        ).join(", ");
         return NoticeReviewer.reject([], {
           judge: "reviewer",
           item: "pii_leakage",
-          required_fix: `Notice body contains ${pii.length} unredacted PII value(s)`,
+          required_fix: `Notice body contains ${piiSpans.length} unredacted PII value(s) (${piiTypes})`,
         });
       }
     }
@@ -273,7 +297,9 @@ export class NoticeReviewer {
     const challengeSystem =
       ctx.pack_type === "authority"
         ? REVIEW_CHALLENGE_AUTHORITY_SYSTEM
-        : REVIEW_CHALLENGE_SYSTEM;
+        : ctx.pack_type === "subject"
+          ? REVIEW_CHALLENGE_SUBJECT_SYSTEM
+          : REVIEW_CHALLENGE_SYSTEM;
     const challengeResponse = await this.deps.modelClient.chat_json({
       system: challengeSystem,
       messages: [

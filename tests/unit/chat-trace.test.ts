@@ -1,3 +1,4 @@
+import { PresidioClient } from "@pims/agent/llm/presidio-client.ts";
 import type { AgentModelClient } from "@pims/agent/llm/safe-prompt.ts";
 import { handleChat } from "@pims/cockpit/chat.ts";
 import type { AgentConfig } from "@pims/config";
@@ -91,6 +92,11 @@ describe("Cockpit Chat Trace and Reasoning", () => {
       TEMP_REASONING: 0.1,
     } as unknown as AgentConfig;
 
+    const presidioClient = new PresidioClient({
+      baseUrl: "http://127.0.0.1:3000",
+    });
+    vi.spyOn(presidioClient, "analyze").mockResolvedValue([]);
+
     const clock = () => new Date("2026-11-05T12:00:00Z");
 
     const result = await handleChat(
@@ -98,6 +104,7 @@ describe("Cockpit Chat Trace and Reasoning", () => {
         adapter: mockAdapter,
         store: mockStore,
         modelClient: mockModelClient,
+        presidioClient,
         config: mockConfig,
         clock,
       },
@@ -194,6 +201,10 @@ describe("Cockpit Chat Trace and Reasoning", () => {
     } as unknown as AgentModelClient;
 
     const mockConfig = { TEMP_REASONING: 0.1 } as unknown as AgentConfig;
+    const presidioClient = new PresidioClient({
+      baseUrl: "http://127.0.0.1:3000",
+    });
+    vi.spyOn(presidioClient, "analyze").mockResolvedValue([]);
     const clock = () => new Date("2026-11-05T12:00:00Z");
 
     const result = await handleChat(
@@ -201,6 +212,7 @@ describe("Cockpit Chat Trace and Reasoning", () => {
         adapter: mockAdapter,
         store: mockStore,
         modelClient: mockModelClient,
+        presidioClient,
         config: mockConfig,
         clock,
       },

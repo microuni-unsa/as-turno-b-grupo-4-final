@@ -211,6 +211,7 @@ export class IncidentWatcherDaemon {
   }
 
   private async advance(incident: PimsIncident): Promise<void> {
+    await this.orchestrator.ensureAwarenessTimers(incident);
     let state = await this.loadState(incident);
     for (let step = 0; step < MAX_STAGE_STEPS; step += 1) {
       switch (state.stage) {
@@ -250,6 +251,7 @@ export class IncidentWatcherDaemon {
           if (!this.config.AUTO_NOTIFY) {
             state = await this.saveState(incident, "awaiting_approval");
             this.emitDraftApprovalRequests(incident.incident_code, result);
+            await this.orchestrator.armReviewSlaTimerIfAbsent(freshIncident);
             return;
           }
           break;
@@ -258,6 +260,7 @@ export class IncidentWatcherDaemon {
           if (!this.config.AUTO_NOTIFY) {
             state = await this.saveState(incident, "awaiting_approval");
             await this.emitApprovedPackRequests(incident.incident_code);
+            await this.orchestrator.armReviewSlaTimerIfAbsent(incident);
             break;
           }
           const result = await this.orchestrator.approveAndNotify(incident.id, {
@@ -440,21 +443,16 @@ export class IncidentWatcherDaemon {
       blocked_reason: error instanceof Error ? error.message : String(error),
       last_error_code: code,
     });
-    const existingHash = (await this.evidenceStore.getAgentState(
+    const freshIncident = await this.adapter.getIncident(incident.id);
+    const currentHash = computeIncidentInputHash(freshIncident);
+    await this.evidenceStore.setAgentState(
       `PROPOSAL_INPUT_HASH:${incident.incident_code}`,
-    )) as { hash?: string } | null;
-    if (existingHash === null) {
-      const freshIncident = await this.adapter.getIncident(incident.id);
-      const currentHash = computeIncidentInputHash(freshIncident);
-      await this.evidenceStore.setAgentState(
-        `PROPOSAL_INPUT_HASH:${incident.incident_code}`,
-        toJsonObject({
-          hash: currentHash,
-          pack_content_sha256: null,
-          updated_at_utc: now.toISOString(),
-        }),
-      );
-    }
+      toJsonObject({
+        hash: currentHash,
+        pack_content_sha256: null,
+        updated_at_utc: now.toISOString(),
+      }),
+    );
     this.events.emit({
       type: "agent:blocked",
       at_utc: now.toISOString(),
@@ -540,7 +538,10 @@ export class IncidentWatcherDaemon {
     const rootCause = await this.evidenceStore.getRootCause(
       incident.incident_code,
     );
-    if (rootCause !== null) {
+    const hasAnalysisAction = incident.actions?.some(
+      (action) => action.action_type === "A",
+    );
+    if (rootCause !== null || hasAnalysisAction) {
       return this.buildState(incident, "investigated");
     }
 

@@ -12,7 +12,7 @@ import {
 } from "@pims/cockpit/chat-tools.ts";
 import type { AgentConfig } from "@pims/config";
 import type { EvidenceStore } from "@pims/evidence/evidence-store.ts";
-import { extractIocs, extractPii } from "@pims/evidence/forensic-patterns.ts";
+import { extractIocs } from "@pims/evidence/forensic-patterns.ts";
 import type { PimsAdapter } from "@pims/pims-adapter";
 import type { RAGService } from "@pims/rag";
 import type {
@@ -33,6 +33,8 @@ import {
   CockpitChatInvalidError,
   CockpitPermissionDeniedError,
   CockpitPiiBlockedError,
+  PiiRedactionUnavailableError,
+  PimsNotFoundError,
 } from "@pims/types/errors.ts";
 import { JsonObjectSchema, type JsonValue } from "@pims/types/models.ts";
 import type { RetrievalPassage } from "@pims/types/rag.ts";
@@ -46,7 +48,7 @@ const PERSONA_PROMPTS: Record<ChatPersona, string> = {
 };
 
 const RESPONSE_CONTRACT =
-  'Answer only from the provided tool results. Return strict JSON {"reply": string, "citations_used": string[], "suggested_actions": string[]}. In citations_used, return ONLY the exact citation_id strings (e.g. ["C1", "C2"]) copied from the citations list, or [] if none apply. Never put statute names or article numbers in citations_used. Never invent citations.';
+  'Answer only from the provided tool results. Return strict JSON {"reply": string, "citations_used": string[], "suggested_actions": string[]}. In citations_used, return ONLY the exact citation_id strings (e.g. ["C1", "C2"]) copied from the citations list, or [] if none apply. Never put statute names, headers, or article numbers in citations_used. Never invent citations.';
 
 export function resolvePersona(
   session: CockpitSession,
@@ -113,7 +115,7 @@ export function detectMessageIntent(
 }
 
 function extractIncidentCode(message: string): string | null {
-  const match = message.match(/\b[A-Z]{2,}-\d+\b/i);
+  const match = message.match(/\bINC-\d+(?:-\d+)?\b/i);
   return match === null ? null : match[0].toUpperCase();
 }
 
@@ -341,7 +343,18 @@ export async function handleChat(
   );
   toolCalls.push("check_pending_decisions");
 
-  const code = request.incident_code ?? extractIncidentCode(request.message);
+  const isFormIntent = detectFormIntent(request.message, request.form_context);
+  const explicitCode =
+    request.incident_code !== undefined &&
+    request.incident_code !== null &&
+    request.incident_code !== ""
+      ? request.incident_code
+      : null;
+  const inferredCode =
+    explicitCode === null && !isFormIntent
+      ? extractIncidentCode(request.message)
+      : null;
+  let code = explicitCode ?? inferredCode;
   let incidentStatus: JsonValue = null;
   const citationEntries: JsonValue[] = [];
   const citationById = new Map<string, ChatCitation>();
@@ -351,56 +364,97 @@ export async function handleChat(
   };
 
   if (code !== null) {
-    const status = await instrumentSpan(
-      "get_incident_status",
-      "tool",
-      { code },
-      () => getIncidentStatus(deps.adapter, code),
-      (res) => ({ summary: res.summary, actions_count: res.actions_count }),
-    );
-    toolCalls.push("get_incident_status");
-    incidentStatus = {
-      summary: status.summary,
-      timestamps: status.timestamps,
-      actions_count: status.actions_count,
-      attachments_count: status.attachments_count,
-    };
+    const targetCode = code;
+    try {
+      const status = await instrumentSpan(
+        "get_incident_status",
+        "tool",
+        { code: targetCode },
+        () => getIncidentStatus(deps.adapter, targetCode),
+        (res) => ({ summary: res.summary, actions_count: res.actions_count }),
+      );
+      toolCalls.push("get_incident_status");
+      incidentStatus = {
+        summary: status.summary,
+        timestamps: status.timestamps,
+        actions_count: status.actions_count,
+        attachments_count: status.attachments_count,
+      };
 
-    ragCitations = await instrumentSpan(
-      "get_rag_citations",
-      "tool",
-      { code },
-      () => getRagCitations(deps.store, code),
-      (res) => ({
-        citations_count: res.citations.length,
-        passages_count: res.passages.length,
-      }),
-    );
-    toolCalls.push("get_rag_citations");
-    const chatCitations = toChatCitations(
-      ragCitations.passages,
-      ragCitations.citations,
-    );
-    citationEntries.push(
-      ...chatCitations.map((citation, index) => {
-        const citationId = `C${index + 1}`;
-        citationById.set(citationId, citation);
-        citationById.set(citation.chunk_id, citation);
-        citationById.set(citation.doc_id, citation);
-        citationById.set(citation.citation, citation);
-        return {
-          citation_id: citationId,
-          doc_id: citation.doc_id,
-          chunk_id: citation.chunk_id,
-          chunk_sha256: citation.chunk_sha256,
-          dense_score: citation.dense_score,
-          bm25_rank: citation.bm25_rank,
-          rrf_score: citation.rrf_score,
-          rerank_score: citation.rerank_score,
-          text: citation.text,
-        };
-      }),
-    );
+      ragCitations = await instrumentSpan(
+        "get_rag_citations",
+        "tool",
+        { code: targetCode },
+        () => getRagCitations(deps.store, targetCode),
+        (res) => ({
+          citations_count: res.citations.length,
+          passages_count: res.passages.length,
+        }),
+      );
+      toolCalls.push("get_rag_citations");
+      const chatCitations = toChatCitations(
+        ragCitations.passages,
+        ragCitations.citations,
+      );
+      citationEntries.push(
+        ...chatCitations.map((citation, index) => {
+          const citationId = `C${index + 1}`;
+          citationById.set(citationId, citation);
+          citationById.set(citationId.toLowerCase(), citation);
+          citationById.set(citation.chunk_id, citation);
+          citationById.set(citation.chunk_id.toLowerCase(), citation);
+          citationById.set(citation.doc_id, citation);
+          citationById.set(citation.doc_id.toLowerCase(), citation);
+          citationById.set(citation.citation, citation);
+          citationById.set(citation.citation.toLowerCase(), citation);
+
+          const headerMatch = citation.text.match(
+            /^\[DOC:([^|]+)\s*\|\s*CLAUSE:([^|]+)\s*\|\s*NORMATIVE:([^\]]+)\]/i,
+          );
+          if (headerMatch !== null && headerMatch[2] !== undefined) {
+            const clause = headerMatch[2].trim();
+            const docId = citation.doc_id;
+            citationById.set(`${docId} | CLAUSE:${clause}`, citation);
+            citationById.set(
+              `${docId} | CLAUSE:${clause}`.toLowerCase(),
+              citation,
+            );
+            citationById.set(`${docId}:${docId} | CLAUSE:${clause}`, citation);
+            citationById.set(
+              `${docId}:${docId} | CLAUSE:${clause}`.toLowerCase(),
+              citation,
+            );
+            citationById.set(`${docId}:${clause}`, citation);
+            citationById.set(`${docId}:${clause}`.toLowerCase(), citation);
+            citationById.set(`DOC:${docId} | CLAUSE:${clause}`, citation);
+            citationById.set(
+              `DOC:${docId} | CLAUSE:${clause}`.toLowerCase(),
+              citation,
+            );
+            citationById.set(clause, citation);
+            citationById.set(clause.toLowerCase(), citation);
+          }
+
+          return {
+            citation_id: citationId,
+            doc_id: citation.doc_id,
+            chunk_id: citation.chunk_id,
+            chunk_sha256: citation.chunk_sha256,
+            dense_score: citation.dense_score,
+            bm25_rank: citation.bm25_rank,
+            rrf_score: citation.rrf_score,
+            rerank_score: citation.rerank_score,
+            text: citation.text,
+          };
+        }),
+      );
+    } catch (err: unknown) {
+      if (err instanceof PimsNotFoundError && explicitCode === null) {
+        code = null;
+      } else {
+        throw err;
+      }
+    }
   }
 
   let formMutation: ChatFormMutation | undefined;
@@ -515,18 +569,25 @@ export async function handleChat(
     "citations_used",
   );
   const resolved: ChatCitation[] = [];
-  for (const citationId of citationsUsed) {
-    const citation = citationById.get(citationId);
+  for (const rawCitationId of citationsUsed) {
+    const trimmed = rawCitationId.trim();
+    let citation =
+      citationById.get(trimmed) ?? citationById.get(trimmed.toLowerCase());
+    if (citation === undefined) {
+      const stripped = trimmed.replace(/^\[+|\]+$/g, "").trim();
+      citation =
+        citationById.get(stripped) ?? citationById.get(stripped.toLowerCase());
+    }
     if (citation === undefined) {
       throw new CitationFabricatedError(
-        citationId,
-        `Chat reply cited '${citationId}' which is absent from verified RAG retrieval chunks`,
+        rawCitationId,
+        `Chat reply cited '${rawCitationId}' which is absent from verified RAG retrieval chunks`,
       );
     }
     if (citation.chunk_sha256.length !== CONSTANTS.SHA256_HEX_LENGTH) {
       throw new CitationFabricatedError(
-        citationId,
-        `Chat reply cited '${citationId}' with invalid chunk hash`,
+        rawCitationId,
+        `Chat reply cited '${rawCitationId}' with invalid chunk hash`,
       );
     }
     if (!resolved.some((r) => r.chunk_sha256 === citation.chunk_sha256)) {
@@ -535,7 +596,21 @@ export async function handleChat(
   }
   readTextArray(response.content.suggested_actions, "suggested_actions");
 
-  const piiHits = extractPii(reply);
+  const presidio =
+    deps.presidioClient ??
+    (typeof deps.modelClient.getPresidioClient === "function"
+      ? deps.modelClient.getPresidioClient()
+      : null);
+  if (!presidio) {
+    throw new PiiRedactionUnavailableError(
+      "PII_REDACTION_UNAVAILABLE: Presidio analyzer client is required for chat reply validation",
+    );
+  }
+
+  const piiSpans = await presidio.analyze(reply);
+  const piiHits = piiSpans.filter(
+    (span) => span.entity_type !== "URL" && span.entity_type !== "IP_ADDRESS",
+  );
   const iocHits = extractIocs(reply).filter(
     (value) => !/^[0-9a-fA-F]{32,64}$/.test(value),
   );

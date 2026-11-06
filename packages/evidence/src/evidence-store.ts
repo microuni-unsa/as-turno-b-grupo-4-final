@@ -976,11 +976,14 @@ export class EvidenceStore {
       .where(eq(timersTable.timer_id, timerId));
   }
 
-  async listActiveTimers(incidentCode?: string): Promise<TimerRecord[]> {
-    const conditions = [
-      eq(timersTable.fired, false),
-      isNull(timersTable.cancelled_reason),
-    ];
+  async listActiveTimers(
+    incidentCode?: string,
+    includeFired = false,
+  ): Promise<TimerRecord[]> {
+    const conditions = [isNull(timersTable.cancelled_reason)];
+    if (!includeFired) {
+      conditions.push(eq(timersTable.fired, false));
+    }
     if (incidentCode) {
       conditions.push(eq(timersTable.incident_code, incidentCode));
     } else {

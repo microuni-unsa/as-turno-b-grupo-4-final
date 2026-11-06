@@ -331,19 +331,19 @@ describe("Phase 4 autonomous lifecycle loop (§6, §9, §14.2)", {
       ) {
         return respond({
           item_a_nature:
-            "Exfiltration of admissions records through the portal export endpoint.",
-          item_a_categories_subjects: ["applicants"],
+            "Exfiltración de registros de admisión mediante credenciales comprometidas.",
+          item_a_categories_subjects: ["postulantes"],
           item_a_approx_subjects: 500,
-          item_a_categories_records: ["identification", "contact"],
+          item_a_categories_records: ["identificación", "contacto"],
           item_a_approx_records: 500,
           item_a_unknown: [],
           item_c_consequences:
-            "Unauthorised parties could impersonate applicants in admissions processes.",
+            "Terceros no autorizados podrían intentar suplantar la identidad de los postulantes en procesos de admisión.",
           item_d_measures_taken: [
-            "The portal export endpoint was disabled and credentials were rotated.",
+            "Se deshabilitó el endpoint de exportación del portal y se rotaron las credenciales de servicio.",
           ],
           item_d_measures_proposed: [
-            "Egress monitoring will be extended to every portal export.",
+            "Se implementará monitoreo continuo sobre todas las exportaciones del portal.",
           ],
           citations: [authorityCitation],
         });
@@ -355,15 +355,15 @@ describe("Phase 4 autonomous lifecycle loop (§6, §9, §14.2)", {
       ) {
         return respond({
           body_plain:
-            "An unauthorised party accessed some of your admissions records. We stopped the access and rotated the credentials. Please watch for unexpected messages about your application.",
+            "Se detectó un acceso no autorizado a ciertos registros del proceso de admisión. Hemos revocado el acceso de inmediato y fortalecido las medidas de autenticación. Le sugerimos revisar sus notificaciones oficiales.",
           item_c_consequences:
-            "Someone could try to impersonate you during the admissions process.",
+            "Terceros podrían intentar contactarlo solicitando datos adicionales bajo falsos pretextos.",
           item_d_measures: [
-            "We disabled the affected export endpoint.",
-            "We rotated every credential that could reach it.",
+            "Revocación inmediata de credenciales comprometidas.",
+            "Auditoría exhaustiva de accesos a la base de datos.",
           ],
           recommendations: [
-            "Report unexpected messages about your application to the admissions office.",
+            "Comuníquese únicamente a través de los canales institucionales verificados.",
           ],
           citations: [authorityCitation],
         });
@@ -938,7 +938,7 @@ describe("Phase 4 autonomous lifecycle loop (§6, §9, §14.2)", {
         incident_code: incident.incident_code,
         pack_type: "authority",
         content_sha256: "a".repeat(64),
-        body_text: "We emailed the applicant at juan@example.test.",
+        body_text: "Notificamos al interesado al correo juan@example.com.",
         citations: [authorityCitation],
         numeric_approvals: [],
         plain_language_waiver: null,
@@ -949,7 +949,7 @@ describe("Phase 4 autonomous lifecycle loop (§6, §9, §14.2)", {
 
     expect(result.approved).toBe(false);
     expect(result.rejection?.item).toBe("pii_leakage");
-    expect(result.rejection?.required_fix).not.toContain("juan@example.test");
+    expect(result.rejection?.required_fix).not.toContain("juan@example.com");
   });
 
   it("reviewer: rejects an authority pack without DPO contact data", async () => {

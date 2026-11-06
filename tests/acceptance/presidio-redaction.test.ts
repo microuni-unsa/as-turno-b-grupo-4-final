@@ -18,6 +18,7 @@ import {
   TEST_GPT_4O_MINI,
   TEST_OPENAI_BASE_URL,
   TEST_PRESIDIO_IMAGE,
+  TEST_PRESIDIO_URL,
   TEST_TEXT_EMBEDDING_3_SMALL,
 } from "@tests/helpers/test-constants.ts";
 import {
@@ -46,15 +47,41 @@ describe("Acceptance Tests A23 & A24: Presidio PII Redaction", {
   let fixtures: RedactionFixture[];
 
   beforeAll(async () => {
-    presidioContainer = await new GenericContainer(TEST_PRESIDIO_IMAGE)
-      .withExposedPorts(3000)
-      .withWaitStrategy(Wait.forHttp("/health", 3000))
-      .withStartupTimeout(60_000)
-      .start();
+    const defaultUrl = TEST_PRESIDIO_URL;
+    let isAlreadyUp = false;
+    try {
+      const probe = await fetch(`${defaultUrl}/health`, {
+        signal: AbortSignal.timeout(1000),
+      });
+      if (probe.ok) {
+        isAlreadyUp = true;
+        presidioUrl = defaultUrl;
+      } else {
+        isAlreadyUp = false;
+      }
+    } catch (probeError) {
+      if (probeError instanceof Error) {
+        isAlreadyUp = false;
+      } else {
+        throw new Error(
+          `Unexpected probe error while probing Presidio sidecar: ${String(probeError)}`,
+        );
+      }
+    }
 
-    const host = presidioContainer.getHost();
-    const port = presidioContainer.getMappedPort(3000);
-    presidioUrl = `http://${host}:${port}`;
+    if (!isAlreadyUp) {
+      presidioContainer = await new GenericContainer(TEST_PRESIDIO_IMAGE)
+        .withExposedPorts(3000)
+        .withWaitStrategy(Wait.forHttp("/health", 3000))
+        .withStartupTimeout(120_000)
+        .start();
+
+      const host = presidioContainer.getHost();
+      const port = presidioContainer.getMappedPort(3000);
+      presidioUrl = `http://${host}:${port}`;
+    } else {
+      // Presidio sidecar is already active at TEST_PRESIDIO_URL
+    }
 
     presidioClient = new PresidioClient({
       baseUrl: presidioUrl,
@@ -70,7 +97,7 @@ describe("Acceptance Tests A23 & A24: Presidio PII Redaction", {
       fs.readFileSync(fixturesPath, "utf-8"),
     ) as RedactionFixture[];
 
-    harness = await startIntegrationHarness();
+    harness = await startIntegrationHarness({ presidioUrl });
   }, 180_000);
 
   afterAll(async () => {

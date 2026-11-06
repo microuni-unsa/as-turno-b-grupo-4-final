@@ -817,19 +817,17 @@ export const ReviewApprovalSchema = z
   .strict();
 export type ReviewApproval = z.infer<typeof ReviewApprovalSchema>;
 
-export const ProsecutorChallengeSchema = z
-  .object({
-    target: z.string().min(1),
-    challenge: z.string().min(1),
-    severity: ProsecutorSeveritySchema,
-    evidence_required: z.string().min(1),
-  })
-  .strict();
+export const ProsecutorChallengeSchema = z.object({
+  target: z.string().min(1),
+  challenge: z.string().min(1),
+  severity: ProsecutorSeveritySchema,
+  evidence_required: z.string().min(1),
+});
 export type ProsecutorChallenge = z.infer<typeof ProsecutorChallengeSchema>;
 
-export const ProsecutorResultSchema = z
-  .object({ challenges: z.array(ProsecutorChallengeSchema) })
-  .strict();
+export const ProsecutorResultSchema = z.object({
+  challenges: z.array(ProsecutorChallengeSchema),
+});
 export type ProsecutorResult = z.infer<typeof ProsecutorResultSchema>;
 
 export const ReviewRejectionSchema = z

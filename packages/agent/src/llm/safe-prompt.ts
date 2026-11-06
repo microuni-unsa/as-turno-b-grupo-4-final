@@ -193,7 +193,14 @@ export function assertPromptSafe(
   for (const region of CONSTANTS.PII_PHONE_REGIONS) {
     try {
       for (const match of findPhoneNumbersInText(combined, region)) {
-        if (match.number.isValid()) {
+        const prevChar =
+          match.startsAt > 0 ? combined.charCodeAt(match.startsAt - 1) : 0;
+        const isInsideToken =
+          prevChar === 58 /* ':' */ ||
+          (prevChar >= 48 && prevChar <= 57) ||
+          (prevChar >= 65 && prevChar <= 90) ||
+          (prevChar >= 97 && prevChar <= 122);
+        if (!isInsideToken && match.number.isValid()) {
           categories.add("phone");
           break;
         }

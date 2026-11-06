@@ -8,7 +8,7 @@ export default defineConfig({
   test: {
     include: ["tests/**/*.test.ts"],
     testTimeout: 120_000,
-    hookTimeout: 60_000,
+    hookTimeout: 180_000,
     fileParallelism: false,
     isolate: false,
     pool: "threads",

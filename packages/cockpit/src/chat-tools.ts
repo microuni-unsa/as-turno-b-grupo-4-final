@@ -26,6 +26,9 @@ const REGULATORY_TIMER_TYPES: Readonly<Record<string, true>> = {
   T_REVIEW_SLA: true,
   T_SUBJECT: true,
   T_PROCESSOR: true,
+  T_PERU_ADVISORY: true,
+  T_PHASE_FOLLOWUP: true,
+  T_RETRY: true,
 };
 
 export function summarizeIncident(
@@ -155,7 +158,7 @@ export async function getRegulatoryTimers(
   clock: () => Date,
   code?: string,
 ): Promise<CockpitTimer[]> {
-  const timers = await store.listActiveTimers(code);
+  const timers = await store.listActiveTimers(code, true);
   const now = clock().getTime();
   const out: CockpitTimer[] = [];
   for (const timer of timers) {

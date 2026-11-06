@@ -199,6 +199,7 @@ export async function createAgent(
     ragService: deps.ragService,
     evidenceStore,
     config,
+    presidioClient,
   });
   const draftService = new NoticeDraftService({
     modelClient,

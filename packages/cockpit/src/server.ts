@@ -168,7 +168,7 @@ async function main(): Promise<void> {
       return;
     }
     void (async () => {
-      const timers = await store.listActiveTimers();
+      const timers = await store.listActiveTimers(undefined, true);
       const now = Date.now();
       for (const timer of timers) {
         const fireAt = new Date(timer.fire_at_utc).getTime();
