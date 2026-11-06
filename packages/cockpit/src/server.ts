@@ -20,15 +20,6 @@ const TIMER_TICK_INTERVAL_MS = CONSTANTS.MS_PER_SECOND;
 const SHUTDOWN_DRAIN_MS = 30 * CONSTANTS.MS_PER_SECOND;
 
 async function main(): Promise<void> {
-  if (
-    process.env.NODE_ENV !== "production" &&
-    (process.env.PIMS_PASSWORD === undefined ||
-      process.env.OPENAI_API_KEY === undefined)
-  ) {
-    const { initAppEnv } = await import("@pims/config");
-    await initAppEnv("dev");
-  }
-
   const config = loadConfig();
   const keyHex = process.env[config.EVIDENCE_KEY_ENV];
   if (keyHex === undefined || keyHex.trim() === "") {

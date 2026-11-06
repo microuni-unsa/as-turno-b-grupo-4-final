@@ -17,4 +17,11 @@ export const matrix = defineMatrix({
 export type AppEnv = InferEnv<typeof matrix>;
 export type AppFlatEnv = InferFlatEnv<typeof matrix>;
 
+export async function initAppEnv(
+  preset: "dev" | "prod" = "dev",
+  opts?: { allowLocal?: boolean },
+): Promise<void> {
+  await matrix.up(preset, { allowLocal: opts?.allowLocal ?? true });
+}
+
 export default matrix;

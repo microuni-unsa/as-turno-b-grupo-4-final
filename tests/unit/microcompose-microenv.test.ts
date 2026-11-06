@@ -1,13 +1,12 @@
 import fs from "node:fs";
 import path from "node:path";
+import { initAppEnv, matrix } from "@pims/config/env-matrix.ts";
+import { schema } from "@pims/config/env-schema.ts";
 import {
   createStack,
   DEFAULT_STACK_PORT_RANGE,
-  initAppEnv,
-  matrix,
-  schema,
   stack,
-} from "@pims/config";
+} from "@pims/config/stack-def.ts";
 import { TEST_OPENAI_API_KEY } from "@tests/helpers/test-constants.ts";
 import { describe, expect, it } from "vitest";
 

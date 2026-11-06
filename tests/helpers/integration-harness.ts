@@ -16,12 +16,8 @@ import {
   ROOT_CAUSE_SYSTEM,
   TRIAGE_SYSTEM,
 } from "@pims/agent";
-import {
-  type AgentConfig,
-  createStack,
-  loadConfig,
-  type StackHandle,
-} from "@pims/config";
+import { type AgentConfig, loadConfig } from "@pims/config";
+import { createStack, type StackHandle } from "@pims/config/stack-def.ts";
 import { EvidenceStore } from "@pims/evidence";
 import { OpenAIModelProvider } from "@pims/models";
 import { PimsAdapter } from "@pims/pims-adapter";
