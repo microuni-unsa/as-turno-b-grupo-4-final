@@ -11,7 +11,6 @@ import {
   ChevronLeft,
   ChevronRight,
   Clock,
-  Columns,
   Copy,
   Download,
   Edit3,
@@ -36,8 +35,8 @@ import {
 } from "lucide-astro";
 ---
 
-<AppLayout title="Asistente IA | UNSA" breadcrumb="Asistente IA">
-  <div class="h-[calc(100vh-7.25rem)] flex flex-row overflow-hidden border border-slate-800 rounded-2xl bg-slate-950 shadow-xl">
+<AppLayout title="Asistente IA | UNSA" breadcrumb="Asistente IA" noPadding={true}>
+  <div class="h-full w-full flex flex-row overflow-hidden bg-slate-950">
     
     <!-- LEFT: Collapsible Sessions Sidebar -->
     <aside
@@ -147,7 +146,7 @@ import {
             </button>
           </div>
 
-          <!-- View Mode Toggle (Chat / Split / Traces) -->
+          <!-- View Mode Toggle (Chat / Traces) -->
           <div class="flex items-center bg-slate-900 p-1 rounded-xl border border-slate-800 text-[11px]">
             <button
               id="mode-chat"
@@ -156,14 +155,6 @@ import {
             >
               <MessageSquare class="w-3.5 h-3.5" />
               <span>Chat</span>
-            </button>
-            <button
-              id="mode-split"
-              type="button"
-              class="view-mode-btn px-2.5 py-1 rounded-lg font-medium transition-colors text-slate-300 hover:text-white hover:bg-slate-800 flex items-center space-x-1"
-            >
-              <Columns class="w-3.5 h-3.5" />
-              <span>Dividido</span>
             </button>
             <button
               id="mode-trace"
@@ -219,7 +210,7 @@ import {
       <div id="workspace-container" class="flex-1 flex flex-row overflow-hidden min-h-0">
         
         <!-- CHAT SECTION -->
-        <div id="chat-section" class="flex-1 flex flex-col min-w-0 h-full border-r border-transparent">
+        <div id="chat-section" class="flex-1 flex flex-col min-w-0 h-full">
           
           <!-- Messages Scrollable Area -->
           <div
@@ -311,7 +302,7 @@ import {
         </div>
 
         <!-- TRACE SECTION (OMP STATS STYLE INSPECTOR & TIMELINE) -->
-        <div id="trace-section" class="flex-1 flex flex-col min-w-0 h-full bg-slate-925/80 overflow-hidden border-l border-slate-800">
+        <div id="trace-section" class="hidden flex-1 flex flex-col min-w-0 h-full bg-slate-925/80 overflow-hidden">
           
           <!-- Trace Header & Selector -->
           <div class="p-3 border-b border-slate-800 bg-slate-900/80 flex flex-wrap items-center justify-between gap-3 shrink-0">
@@ -528,7 +519,7 @@ import {
   const session = getSession();
   let currentPersona: ChatPersona = chatStore.getPersona() || session?.default_persona || "auditor";
   let activeIncidentContext: string | undefined = undefined;
-  let viewMode: "chat" | "split" | "trace" = "chat";
+  let viewMode: "chat" | "trace" = "chat";
   let sidebarOpen = true;
   let zoomLevel = 1.0;
 
@@ -554,7 +545,6 @@ import {
     const btnCreateIncident = document.getElementById("btn-create-incident-from-chat");
 
     const modeChat = document.getElementById("mode-chat");
-    const modeSplit = document.getElementById("mode-split");
     const modeTrace = document.getElementById("mode-trace");
     const chatSection = document.getElementById("chat-section");
     const traceSection = document.getElementById("trace-section");
@@ -585,9 +575,9 @@ import {
     if (!messagesContainer || !chatForm || !chatInput) return;
 
     // --- Render View Mode ---
-    function setViewMode(mode: "chat" | "split" | "trace"): void {
+    function setViewMode(mode: "chat" | "trace"): void {
       viewMode = mode;
-      [modeChat, modeSplit, modeTrace].forEach((btn) => {
+      [modeChat, modeTrace].forEach((btn) => {
         if (!btn) return;
         btn.className = "view-mode-btn px-2.5 py-1 rounded-lg font-medium transition-colors text-slate-300 hover:text-white hover:bg-slate-800 flex items-center space-x-1";
       });
@@ -597,12 +587,6 @@ import {
         modeChat?.classList.add("bg-blue-600");
         chatSection?.classList.remove("hidden");
         traceSection?.classList.add("hidden");
-      } else if (mode === "split") {
-        modeSplit?.classList.replace("text-slate-300", "text-white");
-        modeSplit?.classList.add("bg-blue-600");
-        chatSection?.classList.remove("hidden");
-        traceSection?.classList.remove("hidden");
-        renderTraceView();
       } else {
         modeTrace?.classList.replace("text-slate-300", "text-white");
         modeTrace?.classList.add("bg-blue-600");
@@ -613,7 +597,6 @@ import {
     }
 
     modeChat?.addEventListener("click", () => setViewMode("chat"));
-    modeSplit?.addEventListener("click", () => setViewMode("split"));
     modeTrace?.addEventListener("click", () => setViewMode("trace"));
 
     // --- Sidebar Toggle ---
@@ -1140,7 +1123,7 @@ import {
           viewTraceBtn?.addEventListener("click", () => {
             if (node.trace) {
               traceStore.addTrace(node.trace, true);
-              setViewMode("split");
+              setViewMode("trace");
             }
           });
 

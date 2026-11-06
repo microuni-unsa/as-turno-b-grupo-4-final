@@ -8,9 +8,10 @@ import FloatingChatWidget from "@pims/cockpit/ui/components/FloatingChatWidget.a
 interface Props {
   title?: string;
   breadcrumb: string;
+  noPadding?: boolean;
 }
 
-const { title, breadcrumb } = Astro.props;
+const { title, breadcrumb, noPadding = false } = Astro.props;
 ---
 
 <BaseLayout title={title}>
@@ -20,7 +21,7 @@ const { title, breadcrumb } = Astro.props;
     <div class="flex-1 flex flex-col min-w-0 overflow-hidden">
       <Header breadcrumb={breadcrumb} transition:persist="cockpit-header" />
 
-      <main class="flex-1 overflow-y-auto p-6" transition:animate="fade">
+      <main class={noPadding ? "flex-1 overflow-hidden flex flex-col" : "flex-1 overflow-y-auto p-6"} transition:animate="fade">
         <slot />
       </main>
     </div>
