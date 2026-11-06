@@ -4,7 +4,6 @@ import { ModelSchemaViolationError, ModelUnavailableError } from "@pims/types";
 import {
   TEST_GPT_4O,
   TEST_GPT_4O_MINI,
-  TEST_OPENAI_API_KEY,
   TEST_OPENAI_BASE_URL,
   TEST_TEXT_EMBEDDING_3_SMALL,
 } from "@tests/helpers/test-constants.ts";
@@ -12,43 +11,35 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 describe("OpenAIModelProvider (§4.3 Unit Suite)", () => {
   const dummyModelConfig: ModelConfig = {
-    provider: "openai",
     model: TEST_GPT_4O,
     endpoint: TEST_OPENAI_BASE_URL,
-    auth_env: TEST_OPENAI_API_KEY,
+    apiKey: "dummy-openai-key",
     timeout_ms: 5000,
     max_retries: 2,
-    fallback: "none",
   };
 
   const dummyVisionConfig: ModelConfig = {
-    provider: "openai",
     model: TEST_GPT_4O,
     endpoint: TEST_OPENAI_BASE_URL,
-    auth_env: TEST_OPENAI_API_KEY,
+    apiKey: "dummy-openai-key",
     timeout_ms: 5000,
     max_retries: 2,
-    fallback: "none",
   };
 
   const dummyEmbedConfig: ModelConfig = {
-    provider: "openai",
     model: TEST_TEXT_EMBEDDING_3_SMALL,
     endpoint: TEST_OPENAI_BASE_URL,
-    auth_env: TEST_OPENAI_API_KEY,
+    apiKey: "dummy-openai-key",
     timeout_ms: 5000,
     max_retries: 2,
-    fallback: "none",
   };
 
   const dummyRerankConfig: ModelConfig = {
-    provider: "openai",
     model: TEST_GPT_4O_MINI,
     endpoint: TEST_OPENAI_BASE_URL,
-    auth_env: TEST_OPENAI_API_KEY,
+    apiKey: "dummy-openai-key",
     timeout_ms: 5000,
     max_retries: 2,
-    fallback: "none",
   };
 
   let provider: OpenAIModelProvider;
@@ -60,7 +51,7 @@ describe("OpenAIModelProvider (§4.3 Unit Suite)", () => {
       visionConfig: dummyVisionConfig,
       embeddingsConfig: dummyEmbedConfig,
       rerankerConfig: dummyRerankConfig,
-      apiKey: "dummy-openai-key",
+      defaultApiKey: "dummy-openai-key",
     });
   });
 
@@ -68,18 +59,67 @@ describe("OpenAIModelProvider (§4.3 Unit Suite)", () => {
     vi.restoreAllMocks();
   });
 
-  it("throws ModelUnavailableError if API key is missing or empty", () => {
-    expect(
-      () =>
-        new OpenAIModelProvider({
-          reasoningConfig: dummyModelConfig,
-          fastConfig: dummyModelConfig,
-          visionConfig: dummyVisionConfig,
-          embeddingsConfig: dummyEmbedConfig,
-          rerankerConfig: dummyRerankConfig,
-          apiKey: "",
+  it("throws ModelUnavailableError if API key is missing or empty", async () => {
+    const noKeyProvider = new OpenAIModelProvider({
+      reasoningConfig: { ...dummyModelConfig, apiKey: "" },
+      fastConfig: { ...dummyModelConfig, apiKey: "" },
+      visionConfig: dummyVisionConfig,
+      embeddingsConfig: dummyEmbedConfig,
+      rerankerConfig: dummyRerankConfig,
+    });
+    await expect(
+      noKeyProvider.chat_json({
+        route: "FAST_MODEL",
+        system: "test",
+        messages: [{ role: "user", content: "hi" }],
+        max_tokens: 10,
+        temperature: 0,
+      }),
+    ).rejects.toThrow(ModelUnavailableError);
+  });
+
+  it("dispatches requests to each model's independent endpoint and API key", async () => {
+    const customEmbedConfig: ModelConfig = {
+      model: "mistral-embed",
+      endpoint: "https://api.mistral.ai/v1",
+      apiKey: "mistral-specific-key-123",
+      timeout_ms: 5000,
+      max_retries: 0,
+    };
+    const multiProvider = new OpenAIModelProvider({
+      reasoningConfig: dummyModelConfig,
+      fastConfig: dummyModelConfig,
+      visionConfig: dummyVisionConfig,
+      embeddingsConfig: customEmbedConfig,
+      rerankerConfig: dummyRerankConfig,
+    });
+
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          data: [{ embedding: [0.1, 0.2, 0.3] }],
         }),
-    ).toThrow(ModelUnavailableError);
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+
+    await multiProvider.embed({ texts: ["hello world"] });
+
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    const [requestUrl, requestInit] = fetchSpy.mock.calls[0] as unknown as [
+      string | URL | Request,
+      RequestInit | undefined,
+    ];
+    const urlString =
+      requestUrl instanceof Request ? requestUrl.url : String(requestUrl);
+    expect(urlString).toContain("api.mistral.ai");
+    const headers = new Headers(
+      requestInit?.headers ??
+        (requestUrl instanceof Request ? requestUrl.headers : undefined),
+    );
+    expect(headers.get("authorization")).toBe(
+      "Bearer mistral-specific-key-123",
+    );
   });
 
   it("chat_json succeeds and extracts valid JSON payload", async () => {

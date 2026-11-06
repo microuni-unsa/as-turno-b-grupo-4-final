@@ -16,7 +16,6 @@ import {
 } from "@tests/helpers/integration-harness.ts";
 import {
   TEST_GPT_4O_MINI,
-  TEST_OPENAI_API_KEY,
   TEST_OPENAI_BASE_URL,
   TEST_PRESIDIO_IMAGE,
   TEST_TEXT_EMBEDDING_3_SMALL,
@@ -158,13 +157,11 @@ describe("Acceptance Tests A23 & A24: Presidio PII Redaction", {
       });
 
       const modelConfig = {
-        provider: "openai",
         model: TEST_GPT_4O_MINI,
         endpoint: TEST_OPENAI_BASE_URL,
-        auth_env: TEST_OPENAI_API_KEY,
+        apiKey: "test-key",
         timeout_ms: 20000,
         max_retries: 0,
-        fallback: "none" as const,
       };
 
       const provider = new OpenAIModelProvider({
@@ -176,7 +173,7 @@ describe("Acceptance Tests A23 & A24: Presidio PII Redaction", {
           model: TEST_TEXT_EMBEDDING_3_SMALL,
         },
         rerankerConfig: modelConfig,
-        apiKey: "test-key",
+        defaultApiKey: "test-key",
       });
 
       const chatSpy = vi.spyOn(provider, "chat_json");

@@ -17,7 +17,6 @@ import {
   TEST_CORPUS_DIR,
   TEST_GPT_4O,
   TEST_GPT_4O_MINI,
-  TEST_OPENAI_API_KEY,
   TEST_OPENAI_BASE_URL,
 } from "@tests/helpers/test-constants.ts";
 import type postgres from "postgres";
@@ -25,13 +24,11 @@ import { describe, expect, it, vi } from "vitest";
 
 describe("Tri-Modal RAG Subsystem Unit Suite", () => {
   const dummyModelConfig = {
-    provider: "openai",
     model: TEST_GPT_4O,
     endpoint: TEST_OPENAI_BASE_URL,
-    auth_env: TEST_OPENAI_API_KEY,
+    apiKey: "dummy-key",
     timeout_ms: 5000,
     max_retries: 2,
-    fallback: "none" as const,
   };
 
   const testRagConfig = {
@@ -47,7 +44,7 @@ describe("Tri-Modal RAG Subsystem Unit Suite", () => {
     visionConfig: dummyModelConfig,
     embeddingsConfig: dummyModelConfig,
     rerankerConfig: dummyModelConfig,
-    apiKey: "dummy-key",
+    defaultApiKey: "dummy-key",
   });
 
   describe("Corpus Loader & Contextual Prefixing", () => {

@@ -3,13 +3,11 @@ import { ConfigError } from "@pims/types/errors.ts";
 import { z } from "zod";
 
 export const ModelConfigSchema = z.object({
-  provider: z.string().min(1),
   model: z.string().min(1),
-  endpoint: z.string().optional(),
-  auth_env: z.string().min(1),
+  endpoint: z.string().url(),
+  apiKey: z.string().min(1),
   timeout_ms: z.number().int().positive(),
   max_retries: z.number().int().nonnegative(),
-  fallback: z.literal("none"),
 });
 export type ModelConfig = z.infer<typeof ModelConfigSchema>;
 
@@ -94,9 +92,8 @@ export interface AgentConfig {
 }
 
 export function loadModelProviderOptions(credentials: Record<string, string>): {
-  apiKey: string;
-  cohereApiKey?: string;
-  baseURL?: string;
+  defaultApiKey: string;
+  defaultBaseURL?: string;
 } {
   const apiKey = credentials.OPENAI_API_KEY;
   if (!apiKey || apiKey.trim() === "")
@@ -104,108 +101,108 @@ export function loadModelProviderOptions(credentials: Record<string, string>): {
       "OPENAI_API_KEY is missing or empty in credentials",
       "CONFIG_MISSING:OPENAI_API_KEY",
     );
-  const out: { apiKey: string; cohereApiKey?: string; baseURL?: string } = {
-    apiKey,
+  const out: { defaultApiKey: string; defaultBaseURL?: string } = {
+    defaultApiKey: apiKey.trim(),
   };
-  const cohere = credentials.COHERE_API_KEY;
-  if (cohere !== undefined && cohere !== "") out.cohereApiKey = cohere;
   const base = credentials.OPENAI_BASE_URL;
-  if (base !== undefined && base !== "") out.baseURL = base;
+  if (base !== undefined && base.trim() !== "") {
+    out.defaultBaseURL = base.trim();
+  }
   return out;
 }
 
 function parseModelConfig(
-  raw: unknown,
   key: string,
   env: Record<string, string | undefined>,
+  defaultTimeoutMs: number,
+  defaultRetries = 2,
 ): ModelConfig {
-  if (typeof raw === "string") {
-    const parts = raw.split(",").map((s) => s.trim());
-    if (parts.length < 7) {
-      throw new ConfigError(
-        `Invalid model config format for ${key}. Expected: provider,model,endpoint,auth_env,timeout_ms,max_retries,fallback:none`,
-        `CONFIG_TYPE:${key}`,
-      );
-    }
-    const [
-      provider,
-      model,
-      endpoint,
-      auth_env,
-      timeoutStr,
-      retryStr,
-      fallbackStr,
-    ] = parts;
-    const timeout_ms = Number.parseInt(timeoutStr ?? "", 10);
-    const max_retries = Number.parseInt(retryStr ?? "", 10);
-    if (Number.isNaN(timeout_ms) || Number.isNaN(max_retries)) {
-      throw new ConfigError(
-        `Invalid numbers in model config for ${key}`,
-        `CONFIG_TYPE:${key}`,
-      );
-    }
-    if (fallbackStr !== "fallback:none") {
-      throw new ConfigError(
-        `Invalid fallback spec in ${key}: must be fallback:none`,
-        `CONFIG_TYPE:${key}`,
-      );
-    }
-    const candidate = {
-      provider,
-      model,
-      endpoint: endpoint === "" ? undefined : endpoint,
-      auth_env,
-      timeout_ms,
-      max_retries,
-      fallback: "none" as const,
-    };
-    const result = ModelConfigSchema.safeParse(candidate);
-    if (!result.success) {
-      throw new ConfigError(
-        `Invalid model config for ${key}: ${result.error.message}`,
-        `CONFIG_TYPE:${key}`,
-      );
-    }
-    if (!auth_env || !env[auth_env]) {
-      throw new ConfigError(
-        `Referenced auth env ${auth_env} for ${key} is missing or empty`,
-        `CONFIG_MISSING:${auth_env}`,
-      );
-    }
-    return result.data;
-  }
-
+  const raw = env[key] as unknown;
   if (typeof raw === "object" && raw !== null) {
-    const obj = raw as Record<string, unknown>;
-    const candidate = {
-      provider: obj.provider,
-      model: obj.model,
-      endpoint:
-        typeof obj.endpoint === "string" && obj.endpoint !== ""
-          ? obj.endpoint
-          : undefined,
-      auth_env: obj.auth_env,
-      timeout_ms: obj.timeout_ms,
-      max_retries: obj.max_retries,
-      fallback: obj.fallback,
-    };
-    const result = ModelConfigSchema.safeParse(candidate);
+    const result = ModelConfigSchema.safeParse(raw);
     if (!result.success) {
       throw new ConfigError(
         `Invalid model config for ${key}: ${result.error.message}`,
         `CONFIG_TYPE:${key}`,
       );
     }
-    if (!result.data.auth_env || !env[result.data.auth_env]) {
-      throw new ConfigError(
-        `Referenced auth env ${result.data.auth_env} for ${key} is missing or empty`,
-        `CONFIG_MISSING:${result.data.auth_env}`,
-      );
-    }
     return result.data;
   }
 
-  throw new ConfigError(`Invalid type for ${key}`, `CONFIG_TYPE:${key}`);
+  if (typeof raw !== "string" || raw.trim() === "") {
+    throw new ConfigError(`${key} is required`, `CONFIG_MISSING:${key}`);
+  }
+
+  const model = raw.trim();
+  if (model.includes(",")) {
+    throw new ConfigError(
+      `Legacy comma-separated format is not supported for ${key}. Use independent env vars: ${key}, ${key}_ENDPOINT, ${key}_API_KEY`,
+      `CONFIG_TYPE:${key}`,
+    );
+  }
+
+  const endpointRaw =
+    env[`${key}_ENDPOINT`]?.trim() || env.OPENAI_BASE_URL?.trim();
+  if (!endpointRaw) {
+    throw new ConfigError(
+      `${key}_ENDPOINT is required (or set OPENAI_BASE_URL)`,
+      `CONFIG_MISSING:${key}_ENDPOINT`,
+    );
+  }
+  try {
+    new URL(endpointRaw);
+  } catch {
+    throw new ConfigError(
+      `${key}_ENDPOINT must be a valid URL`,
+      `CONFIG_TYPE:${key}_ENDPOINT`,
+    );
+  }
+
+  const apiKeyRaw = env[`${key}_API_KEY`]?.trim() || env.OPENAI_API_KEY?.trim();
+  if (!apiKeyRaw) {
+    throw new ConfigError(
+      `${key}_API_KEY is required (or set OPENAI_API_KEY)`,
+      `CONFIG_MISSING:${key}_API_KEY`,
+    );
+  }
+
+  const timeoutRaw = env[`${key}_TIMEOUT_MS`]?.trim();
+  const timeout_ms = timeoutRaw
+    ? Number.parseInt(timeoutRaw, 10)
+    : defaultTimeoutMs;
+  if (Number.isNaN(timeout_ms) || timeout_ms <= 0) {
+    throw new ConfigError(
+      `${key}_TIMEOUT_MS must be a positive integer`,
+      `CONFIG_TYPE:${key}_TIMEOUT_MS`,
+    );
+  }
+
+  const retriesRaw = env[`${key}_MAX_RETRIES`]?.trim();
+  const max_retries = retriesRaw
+    ? Number.parseInt(retriesRaw, 10)
+    : defaultRetries;
+  if (Number.isNaN(max_retries) || max_retries < 0) {
+    throw new ConfigError(
+      `${key}_MAX_RETRIES must be a non-negative integer`,
+      `CONFIG_TYPE:${key}_MAX_RETRIES`,
+    );
+  }
+
+  const candidate = {
+    model,
+    endpoint: endpointRaw,
+    apiKey: apiKeyRaw,
+    timeout_ms,
+    max_retries,
+  };
+  const result = ModelConfigSchema.safeParse(candidate);
+  if (!result.success) {
+    throw new ConfigError(
+      `Invalid model config for ${key}: ${result.error.message}`,
+      `CONFIG_TYPE:${key}`,
+    );
+  }
+  return result.data;
 }
 
 export function loadConfig(
@@ -276,51 +273,14 @@ export function loadConfig(
   }
   const jurisdictionDeadlines = valid.data;
 
-  if (!env.REASONING_MODEL) {
-    throw new ConfigError(
-      "REASONING_MODEL is required",
-      "CONFIG_MISSING:REASONING_MODEL",
-    );
-  }
-  if (!env.FAST_MODEL) {
-    throw new ConfigError(
-      "FAST_MODEL is required",
-      "CONFIG_MISSING:FAST_MODEL",
-    );
-  }
-  if (!env.EMBEDDINGS_MODEL) {
-    throw new ConfigError(
-      "EMBEDDINGS_MODEL is required",
-      "CONFIG_MISSING:EMBEDDINGS_MODEL",
-    );
-  }
-  if (!env.RERANKER_MODEL) {
-    throw new ConfigError(
-      "RERANKER_MODEL is required",
-      "CONFIG_MISSING:RERANKER_MODEL",
-    );
-  }
-
-  const reasoningModel = parseModelConfig(
-    env.REASONING_MODEL,
-    "REASONING_MODEL",
-    env,
-  );
-  const fastModel = parseModelConfig(env.FAST_MODEL, "FAST_MODEL", env);
+  const reasoningModel = parseModelConfig("REASONING_MODEL", env, 30000);
+  const fastModel = parseModelConfig("FAST_MODEL", env, 15000);
   const visionModel =
-    env.VISION_MODEL === undefined
+    env.VISION_MODEL === undefined || env.VISION_MODEL === ""
       ? undefined
-      : parseModelConfig(env.VISION_MODEL, "VISION_MODEL", env);
-  const embeddingsModel = parseModelConfig(
-    env.EMBEDDINGS_MODEL,
-    "EMBEDDINGS_MODEL",
-    env,
-  );
-  const rerankerModel = parseModelConfig(
-    env.RERANKER_MODEL,
-    "RERANKER_MODEL",
-    env,
-  );
+      : parseModelConfig("VISION_MODEL", env, 30000);
+  const embeddingsModel = parseModelConfig("EMBEDDINGS_MODEL", env, 10000);
+  const rerankerModel = parseModelConfig("RERANKER_MODEL", env, 15000);
 
   const evidenceKeyEnv =
     env.EVIDENCE_KEY_ENV !== undefined && env.EVIDENCE_KEY_ENV !== ""

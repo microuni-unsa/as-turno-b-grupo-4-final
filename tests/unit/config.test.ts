@@ -18,11 +18,21 @@ describe("Configuration Manager", () => {
     PIMS_USERNAME: TEST_ADMIN_USERNAME,
     PIMS_PASSWORD: TEST_ADMIN_PASSWORD,
     EVIDENCE_DB_URL: TEST_EVIDENCE_DB_URL,
-    REASONING_MODEL: `mistral,mistral-large-latest,${TEST_MISTRAL_BASE_URL},MISTRAL_API_KEY,30000,3,fallback:none`,
-    FAST_MODEL: `mistral,mistral-small-latest,${TEST_MISTRAL_BASE_URL},MISTRAL_API_KEY,10000,3,fallback:none`,
-    VISION_MODEL: `mistral,pixtral-12b-2409,${TEST_MISTRAL_BASE_URL},MISTRAL_API_KEY,20000,3,fallback:none`,
-    EMBEDDINGS_MODEL: `mistral,mistral-embed,${TEST_MISTRAL_BASE_URL},MISTRAL_API_KEY,5000,3,fallback:none`,
-    RERANKER_MODEL: `cohere,rerank-v3.5,${TEST_COHERE_BASE_URL},COHERE_API_KEY,5000,3,fallback:none`,
+    REASONING_MODEL: "mistral-large-latest",
+    REASONING_MODEL_ENDPOINT: TEST_MISTRAL_BASE_URL,
+    REASONING_MODEL_API_KEY: "dummy-mistral-key",
+    FAST_MODEL: "mistral-small-latest",
+    FAST_MODEL_ENDPOINT: TEST_MISTRAL_BASE_URL,
+    FAST_MODEL_API_KEY: "dummy-mistral-key",
+    VISION_MODEL: "pixtral-12b-2409",
+    VISION_MODEL_ENDPOINT: TEST_MISTRAL_BASE_URL,
+    VISION_MODEL_API_KEY: "dummy-mistral-key",
+    EMBEDDINGS_MODEL: "mistral-embed",
+    EMBEDDINGS_MODEL_ENDPOINT: TEST_MISTRAL_BASE_URL,
+    EMBEDDINGS_MODEL_API_KEY: "dummy-mistral-key",
+    RERANKER_MODEL: "rerank-v3.5",
+    RERANKER_MODEL_ENDPOINT: TEST_COHERE_BASE_URL,
+    RERANKER_MODEL_API_KEY: "dummy-cohere-key",
     MISTRAL_API_KEY: "dummy-mistral-key",
     COHERE_API_KEY: "dummy-key",
     EVIDENCE_KEY: "aes-256-gcm-secret-key-32-bytes",
@@ -258,22 +268,49 @@ describe("Configuration Manager", () => {
     expect(loadConfig(env).VISION_MODEL).toBeUndefined();
   });
 
-  it("rejects a malformed VISION_MODEL", () => {
-    const env = { ...baseValidEnv, VISION_MODEL: "not-a-model-config" };
+  it("rejects legacy comma-separated model format", () => {
+    const env = {
+      ...baseValidEnv,
+      REASONING_MODEL:
+        "openai,gpt-4o,https://api.openai.com,OPENAI_API_KEY,30000,2,fallback:none",
+    };
     expect(() => loadConfig(env)).toThrow(ConfigError);
     try {
       loadConfig(env);
     } catch (err) {
-      expect((err as ConfigError).code).toBe("CONFIG_TYPE:VISION_MODEL");
+      expect((err as ConfigError).code).toBe("CONFIG_TYPE:REASONING_MODEL");
+    }
+  });
+
+  it("rejects an invalid model endpoint URL", () => {
+    const env = { ...baseValidEnv, VISION_MODEL_ENDPOINT: "not-a-valid-url" };
+    expect(() => loadConfig(env)).toThrow(ConfigError);
+    try {
+      loadConfig(env);
+    } catch (err) {
+      expect((err as ConfigError).code).toBe(
+        "CONFIG_TYPE:VISION_MODEL_ENDPOINT",
+      );
+    }
+  });
+
+  it("fails fast when model API key is missing", () => {
+    const env = { ...baseValidEnv };
+    delete env.REASONING_MODEL_API_KEY;
+    delete env.OPENAI_API_KEY;
+    expect(() => loadConfig(env)).toThrow(ConfigError);
+    try {
+      loadConfig(env);
+    } catch (err) {
+      expect((err as ConfigError).code).toBe(
+        "CONFIG_MISSING:REASONING_MODEL_API_KEY",
+      );
     }
   });
 
   it("ignores ambient process.env for optional extras", () => {
     vi.stubEnv("PIMS_EXTRA_HEADERS_JSON", '{"FromEnv":"1"}');
-    vi.stubEnv(
-      "VISION_MODEL",
-      `mistral,pixtral-12b-2409,${TEST_MISTRAL_BASE_URL},MISTRAL_API_KEY,20000,3,fallback:none`,
-    );
+    vi.stubEnv("VISION_MODEL", "pixtral-12b-2409");
     try {
       const env = { ...baseValidEnv };
       delete env.VISION_MODEL;
@@ -429,22 +466,20 @@ describe("Configuration Manager", () => {
       const opts = loadModelProviderOptions({
         OPENAI_API_KEY: "sk-test-key",
       });
-      expect(opts).toEqual({ apiKey: "sk-test-key" });
+      expect(opts).toEqual({ defaultApiKey: "sk-test-key" });
 
       expect(
         loadModelProviderOptions({
           OPENAI_API_KEY: "k",
-          COHERE_API_KEY: "c",
           OPENAI_BASE_URL: "u",
         }),
-      ).toEqual({ apiKey: "k", cohereApiKey: "c", baseURL: "u" });
+      ).toEqual({ defaultApiKey: "k", defaultBaseURL: "u" });
       expect(
         loadModelProviderOptions({
           OPENAI_API_KEY: "k",
-          COHERE_API_KEY: "",
           OPENAI_BASE_URL: "",
         }),
-      ).toEqual({ apiKey: "k" });
+      ).toEqual({ defaultApiKey: "k" });
       try {
         loadModelProviderOptions({});
         expect.unreachable();

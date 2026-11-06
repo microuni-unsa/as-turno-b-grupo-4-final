@@ -51,7 +51,6 @@ import {
   TEST_GPT_4O,
   TEST_GPT_4O_MINI,
   TEST_MIME_TEXT,
-  TEST_OPENAI_API_KEY,
   TEST_OPENAI_BASE_URL,
   TEST_POSTGRES_IMAGE,
   TEST_SCHEMA,
@@ -227,13 +226,11 @@ describe("Agent Tool Registry integration suite", {
     await store.init();
 
     const modelConfig = {
-      provider: "openai",
       model: TEST_GPT_4O,
       endpoint: TEST_OPENAI_BASE_URL,
-      auth_env: TEST_OPENAI_API_KEY,
+      apiKey: "tools-integration-key",
       timeout_ms: 20_000,
       max_retries: CONSTANTS.DEFAULT_PIMS_MAX_RETRIES,
-      fallback: "none" as const,
     };
     const provider = new OpenAIModelProvider({
       reasoningConfig: modelConfig,
@@ -241,8 +238,8 @@ describe("Agent Tool Registry integration suite", {
       visionConfig: modelConfig,
       embeddingsConfig: { ...modelConfig, model: TEST_TEXT_EMBEDDING_3_SMALL },
       rerankerConfig: { ...modelConfig, model: TEST_GPT_4O_MINI },
-      apiKey: "tools-integration-key",
-      baseURL: TEST_OPENAI_BASE_URL,
+      defaultApiKey: "tools-integration-key",
+      defaultBaseURL: TEST_OPENAI_BASE_URL,
     });
 
     vi.spyOn(provider, "embed").mockImplementation(async ({ texts }) => ({

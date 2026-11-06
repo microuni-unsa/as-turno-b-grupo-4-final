@@ -50,7 +50,6 @@ import {
   TEST_EVIDENCE_KEY_HEX,
   TEST_GPT_4O,
   TEST_GPT_4O_MINI,
-  TEST_OPENAI_API_KEY,
   TEST_OPENAI_BASE_URL,
   TEST_PRESIDIO_URL,
   TEST_SCHEMA,
@@ -181,13 +180,11 @@ export async function startIntegrationHarness(options?: {
   await store.init();
 
   const modelConfig = {
-    provider: "openai",
     model: TEST_GPT_4O,
     endpoint: TEST_OPENAI_BASE_URL,
-    auth_env: TEST_OPENAI_API_KEY,
+    apiKey: "integration-test-key",
     timeout_ms: 20000,
     max_retries: 0,
-    fallback: "none" as const,
   };
   const provider = new OpenAIModelProvider({
     reasoningConfig: modelConfig,
@@ -195,8 +192,8 @@ export async function startIntegrationHarness(options?: {
     visionConfig: modelConfig,
     embeddingsConfig: { ...modelConfig, model: TEST_TEXT_EMBEDDING_3_SMALL },
     rerankerConfig: { ...modelConfig, model: TEST_GPT_4O_MINI },
-    apiKey: "integration-test-key",
-    baseURL: TEST_OPENAI_BASE_URL,
+    defaultApiKey: "integration-test-key",
+    defaultBaseURL: TEST_OPENAI_BASE_URL,
   });
 
   vi.spyOn(provider, "embed").mockImplementation(async ({ texts }) => ({
@@ -423,11 +420,12 @@ export async function startIntegrationHarness(options?: {
     PIMS_PASSWORD: CONSTANTS.PIMS_TEST_SEED_PASSWORD,
     EVIDENCE_DB_URL: container.getConnectionUri(),
     OPENAI_API_KEY: "integration-test-key",
-    REASONING_MODEL: `openai,${TEST_GPT_4O},${TEST_OPENAI_BASE_URL},${TEST_OPENAI_API_KEY},20000,0,fallback:none`,
-    FAST_MODEL: `openai,${TEST_GPT_4O_MINI},${TEST_OPENAI_BASE_URL},${TEST_OPENAI_API_KEY},20000,0,fallback:none`,
-    VISION_MODEL: `openai,${TEST_GPT_4O},${TEST_OPENAI_BASE_URL},${TEST_OPENAI_API_KEY},20000,0,fallback:none`,
-    EMBEDDINGS_MODEL: `openai,${TEST_TEXT_EMBEDDING_3_SMALL},${TEST_OPENAI_BASE_URL},${TEST_OPENAI_API_KEY},20000,0,fallback:none`,
-    RERANKER_MODEL: `openai,${TEST_GPT_4O_MINI},${TEST_OPENAI_BASE_URL},${TEST_OPENAI_API_KEY},20000,0,fallback:none`,
+    OPENAI_BASE_URL: TEST_OPENAI_BASE_URL,
+    REASONING_MODEL: TEST_GPT_4O,
+    FAST_MODEL: TEST_GPT_4O_MINI,
+    VISION_MODEL: TEST_GPT_4O,
+    EMBEDDINGS_MODEL: TEST_TEXT_EMBEDDING_3_SMALL,
+    RERANKER_MODEL: TEST_GPT_4O_MINI,
     EVIDENCE_KEY: TEST_EVIDENCE_KEY_HEX,
     ASSIGNEES: '["analyst-1","analyst-2"]',
     RAG_TOP_K: "24",

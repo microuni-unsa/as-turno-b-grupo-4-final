@@ -484,7 +484,7 @@ Routing table (concrete values live ONLY in §13; this table fixes the routing R
 | `EMBEDDINGS_MODEL` | RAG ingest + query | Single model per corpus version; changing it REQUIRES full re-ingest (new corpus version) |
 | `RERANKER_MODEL` | RAG rerank stage | Cross-encoder or LLM-rank; score threshold §7.4 |
 | `chat_json` route selection | classification/extraction/triage vs investigation/drafting/review | `route` arg (`FAST_MODEL` = classification/extraction/triage; `REASONING_MODEL` = investigation/drafting/review); caller-supplied, never inferred from temperature |
-| `RERANKER_MODEL` provider `cohere` | RAG rerank stage via native API | `POST {endpoint}/v2/rerank` (`{query, documents, top_n}`, `top_n` bounded); explicit endpoint+model required in `RERANKER_MODEL`, missing → `MODEL_UNAVAILABLE:RERANKER_MODEL` |
+| `RERANKER_MODEL` provider | RAG rerank stage via OpenAI-compatible completion | Strictly OpenAI-compatible chat completions ranking passages with score evaluation; explicit endpoint+model configured via `RERANKER_MODEL` and `RERANKER_MODEL_ENDPOINT`, missing → `MODEL_UNAVAILABLE:RERANKER_MODEL` |
 
 Zero-fallback rule: no silent provider/model downgrade, no temperature change, no retry-with-different-model. Provider error (5xx, quota, timeout, schema violation twice) → `MODEL_UNAVAILABLE:<route>:<reason>`: the orchestrator parks the affected incident state with deadlines preserved (§6.6) and pages the operator.
 
@@ -1137,11 +1137,11 @@ Required by: B.3.11 (documented, communicated procedures — configuration IS pr
 | `HUMAN_VETO_WINDOW_MIN` | int | `0` | No | Only with `AUTO_NOTIFY=true`: >0 parks `pims_notify` for the window (§6.3) |
 | `WATCHER_POLL_INTERVAL_MS` | int | `5000` | No | Watcher poll cadence for `O` and `P` incidents; positive integer |
 | `ASSIGNEES` | string[] | `[]` | No | Round-robin `assigned_to` pool; empty → leave null + flag `UNASSIGNED` (never invent a name) |
-| `REASONING_MODEL` | `provider,model,endpoint,auth_env,timeout_ms,max_retries,fallback:none` | — | Yes | §4.3 investigation/drafting/review |
-| `FAST_MODEL` | same | — | Yes | §4.3 classification/extraction/triage |
-| `VISION_MODEL` | same | — | No | reserved provider capability; no current caller after forensic-scanner removal |
-| `EMBEDDINGS_MODEL` | same | — | Yes | §4.3/§7 (change ⇒ re-ingest) |
-| `RERANKER_MODEL` | same | — | Yes | §4.3/§7.4 |
+| `REASONING_MODEL` | string (model identifier) | — | Yes | §4.3 investigation/drafting/review; independent `REASONING_MODEL_ENDPOINT`, `REASONING_MODEL_API_KEY` (falls back to `OPENAI_BASE_URL`, `OPENAI_API_KEY`) |
+| `FAST_MODEL` | string (model identifier) | — | Yes | §4.3 classification/extraction/triage; independent `FAST_MODEL_ENDPOINT`, `FAST_MODEL_API_KEY` |
+| `VISION_MODEL` | string (model identifier) | — | No | optional provider capability (`vision_json`); independent `VISION_MODEL_ENDPOINT`, `VISION_MODEL_API_KEY` |
+| `EMBEDDINGS_MODEL` | string (model identifier) | — | Yes | §4.3/§7 (change ⇒ re-ingest); independent `EMBEDDINGS_MODEL_ENDPOINT`, `EMBEDDINGS_MODEL_API_KEY` |
+| `RERANKER_MODEL` | string (model identifier) | — | Yes | §4.3/§7.4; independent `RERANKER_MODEL_ENDPOINT`, `RERANKER_MODEL_API_KEY` |
 | `TEMP_CLASSIFIER` / `TEMP_REASONING` | floats | `0.0` / `0.2` | No | §4.3/§5.1 fixed role temperatures; `TEMP_CLASSIFIER` is passed with `FAST_MODEL` calls, `TEMP_REASONING` with `REASONING_MODEL` calls; values fixed, not routing signals |
 | `MAX_REVIEW_CYCLES` / `PLAIN_LANG_MAX_WORDS` | int/int | `3` / `25` | No | §6.1/§9.5 review cycle cap & plain-language word limit |
 | `DEDUPE_TRIGRAM_THRESHOLD` / `DEDUPE_COSINE_THRESHOLD` | floats | `0.85` / `0.90` | No | §6.6 hybrid lexical+semantic dedupe thresholds |

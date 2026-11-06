@@ -14,7 +14,9 @@ describe("Microenv & Microcompose Adoption Suite", () => {
     expect(schema.flatKeys).toContain(TEST_OPENAI_API_KEY);
     expect(schema.flatKeys).toContain("EVIDENCE_DB_URL");
     expect(schema.flatKeys).toContain("AUTO_NOTIFY");
-    expect(schema.flatKeys.length).toBe(41);
+    expect(schema.flatKeys).toContain("REASONING_MODEL_ENDPOINT");
+    expect(schema.flatKeys).toContain("EMBEDDINGS_MODEL_API_KEY");
+    expect(schema.flatKeys.length).toBe(51);
   });
 
   it("matrix defines dev and prod environments and presets", () => {

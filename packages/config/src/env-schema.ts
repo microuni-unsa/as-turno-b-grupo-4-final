@@ -40,11 +40,27 @@ export const schema = defineSchema({
   OPENAI_API_KEY: z.string().min(1),
   MISTRAL_API_KEY: z.string().min(1),
   OPENAI_BASE_URL: z.string().url(),
+
   REASONING_MODEL: z.string().min(1),
+  REASONING_MODEL_ENDPOINT: z.string().url(),
+  REASONING_MODEL_API_KEY: z.string().min(1),
+
   FAST_MODEL: z.string().min(1),
+  FAST_MODEL_ENDPOINT: z.string().url(),
+  FAST_MODEL_API_KEY: z.string().min(1),
+
   VISION_MODEL: z.string().min(1),
+  VISION_MODEL_ENDPOINT: z.string().url(),
+  VISION_MODEL_API_KEY: z.string().min(1),
+
   EMBEDDINGS_MODEL: z.string().min(1),
+  EMBEDDINGS_MODEL_ENDPOINT: z.string().url(),
+  EMBEDDINGS_MODEL_API_KEY: z.string().min(1),
+
   RERANKER_MODEL: z.string().min(1),
+  RERANKER_MODEL_ENDPOINT: z.string().url(),
+  RERANKER_MODEL_API_KEY: z.string().min(1),
+
   MODEL_LOGPROBS: booleanSchema(false),
 
   // --- PIMS API Connection Settings ---

@@ -28,20 +28,15 @@ import { z } from "zod";
 export interface OpenAIProviderOptions {
   reasoningConfig: ModelConfig;
   fastConfig: ModelConfig;
-  visionConfig: ModelConfig;
+  visionConfig?: ModelConfig;
   embeddingsConfig: ModelConfig;
   rerankerConfig: ModelConfig;
-  apiKey: string;
+  defaultApiKey?: string;
+  defaultBaseURL?: string;
+  apiKey?: string;
   baseURL?: string;
-  cohereApiKey?: string;
   requestLogprobs?: boolean;
 }
-
-const OpenAIProviderOptionsSchema = z.object({
-  apiKey: z.string().min(1),
-  baseURL: z.string().optional(),
-  cohereApiKey: z.string().optional(),
-});
 
 const TOP_LOGPROBS = 5;
 
@@ -103,32 +98,14 @@ export function computeTopLogprobEntropy(
 export class OpenAIModelProvider implements ModelProvider {
   private readonly reasoningConfig: ModelConfig;
   private readonly fastConfig: ModelConfig;
-  private readonly visionConfig: ModelConfig;
+  private readonly visionConfig?: ModelConfig;
   private readonly embeddingsConfig: ModelConfig;
   private readonly rerankerConfig: ModelConfig;
-  private readonly apiKey: string;
+  private readonly defaultApiKey?: string;
   private readonly defaultBaseURL?: string;
-  private readonly cohereApiKey?: string;
   private readonly requestLogprobs: boolean;
 
   constructor(options: OpenAIProviderOptions) {
-    if (!options.apiKey || options.apiKey.trim() === "") {
-      throw new ModelUnavailableError(
-        CONSTANTS.MODEL_ROUTE_OPENAI,
-        "API key is missing or empty",
-      );
-    }
-    const validation = OpenAIProviderOptionsSchema.safeParse({
-      apiKey: options.apiKey,
-      baseURL: options.baseURL,
-      cohereApiKey: options.cohereApiKey,
-    });
-    if (!validation.success) {
-      throw new ModelUnavailableError(
-        CONSTANTS.MODEL_ROUTE_OPENAI,
-        `Invalid provider options: ${validation.error.message}`,
-      );
-    }
     if (!options.reasoningConfig) {
       throw new ModelUnavailableError(
         CONSTANTS.MODEL_ROUTE_OPENAI,
@@ -139,12 +116,6 @@ export class OpenAIModelProvider implements ModelProvider {
       throw new ModelUnavailableError(
         CONSTANTS.MODEL_ROUTE_OPENAI,
         "fastConfig is required",
-      );
-    }
-    if (!options.visionConfig) {
-      throw new ModelUnavailableError(
-        CONSTANTS.MODEL_ROUTE_OPENAI,
-        "visionConfig is required",
       );
     }
     if (!options.embeddingsConfig) {
@@ -164,32 +135,29 @@ export class OpenAIModelProvider implements ModelProvider {
     this.visionConfig = options.visionConfig;
     this.embeddingsConfig = options.embeddingsConfig;
     this.rerankerConfig = options.rerankerConfig;
-    this.apiKey = options.apiKey;
-    this.defaultBaseURL = options.baseURL;
-    this.cohereApiKey = options.cohereApiKey;
+    this.defaultApiKey = options.defaultApiKey ?? options.apiKey;
+    this.defaultBaseURL = options.defaultBaseURL ?? options.baseURL;
     this.requestLogprobs =
       options.requestLogprobs !== undefined
         ? options.requestLogprobs
         : CONSTANTS.DEFAULT_MODEL_LOGPROBS;
   }
 
-  private resolveEndpoint(config: ModelConfig, route: string): string {
-    if (config.endpoint && config.endpoint.trim() !== "") {
-      return config.endpoint.replace(/\/+$/, "");
-    }
-    if (this.defaultBaseURL && this.defaultBaseURL.trim() !== "") {
-      return this.defaultBaseURL.replace(/\/+$/, "");
-    }
-    throw new ModelUnavailableError(
-      route,
-      "No endpoint configured: set ModelConfig.endpoint or provider baseURL",
-    );
-  }
-
   private getClient(config: ModelConfig, route: string): OpenAI {
-    const baseURL = this.resolveEndpoint(config, route);
+    const apiKey = config.apiKey || this.defaultApiKey;
+    if (!apiKey || apiKey.trim() === "") {
+      throw new ModelUnavailableError(route, "API key is missing or empty");
+    }
+    const endpoint = config.endpoint || this.defaultBaseURL;
+    if (!endpoint || endpoint.trim() === "") {
+      throw new ModelUnavailableError(
+        route,
+        "No endpoint configured: set ModelConfig.endpoint or defaultBaseURL",
+      );
+    }
+    const baseURL = endpoint.replace(/\/+$/, "");
     return new OpenAI({
-      apiKey: this.apiKey,
+      apiKey,
       baseURL,
       timeout: config.timeout_ms,
       maxRetries: config.max_retries,
@@ -358,6 +326,9 @@ export class OpenAIModelProvider implements ModelProvider {
   async vision_json(args: VisionJsonArgs): Promise<VisionJsonResponse> {
     const route = CONSTANTS.MODEL_ROUTE_VISION;
     const config = this.visionConfig;
+    if (!config) {
+      throw new ModelUnavailableError(route, "visionConfig is not configured");
+    }
     if (args.max_tokens > CONSTANTS.MAX_CHAT_MAX_TOKENS) {
       throw new ModelSchemaViolationError(
         route,
@@ -472,85 +443,6 @@ export class OpenAIModelProvider implements ModelProvider {
 
     if (args.passages.length === 0) {
       return { ranked: [] };
-    }
-
-    if (config.provider.toLowerCase() === "cohere") {
-      if (!this.cohereApiKey || this.cohereApiKey.trim() === "") {
-        throw new ModelUnavailableError(
-          route,
-          "Cohere API key is missing but provider is configured as cohere",
-        );
-      }
-      if (
-        !config.endpoint ||
-        config.endpoint.trim() === "" ||
-        !config.model ||
-        config.model.trim() === ""
-      ) {
-        throw new ModelUnavailableError(
-          route,
-          "Cohere endpoint/model must be explicit in RERANKER_MODEL",
-        );
-      }
-      const endpoint = config.endpoint;
-      const url = `${endpoint.replace(/\/+$/, "")}/v2/rerank`;
-      const body = {
-        model: config.model,
-        query: args.query,
-        documents: args.passages.map((p) => p.text),
-        top_n: Math.min(
-          args.passages.length,
-          CONSTANTS.DEFAULT_RAG_RERANK_K * 2,
-        ),
-      };
-
-      try {
-        const res = await fetch(url, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${this.cohereApiKey}`,
-          },
-          body: JSON.stringify(body),
-          signal: AbortSignal.timeout(config.timeout_ms),
-        });
-
-        if (!res.ok) {
-          throw new ModelUnavailableError(
-            route,
-            `Cohere rerank failed with status ${res.status}: ${await res.text()}`,
-          );
-        }
-
-        const json = (await res.json()) as {
-          results?: Array<{ index: number; relevance_score: number }>;
-        };
-
-        if (!Array.isArray(json.results)) {
-          throw new ModelUnavailableError(
-            route,
-            "Cohere rerank response missing results array",
-          );
-        }
-
-        const ranked: RankedPassage[] = json.results.map((r, rankIdx) => {
-          const passage = args.passages[r.index];
-          if (!passage) {
-            throw new CitationInvalidError(
-              `Invalid passage index in rerank response: ${r.index}`,
-            );
-          }
-          return {
-            ...passage,
-            score: r.relevance_score,
-            rank: rankIdx + 1,
-          };
-        });
-
-        return { ranked };
-      } catch (err: unknown) {
-        throw this.mapError(route, err);
-      }
     }
 
     try {

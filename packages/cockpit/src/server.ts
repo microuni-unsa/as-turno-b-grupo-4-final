@@ -6,7 +6,7 @@ import {
 import { createCockpitApp } from "@pims/cockpit/app.ts";
 import { SessionRegistry } from "@pims/cockpit/auth.ts";
 import { CockpitEventHub } from "@pims/cockpit/event-hub.ts";
-import { loadConfig, loadModelProviderOptions } from "@pims/config";
+import { loadConfig } from "@pims/config";
 import { EvidenceStore } from "@pims/evidence";
 import { OpenAIModelProvider } from "@pims/models";
 import { PimsAdapter } from "@pims/pims-adapter";
@@ -67,22 +67,12 @@ async function main(): Promise<void> {
       "CONFIG_MISSING:VISION_MODEL",
     );
   }
-  const credentials: Record<string, string> = {};
-  for (const [key, value] of Object.entries(process.env)) {
-    if (value !== undefined) {
-      credentials[key] = value;
-    }
-  }
-  const providerOptions = loadModelProviderOptions(credentials);
   const modelProvider = new OpenAIModelProvider({
     reasoningConfig: config.REASONING_MODEL,
     fastConfig: config.FAST_MODEL,
     visionConfig: config.VISION_MODEL,
     embeddingsConfig: config.EMBEDDINGS_MODEL,
     rerankerConfig: config.RERANKER_MODEL,
-    apiKey: providerOptions.apiKey,
-    baseURL: providerOptions.baseURL,
-    cohereApiKey: providerOptions.cohereApiKey,
     requestLogprobs: config.MODEL_LOGPROBS,
   });
 

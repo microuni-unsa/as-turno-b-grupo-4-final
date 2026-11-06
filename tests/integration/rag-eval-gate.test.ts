@@ -15,7 +15,6 @@ import {
   TEST_CORPUS_DIR,
   TEST_GPT_4O,
   TEST_GPT_4O_MINI,
-  TEST_OPENAI_API_KEY,
   TEST_OPENAI_BASE_URL,
   TEST_PGVECTOR_IMAGE,
   TEST_TEXT_EMBEDDING_3_SMALL,
@@ -144,13 +143,11 @@ describe("Automated RAG Evaluation Gate (§7.6 Integration Suite)", () => {
     sql = postgres(container.getConnectionUri());
 
     const modelConfig = {
-      provider: "openai",
       model: TEST_GPT_4O,
       endpoint: TEST_OPENAI_BASE_URL,
-      auth_env: TEST_OPENAI_API_KEY,
+      apiKey: "eval-gate-test-key",
       timeout_ms: 20000,
       max_retries: CONSTANTS.DEFAULT_PIMS_MAX_RETRIES,
-      fallback: "none" as const,
     };
 
     const modelProvider = new OpenAIModelProvider({
@@ -159,8 +156,8 @@ describe("Automated RAG Evaluation Gate (§7.6 Integration Suite)", () => {
       visionConfig: modelConfig,
       embeddingsConfig: { ...modelConfig, model: TEST_TEXT_EMBEDDING_3_SMALL },
       rerankerConfig: { ...modelConfig, model: TEST_GPT_4O_MINI },
-      apiKey: "eval-gate-test-key",
-      baseURL: TEST_OPENAI_BASE_URL,
+      defaultApiKey: "eval-gate-test-key",
+      defaultBaseURL: TEST_OPENAI_BASE_URL,
     });
 
     vi.spyOn(modelProvider, "embed").mockImplementation(async ({ texts }) => {

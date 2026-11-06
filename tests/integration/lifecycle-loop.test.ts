@@ -175,13 +175,11 @@ describe("Phase 4 autonomous lifecycle loop (§6, §9, §14.2)", {
     await store.init();
 
     const modelConfig = {
-      provider: "openai",
       model: "gpt-4o",
       endpoint: "https://api.openai.com/v1",
-      auth_env: "OPENAI_API_KEY",
+      apiKey: "lifecycle-loop-test-key",
       timeout_ms: 20000,
       max_retries: 0,
-      fallback: "none" as const,
     };
 
     provider = new OpenAIModelProvider({
@@ -190,8 +188,8 @@ describe("Phase 4 autonomous lifecycle loop (§6, §9, §14.2)", {
       visionConfig: modelConfig,
       embeddingsConfig: { ...modelConfig, model: "text-embedding-3-small" },
       rerankerConfig: { ...modelConfig, model: "gpt-4o-mini" },
-      apiKey: "lifecycle-loop-test-key",
-      baseURL: "https://api.openai.com/v1",
+      defaultApiKey: "lifecycle-loop-test-key",
+      defaultBaseURL: "https://api.openai.com/v1",
     });
 
     vi.spyOn(provider, "embed").mockImplementation(async ({ texts }) => ({
@@ -400,16 +398,12 @@ describe("Phase 4 autonomous lifecycle loop (§6, §9, §14.2)", {
       PIMS_PASSWORD: CONSTANTS.PIMS_TEST_SEED_PASSWORD,
       EVIDENCE_DB_URL: container.getConnectionUri(),
       OPENAI_API_KEY: "lifecycle-loop-test-key",
-      REASONING_MODEL:
-        "openai,gpt-4o,https://api.openai.com/v1,OPENAI_API_KEY,20000,0,fallback:none",
-      FAST_MODEL:
-        "openai,gpt-4o-mini,https://api.openai.com/v1,OPENAI_API_KEY,20000,0,fallback:none",
-      VISION_MODEL:
-        "openai,gpt-4o,https://api.openai.com/v1,OPENAI_API_KEY,20000,0,fallback:none",
-      EMBEDDINGS_MODEL:
-        "openai,text-embedding-3-small,https://api.openai.com/v1,OPENAI_API_KEY,20000,0,fallback:none",
-      RERANKER_MODEL:
-        "openai,gpt-4o-mini,https://api.openai.com/v1,OPENAI_API_KEY,20000,0,fallback:none",
+      OPENAI_BASE_URL: "https://api.openai.com/v1",
+      REASONING_MODEL: "gpt-4o",
+      FAST_MODEL: "gpt-4o-mini",
+      VISION_MODEL: "gpt-4o",
+      EMBEDDINGS_MODEL: "text-embedding-3-small",
+      RERANKER_MODEL: "gpt-4o-mini",
       EVIDENCE_KEY: "a1".repeat(32),
       ASSIGNEES: '["analyst-1","analyst-2"]',
       RAG_TOP_K: "24",
