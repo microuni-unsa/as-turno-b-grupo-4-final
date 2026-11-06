@@ -78,6 +78,41 @@ export class NoticeReviewer {
     });
   }
 
+  private static describePiiSpans(
+    bodyText: string,
+    spans: Array<{ entity_type: string; start: number; end: number }>,
+  ): string {
+    const segmenter = new Intl.Segmenter("es", { granularity: "sentence" });
+    const sentences = Array.from(segmenter.segment(bodyText));
+    const parts: string[] = [];
+    const seen = new Set<number>();
+    for (const span of spans) {
+      if (parts.length >= 5) {
+        break;
+      }
+      let index = sentences.findIndex(
+        (segment) =>
+          span.start >= segment.index &&
+          span.start < segment.index + segment.segment.length,
+      );
+      if (index === -1) {
+        index = 0;
+      }
+      if (seen.has(index)) {
+        continue;
+      }
+      seen.add(index);
+      const sentence = sentences[index]?.segment.trim() ?? bodyText;
+      parts.push(
+        `sentence ${index + 1} (${span.entity_type}): "${sentence.slice(0, 200)}"`,
+      );
+    }
+    if (parts.length === 0) {
+      return "rephrase the body to remove any value resembling personal data";
+    }
+    return parts.join("; ");
+  }
+
   private static legalCompletenessRejection(
     ctx: ReviewContext,
     incident: PimsIncident,
@@ -288,7 +323,10 @@ export class NoticeReviewer {
         return NoticeReviewer.reject([], {
           judge: "reviewer",
           item: "pii_leakage",
-          required_fix: `Notice body contains ${piiSpans.length} unredacted PII value(s) (${piiTypes})`,
+          required_fix:
+            `Notice body contains ${piiSpans.length} unredacted PII value(s) (${piiTypes}). ` +
+            `Rephrase the flagged sentences so they contain no value resembling personal data: ` +
+            `${NoticeReviewer.describePiiSpans(ctx.body_text, piiSpans)}`,
         });
       }
     }

@@ -82,4 +82,49 @@ describe("Review feedback redraft loop", { timeout: 240_000 }, () => {
     subjectSpy.mockRestore();
     authoritySpy.mockRestore();
   });
+
+  it("names the flagged sentence in PII rejections so redrafts can rephrase it", async () => {
+    const { adapter, agent, authorityCitation } = harness;
+    const intake = await agent.orchestrator.intake(
+      intakeFixture({ title: "PII feedback fixture" }),
+    );
+    const incident = await adapter.getIncident(intake.incident.id);
+    const body =
+      "Su cuenta fue bloqueada por seguridad. Recibirá nuevas instrucciones por el canal oficial. Revise su bandeja con atención.";
+    const flaggedStart = body.indexOf("Recibirá");
+
+    const analyzeSpy = vi
+      .spyOn(agent.presidioClient, "analyze")
+      .mockResolvedValueOnce([
+        {
+          entity_type: "PERSON",
+          start: flaggedStart,
+          end: flaggedStart + "Recibirá".length,
+          score: 0.85,
+        },
+      ]);
+
+    const result = await agent.reviewer.review(
+      {
+        incident_code: incident.incident_code,
+        pack_type: "subject",
+        content_sha256: "b2".repeat(32),
+        body_text: body,
+        citations: [authorityCitation],
+        numeric_approvals: [],
+        plain_language_waiver: null,
+        checklist: null,
+      },
+      incident,
+    );
+
+    expect(result.approved).toBe(false);
+    expect(result.rejection?.item).toBe("pii_leakage");
+    expect(result.rejection?.required_fix).toContain("sentence 2 (PERSON)");
+    expect(result.rejection?.required_fix).toContain(
+      "Recibirá nuevas instrucciones",
+    );
+
+    analyzeSpy.mockRestore();
+  });
 });
