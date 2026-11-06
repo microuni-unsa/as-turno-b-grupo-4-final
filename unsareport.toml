@@ -1,0 +1,11 @@
+[project]
+  typst_entry = "main.typ"
+  config_version = 1
+
+[scripts]
+
+[hooks]
+
+[dependencies]
+  "@unsareport/gdocs-code-block" = "0.2.0"
+  "@unsareport/standard-report" = "^0.2.0"

@@ -1,0 +1,75 @@
+[[scopes]]
+  name = "@unsareport"
+
+[[pkg]]
+  name = "@unsareport/standard-report"
+  version = "0.2.0"
+  depends_on = ["@unsareport/autoindent ^0.2.0", "@unsareport/define ^0.2.0", "@unsareport/standard-report-theming ^0.2.0"]
+
+  [[pkg.files]]
+    path = "README.md"
+    sha256 = "b12a6c677b66e1f2cfd723df0154af05072ec4508df40c0521764175dc27725c"
+
+  [[pkg.files]]
+    path = "img/logo.png"
+    sha256 = "26998bf0cd2ac7e5053913497e717a8283bcbe4df250cf1fc5e85c38c2555f79"
+
+  [[pkg.files]]
+    path = "lib.typ"
+    sha256 = "5a82113b955f09d2ca305bafdf9080dcdf2e014076d028143856f093f17ff425"
+
+  [[pkg.files]]
+    path = "scripts/copy_report.ts"
+    sha256 = "e13f935ca29ec803eb60b0799be3531c576e6f56090d25c03c03ffef1ef25227"
+
+[[pkg]]
+  name = "@unsareport/define"
+  version = "0.2.0"
+
+  [[pkg.files]]
+    path = "README.md"
+    sha256 = "05fc8bc56c403d1cbee82c8149301f7c92380cff0131a698695f9e877382d5da"
+
+  [[pkg.files]]
+    path = "lib.typ"
+    sha256 = "a716ed3824fb8015ab0b74c231f9c9f4fcbc2d31fce3ab5df35acc9462ac14f7"
+
+  [[pkg.files]]
+    path = "scripts/read-vars.ts"
+    sha256 = "d31f0dfa532b27e297f1ca7da48f2c87fc03eb9f73951fb742259bfd11094d95"
+
+[[pkg]]
+  name = "@unsareport/standard-report-theming"
+  version = "0.2.0"
+
+  [[pkg.files]]
+    path = "README.md"
+    sha256 = "e6dcde9af0922e31526022826b0ab7f427229a61534205eb2e1eef38b49ce0e6"
+
+  [[pkg.files]]
+    path = "lib.typ"
+    sha256 = "22be5a567b4aef00c4a9683426c64709d0401e4dc31eefd69fcadc834808bbf9"
+
+[[pkg]]
+  name = "@unsareport/autoindent"
+  version = "0.2.0"
+
+  [[pkg.files]]
+    path = "README.md"
+    sha256 = "560d873957ad29cffaa633c29ff2812de45dabaf1c206aeee4ede44ada55d474"
+
+  [[pkg.files]]
+    path = "lib.typ"
+    sha256 = "d209124ba2bda2cbd9698c2c5916e7a85410162918b430f2eb59c1a590c95182"
+
+[[pkg]]
+  name = "@unsareport/gdocs-code-block"
+  version = "0.2.0"
+
+  [[pkg.files]]
+    path = "README.md"
+    sha256 = "bc4dcab3868a7a111a6b952c11ff91e8cc1738695600dd3c541d76ea0d310416"
+
+  [[pkg.files]]
+    path = "lib.typ"
+    sha256 = "fb130f04f992930c96325c6d9d8eeda99d798f2035d18631011bc47ea6212aa8"
