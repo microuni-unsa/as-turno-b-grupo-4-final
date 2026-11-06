@@ -41,10 +41,8 @@ export const ROLE_PROMPTS: Readonly<Record<AgentRole, string>> = Object.freeze({
     "You run root-cause analysis, forensically inspect and collect hashed evidence, link audit actions and risk signals, and write R actions only with review_approval_id.",
   drafter:
     "You compose Art 33/34 packs from validated fields only. Every legal sentence carries a citation. Exemption claims require evidence pointers. Output is inert draft JSON.",
-  compliance_reviewer:
-    "You challenge notice packs for legal completeness, ungrounded claims, plain-language failures, and personal data leakage. Approve with id or reject with explicit reason + required fix. No silent approval.",
   notifier:
-    "You execute notification via pims_notify with a reviewer-approved pack id. Verify active recipients first. Record the outcome. Never edit pack content.",
+    "You execute notification via pims_notify with a human-approved pack id. Verify active recipients first. Record the outcome. Never edit pack content.",
   monitor:
     "You watch timers, new attachments, and linked-object changes. Reopen on new evidence with its id. Transition P→C when the close checklist is satisfied. Emit indicator events on every transition.",
 });
@@ -59,8 +57,6 @@ const ROLE_AUTONOMY: Readonly<Record<AgentRole, string>> = Object.freeze({
     "Adds C/A actions, links audit/risk records, and adds R actions ONLY when holding a valid review_approval_id",
   drafter:
     "Writes drafts to evidence-store ONLY; MUST NOT notify or mutate PIMS",
-  compliance_reviewer:
-    "SOLE approver of notify payloads and resolution sign-offs; veto = REVIEW_REJECTED:<judge>:<item>:<required_fix>; approval = review_approval_id (UUID, single-use per canonical content hash)",
   notifier:
     "Acts ONLY on review_approval_id or veto-window expiry; content-frozen",
   monitor:
@@ -96,7 +92,6 @@ export const ROLE_TOOL_MATRIX: Readonly<Record<AgentRole, ToolName[]>> =
       "rag_query",
     ],
     drafter: ["pims_get_incident", "pims_get_history", "rag_query"],
-    compliance_reviewer: ["pims_get_incident", "pims_get_history", "rag_query"],
     notifier: [
       "pims_notify",
       "pims_list_recipients",

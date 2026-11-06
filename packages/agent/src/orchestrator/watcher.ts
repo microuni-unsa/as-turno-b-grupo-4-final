@@ -7,7 +7,7 @@ import type { EvidenceStore } from "@pims/evidence/evidence-store.ts";
 import type { PimsAdapter } from "@pims/pims-adapter";
 import type {
   AgentEvent,
-  DraftReviewResult,
+  DraftPacksResult,
   PageAlert,
   WatcherStage,
   WatcherState,
@@ -16,7 +16,6 @@ import { WatcherStateSchema } from "@pims/types/agent.ts";
 import { canonicalizeJson } from "@pims/types/canonical.ts";
 import { CONSTANTS } from "@pims/types/constants.ts";
 import {
-  EscalateStuckReviewError,
   LeaseHeldError,
   NotifyNoRecipientsError,
   PimsBaseError,
@@ -227,7 +226,7 @@ export class IncidentWatcherDaemon {
           break;
         }
         case "investigated": {
-          const result = await this.orchestrator.draftAndReview(incident.id, {
+          const result = await this.orchestrator.draftPacks(incident.id, {
             phaseDueAtUtc: new Date(
               this.clock().getTime() +
                 this.config.PHASE_DUE_HOURS * CONSTANTS.MS_PER_HOUR,
@@ -468,11 +467,6 @@ export class IncidentWatcherDaemon {
       });
     }
 
-    if (error instanceof EscalateStuckReviewError) {
-      this.retryByIncident.delete(incident.id);
-      return;
-    }
-
     const attempt = this.retryByIncident.get(incident.id)?.attempt ?? 0;
     this.scheduleRetry(incident.id, this.backoffFor(attempt));
   }
@@ -609,34 +603,20 @@ export class IncidentWatcherDaemon {
 
   private emitDraftApprovalRequests(
     incidentCode: string,
-    result: DraftReviewResult,
+    result: DraftPacksResult,
   ): void {
     const pairs: Array<{
       pack_type: "authority" | "subject";
       pack_id: string | null;
-      approval_id: string | null;
     }> = [
-      {
-        pack_type: "authority",
-        pack_id: result.authority_pack_id,
-        approval_id: result.authority_approval_id,
-      },
-      {
-        pack_type: "subject",
-        pack_id: result.subject_pack_id,
-        approval_id: result.subject_approval_id,
-      },
+      { pack_type: "authority", pack_id: result.authority_pack_id },
+      { pack_type: "subject", pack_id: result.subject_pack_id },
     ];
     for (const pair of pairs) {
-      if (pair.pack_id === null || pair.approval_id === null) {
+      if (pair.pack_id === null) {
         continue;
       }
-      this.emitApproval(
-        incidentCode,
-        pair.pack_type,
-        pair.pack_id,
-        pair.approval_id,
-      );
+      this.emitApproval(incidentCode, pair.pack_type, pair.pack_id, null);
     }
   }
 

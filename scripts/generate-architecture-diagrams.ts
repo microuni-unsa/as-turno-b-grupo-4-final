@@ -18,7 +18,6 @@ const ICONS = {
   triage: `<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="#0D9488" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>`,
   investigate: `<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="#7C3AED" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><path d="M11 8v6"/><path d="M8 11h6"/></svg>`,
   drafter: `<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="#D97706" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/><path d="M2 2l7.586 7.586"/><circle cx="11" cy="11" r="2"/></svg>`,
-  reviewer: `<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="#DC2626" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18"/><path d="m3 7 9-4 9 4"/><path d="M4 14a4 4 0 0 0 6 0l-3-7z"/><path d="M14 14a4 4 0 0 0 6 0l-3-7z"/><path d="M5 21h14"/></svg>`,
   notifier: `<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="#EA580C" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/></svg>`,
   monitor: `<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="#4F46E5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>`,
   rag: `<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="#B45309" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>`,
@@ -309,13 +308,13 @@ function generateAiArchitectureHtml(): string {
         </div>
         <div class="step-card">
           <div class="step-num">6</div>
-          <div class="step-name">Review</div>
-          <div class="step-role">Reviewer</div>
-          <div class="step-desc">Desafío adversarial: completitud legal, lenguaje accesible e inspección anti-fugas PII.</div>
+          <div class="step-name">Approve</div>
+          <div class="step-role">Human DPO</div>
+          <div class="step-desc">El operador aprueba el borrador en el Cockpit; autorización de un solo uso ligada al hash del contenido.</div>
         </div>
         <div class="step-card">
           <div class="step-num">7</div>
-          <div class="step-name">Approve</div>
+          <div class="step-name">Notify</div>
           <div class="step-role">Notifier</div>
           <div class="step-desc">Emisión firmada con review_approval_id o vencimiento de veto humano. Envío a PIMS.</div>
         </div>
@@ -334,7 +333,7 @@ function generateAiArchitectureHtml(): string {
       </div>
     </div>
 
-    <!-- 2. LOS 8 ROLES ESPECIALIZADOS DEL AGENTE -->
+    <!-- 2. LOS 7 ROLES ESPECIALIZADOS DEL AGENTE (+ APROBADOR HUMANO DPO) -->
     <div class="section-card" style="grid-column: span 2;">
       <div class="section-header">
         <div class="section-title">
@@ -432,23 +431,7 @@ function generateAiArchitectureHtml(): string {
           </div>
         </div>
 
-        <!-- Compliance Reviewer -->
-        <div class="role-card">
-          <div>
-            <div class="role-top">
-              <div class="role-icon">${ICONS.reviewer}</div>
-              <div class="role-name">Compliance Reviewer</div>
-            </div>
-            <p class="role-desc">Revisor adversarial independiente. Desafía exhaustividad legal, lenguaje accesible (Intl.Segmenter) y ausencia de PII.</p>
-          </div>
-          <div class="role-tools">
-            <div class="tools-label">Allowed Tools</div>
-            <span class="tool-tag">pims_get_incident</span>
-            <span class="tool-tag">pims_get_history</span>
-            <span class="tool-tag">rag_query</span>
-          </div>
-        </div>
-
+        <!-- Human DPO approver (no machine role: drafts await human approval) -->
         <!-- Notifier -->
         <div class="role-card">
           <div>

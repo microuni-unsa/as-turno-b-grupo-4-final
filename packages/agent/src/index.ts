@@ -13,7 +13,6 @@ import {
   type TimerEffects,
 } from "@pims/agent/orchestrator/scheduler.ts";
 import { NoticeDraftService } from "@pims/agent/review/draft-service.ts";
-import { NoticeReviewer } from "@pims/agent/review/reviewer.ts";
 import { createIncidentToolHandlers } from "@pims/agent/tools/incident-tools.ts";
 import { createKnowledgeToolHandlers } from "@pims/agent/tools/knowledge-tools.ts";
 import { createNoticeToolHandlers } from "@pims/agent/tools/notice-tools.ts";
@@ -49,7 +48,6 @@ export * from "@pims/agent/orchestrator/roles.ts";
 export * from "@pims/agent/orchestrator/scheduler.ts";
 export * from "@pims/agent/orchestrator/watcher.ts";
 export * from "@pims/agent/review/draft-service.ts";
-export * from "@pims/agent/review/reviewer.ts";
 export * from "@pims/agent/tools/helpers.ts";
 export * from "@pims/agent/tools/incident-tools.ts";
 export * from "@pims/agent/tools/knowledge-tools.ts";
@@ -81,7 +79,6 @@ export interface Agent {
   roles: RoleRegistry;
   tools: ToolRegistry;
   scheduler: DeadlineScheduler;
-  reviewer: NoticeReviewer;
   draftService: NoticeDraftService;
   orchestrator: IncidentOrchestrator;
   indicator: IndicatorEmitter;
@@ -194,13 +191,6 @@ export async function createAgent(
     page,
   });
 
-  const reviewer = new NoticeReviewer({
-    modelClient,
-    ragService: deps.ragService,
-    evidenceStore,
-    config,
-    presidioClient,
-  });
   const draftService = new NoticeDraftService({
     modelClient,
     ragService: deps.ragService,
@@ -243,7 +233,6 @@ export async function createAgent(
     bundleSealer,
     modelClient,
     scheduler,
-    reviewer,
     draftService,
     composer,
     exemptionEngine,
@@ -271,7 +260,6 @@ export async function createAgent(
     roles,
     tools,
     scheduler,
-    reviewer,
     draftService,
     orchestrator,
     indicator,

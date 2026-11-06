@@ -10,8 +10,6 @@ import {
   DRAFT_AUTHORITY_SYSTEM,
   DRAFT_SUBJECT_SYSTEM,
   RESOLUTION_SYSTEM,
-  REVIEW_CHALLENGE_AUTHORITY_SYSTEM,
-  REVIEW_CHALLENGE_SYSTEM,
   RISK_CATALOG_SYSTEM,
   ROOT_CAUSE_SYSTEM,
   TRIAGE_SYSTEM,
@@ -27,10 +25,8 @@ import {
   type PimsTestServerInstance,
 } from "@pims/pims-mock";
 import { CorpusLoader, RAGService, RagIndexer } from "@pims/rag";
-import { ModelSchemaViolationError } from "@pims/types";
 import {
   type AgentRole,
-  CLOSE_CHECKLIST_ITEMS,
   type IntakePayload,
   IntakePayloadSchema,
 } from "@pims/types/agent.ts";
@@ -123,7 +119,6 @@ describe("Phase 4 autonomous lifecycle loop (§6, §9, §14.2)", {
   let config: AgentConfig;
   let authorityCitation: string;
   let storageDir: string;
-  let reviewChallengePayload: JsonObject = { challenges: [] };
   const now = new Date("2026-10-01T20:00:00.000Z");
 
   beforeAll(async () => {
@@ -289,9 +284,7 @@ describe("Phase 4 autonomous lifecycle loop (§6, §9, §14.2)", {
       }
       if (
         args.system.startsWith(B3_12_SYSTEM) ||
-        (args.system.includes("breach") &&
-          !args.system.includes("challenge") &&
-          !args.system.includes("You review"))
+        args.system.includes("breach")
       ) {
         return respond({
           breach_requiring_response: !isNonPii,
@@ -368,17 +361,6 @@ describe("Phase 4 autonomous lifecycle loop (§6, §9, §14.2)", {
           citations: [authorityCitation],
         });
       }
-      // Challenge routing precedes resolution routing: the resolution-challenge
-      // system prompt contains the word "resolution" and would otherwise be
-      // hijacked by the resolution-draft branch below.
-      if (
-        args.system.startsWith(REVIEW_CHALLENGE_SYSTEM) ||
-        args.system.startsWith(REVIEW_CHALLENGE_AUTHORITY_SYSTEM) ||
-        args.system.includes("challenge") ||
-        args.system.includes("You review")
-      ) {
-        return respond(reviewChallengePayload);
-      }
       if (
         args.system.startsWith(RESOLUTION_SYSTEM) ||
         args.system.includes("resolution")
@@ -409,13 +391,11 @@ describe("Phase 4 autonomous lifecycle loop (§6, §9, §14.2)", {
       VISION_MODEL: "gpt-4o",
       EMBEDDINGS_MODEL: "text-embedding-3-small",
       RERANKER_MODEL: "gpt-4o-mini",
-      EVIDENCE_KEY: "a1".repeat(32),
       ASSIGNEES: '["analyst-1","analyst-2"]',
       RAG_TOP_K: "24",
       RAG_RERANK_K: "6",
       RAG_MIN_SCORE: "0.35",
       RAG_TIMEOUT_MS: "30000",
-      MAX_REVIEW_CYCLES: "3",
       SCHEDULER_MAX_TIMERS: "100",
     });
 
@@ -497,10 +477,6 @@ describe("Phase 4 autonomous lifecycle loop (§6, §9, §14.2)", {
     }
   }
 
-  async function freshReviewIncident(title: string) {
-    return (await agent.orchestrator.intake({ ...FIXTURE, title })).incident;
-  }
-
   const spool = (): Promise<IndicatorSpoolRecord[]> =>
     store.listIndicatorSpool();
 
@@ -577,16 +553,13 @@ describe("Phase 4 autonomous lifecycle loop (§6, §9, §14.2)", {
       `10.2 corrective action for ${code}`,
     );
 
-    const draft = await agent.orchestrator.draftAndReview(intake.incident.id);
+    const draft = await agent.orchestrator.draftPacks(intake.incident.id);
     expect(draft.high_risk_gate.verdict).toBe(true);
     expect(draft.authority_pack_id).not.toBeNull();
     expect(draft.subject_pack_id).not.toBeNull();
-    expect(draft.authority_approval_id).not.toBeNull();
-    expect(draft.subject_approval_id).not.toBeNull();
-    expect(draft.authority_approval_id).not.toBe(draft.subject_approval_id);
 
     const authorityRow = await store.getDraftPack(code, "authority");
-    expect(authorityRow?.state).toBe("approved");
+    expect(authorityRow?.state).toBe("draft");
     const authorityPayload = authorityRow?.payload as JsonObject;
     expect(authorityPayload.item_a_approx_subjects).toBe(500);
     expect(authorityPayload.item_a_nature).toBeTruthy();
@@ -600,9 +573,8 @@ describe("Phase 4 autonomous lifecycle loop (§6, §9, §14.2)", {
     ).toBeGreaterThan(0);
     expect(authorityPayload.phased).toBe(false);
     expect(authorityPayload.citations).toEqual([authorityCitation]);
-
     const subjectRow = await store.getDraftPack(code, "subject");
-    expect(subjectRow?.state).toBe("approved");
+    expect(subjectRow?.state).toBe("draft");
 
     const notify = await agent.orchestrator.approveAndNotify(
       intake.incident.id,
@@ -659,7 +631,7 @@ describe("Phase 4 autonomous lifecycle loop (§6, §9, §14.2)", {
     expect(closed.incident.evidence_refs).toContain("CLOSE_APPROVED:");
   });
 
-  it("A05: blocks notify with zero recipients, keeps the pack approved and resumes", async () => {
+  it("A05: blocks notify with zero recipients, keeps human authorizations and resumes", async () => {
     await removeAllRecipients();
 
     const intake = await agent.orchestrator.intake(
@@ -672,8 +644,9 @@ describe("Phase 4 autonomous lifecycle loop (§6, §9, §14.2)", {
     const code = intake.incident.incident_code;
     await agent.orchestrator.triage(intake.incident.id);
     await agent.orchestrator.investigate(intake.incident.id);
-    const draft = await agent.orchestrator.draftAndReview(intake.incident.id);
-    expect(draft.authority_approval_id).not.toBeNull();
+    const draft = await agent.orchestrator.draftPacks(intake.incident.id);
+    expect(draft.authority_pack_id).not.toBeNull();
+    expect((await store.getDraftPack(code, "authority"))?.state).toBe("draft");
 
     await expect(
       agent.orchestrator.approveAndNotify(intake.incident.id),
@@ -704,7 +677,7 @@ describe("Phase 4 autonomous lifecycle loop (§6, §9, §14.2)", {
     ).toBe(true);
   });
 
-  it("A06: parks approved packs for the veto window, vetoes, then auto-sends on expiry", async () => {
+  it("A06: parks human-approved packs for the veto window, vetoes, then auto-sends on expiry", async () => {
     await ensureRecipient();
 
     const intake = await agent.orchestrator.intake(
@@ -717,7 +690,7 @@ describe("Phase 4 autonomous lifecycle loop (§6, §9, §14.2)", {
     const code = intake.incident.incident_code;
     await agent.orchestrator.triage(intake.incident.id);
     await agent.orchestrator.investigate(intake.incident.id);
-    await agent.orchestrator.draftAndReview(intake.incident.id);
+    await agent.orchestrator.draftPacks(intake.incident.id);
 
     const parked = await agent.orchestrator.approveAndNotify(
       intake.incident.id,
@@ -744,7 +717,7 @@ describe("Phase 4 autonomous lifecycle loop (§6, §9, §14.2)", {
       "VETOED_BY:operator-1:unsafe wording",
     );
 
-    await agent.orchestrator.draftAndReview(intake.incident.id);
+    await agent.orchestrator.draftPacks(intake.incident.id);
     const reparked = await agent.orchestrator.approveAndNotify(
       intake.incident.id,
       { vetoWindowMin: 30 },
@@ -776,7 +749,7 @@ describe("Phase 4 autonomous lifecycle loop (§6, §9, §14.2)", {
     const code = intake.incident.incident_code;
     await agent.orchestrator.triage(intake.incident.id);
     await agent.orchestrator.investigate(intake.incident.id);
-    await agent.orchestrator.draftAndReview(intake.incident.id);
+    await agent.orchestrator.draftPacks(intake.incident.id);
     await agent.orchestrator.approveAndNotify(intake.incident.id);
     const closed = await agent.orchestrator.close(intake.incident.id);
     expect(closed.incident.status).toBe("C");
@@ -843,7 +816,7 @@ describe("Phase 4 autonomous lifecycle loop (§6, §9, §14.2)", {
       "audit_link_skipped:not_qualifying",
     );
 
-    const draft = await agent.orchestrator.draftAndReview(intake.incident.id);
+    const draft = await agent.orchestrator.draftPacks(intake.incident.id);
     expect(draft.authority_pack_id).toBeNull();
     expect(draft.high_risk_gate.verdict).toBe(false);
     const subject = await store.getDraftPack(code, "subject");
@@ -875,154 +848,5 @@ describe("Phase 4 autonomous lifecycle loop (§6, §9, §14.2)", {
       expect(entry.idempotency_key.length).toBeGreaterThan(0);
       expect(entry.result_ref).toContain(":");
     }
-  });
-
-  it("reviewer: blocks approval on a high-severity model challenge", async () => {
-    const incident = await freshReviewIncident("Reviewer high challenge");
-    reviewChallengePayload = {
-      challenges: [
-        {
-          target: "item_a_nature",
-          challenge: "Nature omits the storage location",
-          severity: "high",
-          evidence_required: "Hosting location evidence",
-        },
-      ],
-    };
-
-    const result = await agent.reviewer.review(
-      {
-        incident_code: incident.incident_code,
-        pack_type: "authority",
-        content_sha256: "a".repeat(64),
-        body_text:
-          "We detected a breach and notified the supervisory authority.",
-        citations: [authorityCitation],
-        numeric_approvals: [],
-        plain_language_waiver: null,
-        checklist: null,
-      },
-      incident,
-    );
-
-    expect(result.approved).toBe(false);
-    expect(result.rejection?.item).toBe("item_a_nature");
-    expect(result.challenges[0]?.severity).toBe("high");
-  });
-
-  it("reviewer: rejects a malformed challenge response instead of approving", async () => {
-    const incident = await freshReviewIncident("Reviewer malformed challenge");
-    reviewChallengePayload = {};
-
-    await expect(
-      agent.reviewer.review(
-        {
-          incident_code: incident.incident_code,
-          pack_type: "authority",
-          content_sha256: "a".repeat(64),
-          body_text:
-            "We detected a breach and notified the supervisory authority.",
-          citations: [authorityCitation],
-          numeric_approvals: [],
-          plain_language_waiver: null,
-          checklist: null,
-        },
-        incident,
-      ),
-    ).rejects.toBeInstanceOf(ModelSchemaViolationError);
-  });
-
-  it("reviewer: rejects unredacted PII without echoing the value", async () => {
-    const incident = await freshReviewIncident("Reviewer pii leakage");
-    reviewChallengePayload = { challenges: [] };
-
-    const result = await agent.reviewer.review(
-      {
-        incident_code: incident.incident_code,
-        pack_type: "authority",
-        content_sha256: "a".repeat(64),
-        body_text: "Notificamos al interesado al correo juan@example.com.",
-        citations: [authorityCitation],
-        numeric_approvals: [],
-        plain_language_waiver: null,
-        checklist: null,
-      },
-      incident,
-    );
-
-    expect(result.approved).toBe(false);
-    expect(result.rejection?.item).toBe("pii_leakage");
-    expect(result.rejection?.required_fix).not.toContain("juan@example.com");
-  });
-
-  it("reviewer: rejects an authority pack without DPO contact data", async () => {
-    const incident = {
-      ...(await freshReviewIncident("Reviewer dpo gap")),
-      dpo_contact_name: null,
-    };
-    reviewChallengePayload = { challenges: [] };
-
-    const result = await agent.reviewer.review(
-      {
-        incident_code: incident.incident_code,
-        pack_type: "authority",
-        content_sha256: "a".repeat(64),
-        body_text:
-          "We detected a breach and notified the supervisory authority.",
-        citations: [authorityCitation],
-        numeric_approvals: [],
-        plain_language_waiver: null,
-        checklist: null,
-      },
-      incident,
-    );
-
-    expect(result.approved).toBe(false);
-    expect(result.rejection?.item).toBe("dpo_contact_name");
-  });
-
-  it("reviewer: rejects a resolution without the full close checklist", async () => {
-    const incident = await freshReviewIncident("Reviewer checklist gap");
-    reviewChallengePayload = { challenges: [] };
-
-    const result = await agent.reviewer.reviewResolution(
-      {
-        incident_code: incident.incident_code,
-        pack_type: "resolution",
-        content_sha256: "a".repeat(64),
-        body_text: "",
-        citations: [],
-        numeric_approvals: [],
-        plain_language_waiver: null,
-        checklist: ["analysis_action"],
-      },
-      incident,
-    );
-
-    expect(result.approved).toBe(false);
-    expect(result.rejection?.item).toBe("resolution_action_or_considered");
-  });
-
-  it("reviewer: enforces plain language on a resolution with a full checklist", async () => {
-    const incident = await freshReviewIncident("Reviewer plain language");
-    reviewChallengePayload = { challenges: [] };
-
-    const result = await agent.reviewer.reviewResolution(
-      {
-        incident_code: incident.incident_code,
-        pack_type: "resolution",
-        content_sha256: "a".repeat(64),
-        body_text:
-          "We have reviewed every action taken during this incident and we confirm that all containment measures remain in place across every affected production system and every related backup system without exception.",
-        citations: [],
-        numeric_approvals: [],
-        plain_language_waiver: null,
-        checklist: [...CLOSE_CHECKLIST_ITEMS],
-      },
-      incident,
-    );
-
-    expect(result.approved).toBe(false);
-    expect(result.rejection?.item).toBe("PLAIN_LANGUAGE_VIOLATION");
   });
 });

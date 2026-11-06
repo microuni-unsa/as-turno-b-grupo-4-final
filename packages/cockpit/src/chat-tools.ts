@@ -501,23 +501,21 @@ export async function checkPendingDecisions(
         ];
       }
 
-      if (draftPacks.some((pack) => pack.state === "draft")) {
-        const draftPack = draftPacks.find((pack) => pack.state === "draft");
-        return [
-          {
-            incident_id: incident.id,
-            incident_code: incident.incident_code,
-            kind: "revision_required" as const,
-            pack_type: draftPack?.pack_type ?? null,
-            approval_id: null,
-            blocked_reason: null,
-            actionable,
-            proposal: activeProposal,
-            proposal_state: activeProposalState ?? "draft",
-            root_cause: rootCause,
-            findings: activeFindings,
-          },
-        ];
+      const drafts = draftPacks.filter((pack) => pack.state === "draft");
+      if (drafts.length > 0) {
+        return drafts.map((pack) => ({
+          incident_id: incident.id,
+          incident_code: incident.incident_code,
+          kind: "notice_approval" as const,
+          pack_type: pack.pack_type,
+          approval_id: null,
+          blocked_reason: null,
+          actionable,
+          proposal: pack.proposal,
+          proposal_state: pack.state,
+          root_cause: rootCause,
+          findings: resolvePackFindings(pack.proposal),
+        }));
       }
 
       if (state.stage !== "awaiting_approval") {

@@ -15,7 +15,6 @@ import {
   ExemptionEvaluationResultSchema,
   HighRiskGateResultSchema,
   NumericApprovalSchema,
-  PlainLanguageWaiverSchema,
 } from "@pims/types/notices.ts";
 import {
   ACTION_PLAN_STATUSES,
@@ -48,7 +47,6 @@ export const AGENT_ROLES = [
   "triage",
   "investigator",
   "drafter",
-  "compliance_reviewer",
   "notifier",
   "monitor",
 ] as const;
@@ -264,11 +262,6 @@ export const ALL_NOTICE_PACK_TYPES = [
 ] as const;
 export const NoticePackTypeSchema = z.enum(ALL_NOTICE_PACK_TYPES);
 export type NoticePackType = z.infer<typeof NoticePackTypeSchema>;
-
-export const PROSECUTOR_SEVERITIES = ["low", "medium", "high"] as const;
-export const ProsecutorSeveritySchema = z.enum(PROSECUTOR_SEVERITIES);
-export type ProsecutorSeverity = z.infer<typeof ProsecutorSeveritySchema>;
-
 export const TRIAGE_CALIBRATION_MODES = [
   "cold_start",
   "split_conformal",
@@ -296,7 +289,6 @@ export const RoleToolMatrixSchema = z
     triage: z.array(ToolNameSchema),
     investigator: z.array(ToolNameSchema),
     drafter: z.array(ToolNameSchema),
-    compliance_reviewer: z.array(ToolNameSchema),
     notifier: z.array(ToolNameSchema),
     monitor: z.array(ToolNameSchema),
   })
@@ -817,63 +809,15 @@ export const ReviewApprovalSchema = z
   .strict();
 export type ReviewApproval = z.infer<typeof ReviewApprovalSchema>;
 
-export const ProsecutorChallengeSchema = z.object({
-  target: z.string().min(1),
-  challenge: z.string().min(1),
-  severity: ProsecutorSeveritySchema,
-  evidence_required: z.string().min(1),
-});
-export type ProsecutorChallenge = z.infer<typeof ProsecutorChallengeSchema>;
-
-export const ProsecutorResultSchema = z.object({
-  challenges: z.array(ProsecutorChallengeSchema),
-});
-export type ProsecutorResult = z.infer<typeof ProsecutorResultSchema>;
-
-export const ReviewRejectionSchema = z
-  .object({
-    judge: z.string().min(1),
-    item: z.string().min(1),
-    required_fix: z.string().min(1),
-  })
-  .strict();
-export type ReviewRejection = z.infer<typeof ReviewRejectionSchema>;
-
-export const ReviewResultSchema = z
-  .object({
-    approved: z.boolean(),
-    approval_id: z.string().uuid().nullable(),
-    challenges: z.array(ProsecutorChallengeSchema),
-    rejection: ReviewRejectionSchema.nullable(),
-  })
-  .strict();
-export type ReviewResult = z.infer<typeof ReviewResultSchema>;
-
-export const ReviewContextSchema = z
-  .object({
-    incident_code: z.string().min(1),
-    pack_type: NoticePackTypeSchema,
-    content_sha256: z.string().length(CONSTANTS.SHA256_HEX_LENGTH),
-    body_text: z.string(),
-    citations: z.array(z.string().min(1)),
-    numeric_approvals: z.array(NumericApprovalSchema),
-    plain_language_waiver: PlainLanguageWaiverSchema.nullable(),
-    checklist: z.array(CloseChecklistItemSchema).nullable(),
-  })
-  .strict();
-export type ReviewContext = z.infer<typeof ReviewContextSchema>;
-
-export const DraftReviewResultSchema = z
+export const DraftPacksResultSchema = z
   .object({
     authority_pack_id: z.string().uuid().nullable(),
     subject_pack_id: z.string().uuid().nullable(),
-    authority_approval_id: z.string().uuid().nullable(),
-    subject_approval_id: z.string().uuid().nullable(),
     high_risk_gate: HighRiskGateResultSchema,
     exemption: ExemptionEvaluationResultSchema,
   })
   .strict();
-export type DraftReviewResult = z.infer<typeof DraftReviewResultSchema>;
+export type DraftPacksResult = z.infer<typeof DraftPacksResultSchema>;
 
 export const LifecycleRunSchema = z
   .object({
@@ -1240,11 +1184,11 @@ export const IntakeCallbacksSchema = z.object({
 });
 export type IntakeCallbacks = z.infer<typeof IntakeCallbacksSchema>;
 
-export const DraftReviewOptionsSchema = z
+export const DraftPacksOptionsSchema = z
   .object({
     exemption: ExemptionEvaluationInputSchema.optional(),
     numericApprovals: z.array(NumericApprovalSchema).optional(),
     phaseDueAtUtc: z.string().optional(),
   })
   .strict();
-export type DraftReviewOptions = z.infer<typeof DraftReviewOptionsSchema>;
+export type DraftPacksOptions = z.infer<typeof DraftPacksOptionsSchema>;

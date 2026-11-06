@@ -540,7 +540,6 @@ export class NoticeDraftService {
       fetchedAt: Date;
       exemption: ExemptionEvaluationResult | null;
       phase: number;
-      feedback?: string;
     },
   ): Promise<{
     pack: AuthorityNoticePack;
@@ -559,16 +558,12 @@ export class NoticeDraftService {
       AUTHORITY_RAG_QUERY,
     );
 
-    const feedbackBlock =
-      context.feedback !== undefined && context.feedback.trim().length > 0
-        ? `\n\nReviewer feedback on the previous rejected draft (address it first, keep every other requirement):\n${context.feedback.trim()}`
-        : "";
     const response = await this.modelClient.chat_json({
       system: DRAFT_AUTHORITY_SYSTEM,
       messages: [
         {
           role: "user",
-          content: `${await renderIncidentProse(incident)}\nAllowed normative citations (return citations[] using ONLY the identifiers C1..Cn; never invent):\n${rag.citations.map((citation, index) => `C${index + 1} = ${citation}`).join("\n")}${feedbackBlock}\n\n${SPANISH_OUTPUT_CONTRACT}`,
+          content: `${await renderIncidentProse(incident)}\nAllowed normative citations (return citations[] using ONLY the identifiers C1..Cn; never invent):\n${rag.citations.map((citation, index) => `C${index + 1} = ${citation}`).join("\n")}\n\n${SPANISH_OUTPUT_CONTRACT}`,
         },
       ],
       json_schema: AUTHORITY_JSON_SCHEMA,
@@ -690,7 +685,6 @@ export class NoticeDraftService {
     gate: HighRiskGateResult,
     exemption: ExemptionEvaluationResult | null,
     numericApprovals: NumericApproval[],
-    feedback?: string,
   ): Promise<{
     pack: SubjectNoticePack;
     contentSha: string;
@@ -764,16 +758,12 @@ export class NoticeDraftService {
         ? this.config.PLAIN_LANG_MAX_WORDS
         : CONSTANTS.PLAIN_LANGUAGE_MAX_WORDS;
 
-    const feedbackBlock =
-      feedback !== undefined && feedback.trim().length > 0
-        ? `\n\nReviewer feedback on the previous rejected draft (address it first, keep every other requirement):\n${feedback.trim()}`
-        : "";
     const response = await this.modelClient.chat_json({
       system: DRAFT_SUBJECT_SYSTEM,
       messages: [
         {
           role: "user",
-          content: `${await renderIncidentProse(incident)}\nAllowed normative citations (return citations[] using ONLY the identifiers C1..Cn; never invent):\n${rag.citations.map((citation, index) => `C${index + 1} = ${citation}`).join("\n")}\nConstraints: write body_plain in Spanish; every sentence must have at most ${maxWords} words; do not include digits or numeric literals in body_plain; keep every field concrete and free of legal jargon.${feedbackBlock}\n\n${SPANISH_OUTPUT_CONTRACT}`,
+          content: `${await renderIncidentProse(incident)}\nAllowed normative citations (return citations[] using ONLY the identifiers C1..Cn; never invent):\n${rag.citations.map((citation, index) => `C${index + 1} = ${citation}`).join("\n")}\nConstraints: write body_plain in Spanish; every sentence must have at most ${maxWords} words; do not include digits or numeric literals in body_plain; keep every field concrete and free of legal jargon.\n\n${SPANISH_OUTPUT_CONTRACT}`,
         },
       ],
       json_schema: SUBJECT_JSON_SCHEMA,

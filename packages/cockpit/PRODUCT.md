@@ -16,7 +16,7 @@ Primary: incident operator (native PIMS Operador, e.g. `grupob4`) running live b
 
 Secondary (confirmed by backend role/permission filtering, `docs/phases/05-live-integration-and-cockpit.md` §3):
 
-- DPO / compliance reviewer (Editor, «Oficial de Protección de Datos»): 72h countdowns, draft notices, statutory exemption attestations.
+- DPO (Editor, «Oficial de Protección de Datos»): 72h countdowns, draft notices, statutory exemption attestations — the sole approver of notice packs.
 - Auditor / consultant reader (Lector): view-only incidents plus verbatim RAG citations.
 - Platform admin (Administrador): full panels, security logs, mutation ledger, audit links.
 
@@ -26,11 +26,11 @@ Web UI client for the Glass-Box Cockpit backend: a real-time operations console 
 
 ## Positioning
 
-Glass-box console for an autonomous GDPR breach-response closed loop: watcher daemon → triage → single-prompt root-cause analysis → C/A/R actions → Dual-Modal RAG drafts → adversarial challenge review → human approval → sealed evidence bundle → PIMS close. Every step is streamed live with verbatim normative quotes, retrieval scores, and forensic hashes, and every irreversible step (notice dispatch, Art 34(3) exemption) waits on an explicit, permission-gated human decision. A neighboring dashboard could not truthfully copy the loop behind the glass.
+Glass-box console for an autonomous GDPR breach-response closed loop: watcher daemon → triage → single-prompt root-cause analysis → C/A/R actions → Dual-Modal RAG drafts → human DPO approval → sealed evidence bundle → PIMS close. Every step is streamed live with verbatim normative quotes, retrieval scores, and forensic hashes, and every irreversible step (notice dispatch, Art 34(3) exemption) waits on an explicit, permission-gated human decision. A neighboring dashboard could not truthfully copy the loop behind the glass.
 
 ## Operating Context
 
-- Agent loop: guided-create submit (or watcher-detected `O`) → `O→P` → triage → 5-whys RCA → `C` actions + E19 audit link → RAG retrieval → notice drafts → challenge review → `AWAITING_APPROVAL` (`AUTO_NOTIFY=false` default) → cockpit approve → notify → seal bundle → exactly one `bundle.json.txt` upload → `C`.
+- Agent loop: guided-create submit (or watcher-detected `O`) → `O→P` → triage → 5-whys RCA → `C` actions + E19 audit link → RAG retrieval → notice drafts → `AWAITING_APPROVAL` (`AUTO_NOTIFY=false` default) → cockpit approve (content-hash-bound, single-use authorization) → notify → seal bundle → exactly one `bundle.json.txt` upload → `C`.
 - Clocks: Art 33 72h from `awareness_at_utc`, 4h internal review SLA, phased follow-up timers, Peru 48h advisory (never asserted as law).
 - Backend already exists (`packages/cockpit/src/`): `POST /api/login` (live PIMS E01/E04, native roles + permission matrix), `GET /api/stream` (SSE snapshot + agent events + heartbeat), guided-create endpoints (`POST /api/incidents/draft`, `POST /api/incidents/explain`, `POST /api/incidents` per spec §8.4), approve / revision / exemption endpoints, `POST /api/chat` (persona-adapted, five query tools), `/healthz` + `/readyz`.
 - Operator/admin chat persona switching («Viewing as: Auditor / Executive / DPO-Legal») changes tone, depth, and alert routing.
@@ -45,7 +45,7 @@ Constraints:
 - Zero static or mocked runtime data: every pixel comes from live PIMS E01–E26 calls or live agent state. RAG shows exact quotes with scores, never "clauses xxx apply".
 - Permission-shaped UI: `change_incident` gates guided-create draft/submit, approvals, transitions, and exemptions; `view_incident` gates field explain; `view_securitylog` gates the raw ledger/bitácora (admin + operator only); `view_audit` / `view_riskevaluation` gate audit/risk panels. Lector gets read-only indicators; mutations return 403.
 - PII never enters model prompts (Presidio sidecar redaction per spec §11.3); chat citations are grounded in stored retrieval records validated by `chunk_sha256` + scores.
-- Art 34 subject notices exclude Art 33(3)(a) counts unless the reviewer explicitly approves; exemptions require structured attestations plus reviewer approval; an authority order to notify overrides any granted exemption.
+- Art 34 subject notices exclude Art 33(3)(a) counts unless the DPO explicitly approves; exemptions require structured attestations plus DPO approval; an authority order to notify overrides any granted exemption.
 
 Explicitly undecided: deploy topology (serve the Astro UI from the same Bun/Hono server vs a separate static host behind Docker); UI copy language (the PIMS SPA is Spanish, the spec is English); which cockpit surface gets built first (no surface brief exists yet).
 

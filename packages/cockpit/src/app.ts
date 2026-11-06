@@ -736,6 +736,7 @@ export function createCockpitApp(deps: CockpitAppDeps): Hono<CockpitEnv> {
     const incidentId = parseIncidentId(c.req.param("id"));
     const result = await deps.agent.orchestrator.approveAndNotify(incidentId, {
       vetoWindowMin: CONSTANTS.HUMAN_VETO_WINDOW_MIN,
+      operator: session.username,
     });
     return c.json({
       parked: result.parked,

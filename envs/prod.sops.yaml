@@ -27,7 +27,6 @@ PIMS_PAGE_SIZE: ENC[AES256_GCM,data:Qj9tdU9m,iv:JrZgMwCcEiSfODm1QUlDPDzjM2I8umYU
 IDEMPOTENCY_KEY_PREFIX: ENC[AES256_GCM,data:G9pLNHuvuUj93ag=,iv:l0u9fq/XITpRGkUcrsGjemUiLM/ers8jbCHga+j0u48=,tag:hsgVOHe05BVNS4yJ+l525Q==,type:str]
 AUTO_NOTIFY: ENC[AES256_GCM,data:1NyVMPg=,iv:F6l6wzLRnpm1tEAdtYe5gJDbB7fNOgR0xCmTejob1OA=,tag:56DvXHhaI3BiGzO+lcQucA==,type:bool]
 PHASE_DUE_HOURS: ENC[AES256_GCM,data:PMI=,iv:RgB80TGpdhTELtF/RPOwHAbWjFayWYFg3HLPpZEDMOU=,tag:XIix88mE5hLVYg3AnfFTXA==,type:int]
-REVIEW_CHALLENGE_BLOCKING: ENC[AES256_GCM,data:mvWe1A==,iv:Ymzh11hxpre3tXWM1uWhPgUCZi7S5+sTJXslwJwJ8WA=,tag:jsOrz1OY7l1wEwbhgaolyw==,type:bool]
 WATCHER_POLL_INTERVAL_MS: ENC[AES256_GCM,data:bD5i9h0=,iv:n5VAIck3eZWtzJbT/jChlQ0A61kGkGzWPLRaVxlx+Jw=,tag:AOaRTbg+f1D51h2QolcoJg==,type:int]
 EVIDENCE_HASH: ENC[AES256_GCM,data:H1ABNJVK,iv:wyEES5RKCr3KCnJTScNGScItXZOkW2iKumoUfagHjmQ=,tag:ngBe92aQ7zMRxbZbP2Cb3w==,type:str]
 EVIDENCE_KEY_ENV: ENC[AES256_GCM,data:KNT4i8i47FOzlC13,iv:3FonITmfShbi8mo2lqns+jljymNxPgFQg2KCdCWlgJs=,tag:tsQlEEA2IcwDUj2VaAJ3ig==,type:str]
@@ -69,7 +68,7 @@ sops:
             O6rMV3VFIKV5LmDtgJqq/sJgCftG020diNi/0BUbryv4rvXXpl26nQ==
             -----END AGE ENCRYPTED FILE-----
           recipient: age179xlc7hrhzlzjatrfjr5a5puldkxqzar7k36409w2dxhh9rxr42q2745tl
-    lastmodified: "2026-11-06T02:57:52Z"
-    mac: ENC[AES256_GCM,data:qLNYUSR4SnpwerMB6s7jrmj9/D+/b2Bv3CFKQM7GVpWNEg+qUlWqDi9EeszDLtYY+VuJPgWy3/c7W8fbWtz3LHqnF6p00XYCi73Y7TR9M/JNGsSz1MnhnBXoGoUbiHSClRosuI1HLYuUlzzFJDnukdrKpmX64Hi85s5ztj4iuEI=,iv:vrdOk/P7V/s6YYDQS1x15iSQu35U7d7oR50BoS6OlUE=,tag:YOqNpk9IylQETdoVwhsxOQ==,type:str]
+    lastmodified: "2026-11-06T10:27:38Z"
+    mac: ENC[AES256_GCM,data:oIMVydVXlAIk27u2jBjkZitWSsKR9B8RAyU9kfJO1Hk21E3r6e4HO0CyhnPi+BwQiAA5ptyJMz4Rxk79F2QKQTkw7KUvtLycJg7dnsAkMzfIwKoG0E+wgkzAEIs+BKdw62tiqNoJVBJuW5mMtoHce9wUjsRdYVeViiQ44X0EBNQ=,iv:/f+lHB+uEeKWgd4dXOKLRzQKC0EXhQCAB1ShCvJBLkk=,tag:yyQ1qbNq+JvxAIEcyLt4QQ==,type:str]
     unencrypted_suffix: _unencrypted
     version: 3.13.3

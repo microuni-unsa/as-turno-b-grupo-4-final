@@ -10,7 +10,6 @@ import {
 import { canonicalizeJson } from "@pims/types/canonical.ts";
 import type { CockpitSession } from "@pims/types/cockpit.ts";
 import { CONSTANTS } from "@pims/types/constants.ts";
-import { EscalateStuckReviewError } from "@pims/types/errors.ts";
 import {
   type IntegrationHarness,
   intakeFixture,
@@ -243,11 +242,11 @@ describe("Autonomous watcher daemon lifecycle", { timeout: 240_000 }, () => {
     const state = WatcherStateSchema.parse(rawState);
     expect(state.stage).toBe("awaiting_approval");
 
-    const draftSpy = vi.spyOn(agent.orchestrator, "draftAndReview");
+    const draftSpy = vi.spyOn(agent.orchestrator, "draftPacks");
     const initialAuthPack = await store.getDraftPack(code, "authority");
     expect(initialAuthPack).not.toBeNull();
 
-    // 2. Poll 3x with unchanged PIMS data -> 0 draftAndReview calls
+    // 2. Poll 3x with unchanged PIMS data -> 0 draftPacks calls
     await watcher.pollOnce();
     await watcher.pollOnce();
     await watcher.pollOnce();
@@ -256,7 +255,7 @@ describe("Autonomous watcher daemon lifecycle", { timeout: 240_000 }, () => {
     const packAfter3Polls = await store.getDraftPack(code, "authority");
     expect(packAfter3Polls?.id).toBe(initialAuthPack?.id);
 
-    // 3. Edit evidence_refs on the incident -> 1x pollOnce() -> exactly one new draftAndReview
+    // 3. Edit evidence_refs on the incident -> 1x pollOnce() -> exactly one new draftPacks
     await adapter.updateIncident(incidentId, {
       evidence_refs: "new-forensic-evidence-token-1234",
     });
@@ -312,12 +311,12 @@ describe("Autonomous watcher daemon lifecycle", { timeout: 240_000 }, () => {
     expect(draftSpy).toHaveBeenCalledTimes(0);
   });
 
-  it("parks incident in blocked upon EscalateStuckReviewError without repeated paging and without infinite retries", async () => {
+  it("parks incident in blocked on unexpected draft failure without repeated paging", async () => {
     const { adapter, agent, config, store, events, now } = harness;
 
     const intake = await agent.orchestrator.intake(
       intakeFixture({
-        title: "Stuck review test fixture",
+        title: "Blocked draft test fixture",
       }),
     );
     const incidentId = intake.incident.id;
@@ -337,25 +336,22 @@ describe("Autonomous watcher daemon lifecycle", { timeout: 240_000 }, () => {
     });
 
     const draftSpy = vi
-      .spyOn(agent.orchestrator, "draftAndReview")
-      .mockRejectedValueOnce(
-        new EscalateStuckReviewError("Pack rejected 3 times"),
-      );
+      .spyOn(agent.orchestrator, "draftPacks")
+      .mockRejectedValueOnce(new Error("model unavailable"));
 
-    // First poll executes detected -> triaged -> investigated -> draftAndReview fails
+    // First poll executes detected -> triaged -> investigated -> draftPacks fails
     await watcher.pollOnce();
 
     expect(pagedAlerts).toHaveLength(1);
     expect(pagedAlerts[0]?.incident_code).toBe(code);
     expect(pagedAlerts[0]?.kind).toBe("T_RETRY");
-    expect(pagedAlerts[0]?.reason).toBe("ESCALATE_STUCK_REVIEW");
 
     const rawState = await store.getAgentState(`WATCHER:${code}`);
     const state = WatcherStateSchema.parse(rawState);
     expect(state.stage).toBe("blocked");
     expect(state.blocked_at_stage).toBe("investigated");
 
-    // Subsequent polls without incident update must NOT unblock, NOT call draftAndReview, and NOT page again
+    // Subsequent polls without incident update must NOT unblock, NOT call draftPacks, and NOT page again
     draftSpy.mockClear();
     await watcher.pollOnce();
     await watcher.pollOnce();
@@ -370,7 +366,7 @@ describe("Autonomous watcher daemon lifecycle", { timeout: 240_000 }, () => {
 
     // Once the incident is updated in PIMS, the next poll unblocks it
     await adapter.updateIncident(incidentId, {
-      title: "Updated stuck review test fixture with more details",
+      title: "Updated blocked draft test fixture with more details",
     });
 
     await watcher.pollOnce();

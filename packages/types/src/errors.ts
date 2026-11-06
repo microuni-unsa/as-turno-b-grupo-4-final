@@ -376,27 +376,6 @@ export class ReviewApprovalInvalidError extends PimsBaseError {
   }
 }
 
-export class ReviewRejectedError extends PimsBaseError {
-  readonly judge: string;
-  readonly item: string;
-  readonly fix: string;
-
-  constructor(
-    judge: string,
-    item: string,
-    fix: string,
-    details?: PimsErrorDetails,
-  ) {
-    super(
-      `Review rejected by ${judge} on ${item}: ${fix}`,
-      `REVIEW_REJECTED:${judge}:${item}:${fix}`,
-      details,
-    );
-    this.judge = judge;
-    this.item = item;
-    this.fix = fix;
-  }
-}
 
 export class ExportVersionUnknownError extends PimsBaseError {
   readonly version: string;
@@ -854,15 +833,6 @@ export class AuditLinkDuplicateError extends PimsBaseError {
     details?: PimsErrorDetails,
   ) {
     super(message, "AUDIT_LINK_DUPLICATE", details);
-  }
-}
-
-export class EscalateStuckReviewError extends PimsBaseError {
-  constructor(
-    message = "Review rejected MAX_REVIEW_CYCLES times; notices parked and operator paged",
-    details?: PimsErrorDetails,
-  ) {
-    super(message, "ESCALATE_STUCK_REVIEW", details);
   }
 }
 

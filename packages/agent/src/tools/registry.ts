@@ -110,7 +110,6 @@ export const ROLE_PATCH_POLICIES: Readonly<
     ],
   },
   drafter: {},
-  compliance_reviewer: {},
   notifier: { pims_update_incident: ["measure_reported_authorities"] },
   monitor: {
     pims_update_incident: [

@@ -22,8 +22,8 @@ import { describe, expect, it } from "vitest";
 describe("Phase 4 role registry (§5.1–§5.4)", () => {
   const registry = new RoleRegistry();
 
-  it("defines exactly the eight roles with versioned prompts", () => {
-    expect(AGENT_ROLES).toHaveLength(8);
+  it("defines exactly the seven roles with versioned prompts", () => {
+    expect(AGENT_ROLES).toHaveLength(7);
     expect(Object.keys(ROLE_DEFINITIONS).sort()).toEqual(
       [...AGENT_ROLES].sort(),
     );
@@ -148,11 +148,6 @@ describe("Phase 4 role registry (§5.1–§5.4)", () => {
         "rag_query",
       ],
       drafter: ["pims_get_incident", "pims_get_history", "rag_query"],
-      compliance_reviewer: [
-        "pims_get_incident",
-        "pims_get_history",
-        "rag_query",
-      ],
       notifier: [
         "pims_notify",
         "pims_list_recipients",

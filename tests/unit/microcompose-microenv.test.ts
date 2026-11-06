@@ -18,7 +18,7 @@ describe("Microenv & Microcompose Adoption Suite", () => {
     expect(schema.flatKeys).toContain("AUTO_NOTIFY");
     expect(schema.flatKeys).toContain("REASONING_MODEL_ENDPOINT");
     expect(schema.flatKeys).toContain("EMBEDDINGS_MODEL_API_KEY");
-    expect(schema.flatKeys.length).toBe(51);
+    expect(schema.flatKeys.length).toBe(50);
   });
 
   it("matrix defines dev and prod environments and presets", () => {
@@ -52,13 +52,13 @@ describe("Microenv & Microcompose Adoption Suite", () => {
 
   it("resolves encrypted dev and prod configurations through microenv without .env", async () => {
     const devResolved = await matrix.resolve("dev");
-    expect(Object.keys(devResolved.values).length).toBe(51);
+    expect(Object.keys(devResolved.values).length).toBe(50);
     expect(devResolved.values.PIMS_BASE_URL).toBeDefined();
     expect(devResolved.values.OPENAI_API_KEY).toBeDefined();
     expect(devResolved.values.LOG_PII).toBe("false");
 
     const prodResolved = await matrix.resolve("prod");
-    expect(Object.keys(prodResolved.values).length).toBe(51);
+    expect(Object.keys(prodResolved.values).length).toBe(50);
     expect(prodResolved.values.PIMS_BASE_URL).toBeDefined();
     expect(prodResolved.values.OPENAI_API_KEY).toBeDefined();
     expect(prodResolved.values.LOG_PII).toBe("false");

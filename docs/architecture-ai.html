@@ -277,13 +277,13 @@
         </div>
         <div class="step-card">
           <div class="step-num">6</div>
-          <div class="step-name">Review</div>
-          <div class="step-role">Reviewer</div>
-          <div class="step-desc">Desafío adversarial: completitud legal, lenguaje accesible e inspección anti-fugas PII.</div>
+          <div class="step-name">Approve</div>
+          <div class="step-role">Human DPO</div>
+          <div class="step-desc">El operador aprueba el borrador en el Cockpit; autorización de un solo uso ligada al hash del contenido.</div>
         </div>
         <div class="step-card">
           <div class="step-num">7</div>
-          <div class="step-name">Approve</div>
+          <div class="step-name">Notify</div>
           <div class="step-role">Notifier</div>
           <div class="step-desc">Emisión firmada con review_approval_id o vencimiento de veto humano. Envío a PIMS.</div>
         </div>
@@ -302,7 +302,7 @@
       </div>
     </div>
 
-    <!-- 2. LOS 8 ROLES ESPECIALIZADOS DEL AGENTE -->
+    <!-- 2. LOS 7 ROLES ESPECIALIZADOS DEL AGENTE (+ APROBADOR HUMANO DPO) -->
     <div class="section-card" style="grid-column: span 2;">
       <div class="section-header">
         <div class="section-title">
@@ -400,23 +400,7 @@
           </div>
         </div>
 
-        <!-- Compliance Reviewer -->
-        <div class="role-card">
-          <div>
-            <div class="role-top">
-              <div class="role-icon"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="#DC2626" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18"/><path d="m3 7 9-4 9 4"/><path d="M4 14a4 4 0 0 0 6 0l-3-7z"/><path d="M14 14a4 4 0 0 0 6 0l-3-7z"/><path d="M5 21h14"/></svg></div>
-              <div class="role-name">Compliance Reviewer</div>
-            </div>
-            <p class="role-desc">Revisor adversarial independiente. Desafía exhaustividad legal, lenguaje accesible (Intl.Segmenter) y ausencia de PII.</p>
-          </div>
-          <div class="role-tools">
-            <div class="tools-label">Allowed Tools</div>
-            <span class="tool-tag">pims_get_incident</span>
-            <span class="tool-tag">pims_get_history</span>
-            <span class="tool-tag">rag_query</span>
-          </div>
-        </div>
-
+        <!-- Human DPO approver (no machine role: drafts await human approval) -->
         <!-- Notifier -->
         <div class="role-card">
           <div>

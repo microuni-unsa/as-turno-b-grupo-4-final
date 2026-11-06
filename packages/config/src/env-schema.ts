@@ -78,7 +78,6 @@ export const schema = defineSchema({
   // --- Autonomous Watcher Daemon & Compliance Gates ---
   AUTO_NOTIFY: booleanSchema(false),
   PHASE_DUE_HOURS: numberSchema(CONSTANTS.DEFAULT_PHASE_DUE_HOURS),
-  REVIEW_CHALLENGE_BLOCKING: booleanSchema(true),
   WATCHER_POLL_INTERVAL_MS: numberSchema(
     CONSTANTS.DEFAULT_WATCHER_POLL_INTERVAL_MS,
   ),

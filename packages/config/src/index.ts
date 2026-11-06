@@ -42,7 +42,6 @@ export interface AgentConfig {
   RERANKER_MODEL: ModelConfig;
   TEMP_CLASSIFIER: number;
   TEMP_REASONING: number;
-  MAX_REVIEW_CYCLES: number;
   PLAIN_LANG_MAX_WORDS: number;
   DEDUPE_TRIGRAM_THRESHOLD: number;
   DEDUPE_COSINE_THRESHOLD: number;
@@ -70,7 +69,6 @@ export interface AgentConfig {
   AUTO_NOTIFY: boolean;
   MODEL_LOGPROBS: boolean;
   PHASE_DUE_HOURS: number;
-  REVIEW_CHALLENGE_BLOCKING: boolean;
   WATCHER_POLL_INTERVAL_MS: number;
   WEBHOOK_INGEST_SECRET_ENV: string;
   ATTACHMENT_MAX_MB: number;
@@ -335,23 +333,6 @@ export function loadConfig(
       "CONFIG_TYPE:PHASE_DUE_HOURS",
     );
   }
-
-  const reviewChallengeBlockingRaw = env.REVIEW_CHALLENGE_BLOCKING;
-  if (
-    reviewChallengeBlockingRaw !== undefined &&
-    reviewChallengeBlockingRaw !== "true" &&
-    reviewChallengeBlockingRaw !== "false"
-  ) {
-    throw new ConfigError(
-      "REVIEW_CHALLENGE_BLOCKING must be either 'true' or 'false'",
-      "CONFIG_TYPE:REVIEW_CHALLENGE_BLOCKING",
-    );
-  }
-  const reviewChallengeBlocking =
-    reviewChallengeBlockingRaw === undefined
-      ? CONSTANTS.DEFAULT_REVIEW_CHALLENGE_BLOCKING
-      : reviewChallengeBlockingRaw === "true";
-
   const autoNotifyRaw = env.AUTO_NOTIFY;
   if (
     autoNotifyRaw !== undefined &&
@@ -654,10 +635,6 @@ export function loadConfig(
       env.TEMP_REASONING !== undefined && env.TEMP_REASONING !== ""
         ? Number.parseFloat(env.TEMP_REASONING)
         : CONSTANTS.TEMP_REASONING,
-    MAX_REVIEW_CYCLES:
-      env.MAX_REVIEW_CYCLES !== undefined && env.MAX_REVIEW_CYCLES !== ""
-        ? Number.parseInt(env.MAX_REVIEW_CYCLES, 10)
-        : CONSTANTS.MAX_REVIEW_CYCLES,
     PLAIN_LANG_MAX_WORDS:
       env.PLAIN_LANG_MAX_WORDS !== undefined && env.PLAIN_LANG_MAX_WORDS !== ""
         ? Number.parseInt(env.PLAIN_LANG_MAX_WORDS, 10)
@@ -745,7 +722,6 @@ export function loadConfig(
     AUTO_NOTIFY: autoNotify,
     MODEL_LOGPROBS: modelLogprobs,
     PHASE_DUE_HOURS: phaseDueHours,
-    REVIEW_CHALLENGE_BLOCKING: reviewChallengeBlocking,
     WATCHER_POLL_INTERVAL_MS: watcherPollIntervalMs,
     WEBHOOK_INGEST_SECRET_ENV:
       env.WEBHOOK_INGEST_SECRET_ENV !== undefined &&

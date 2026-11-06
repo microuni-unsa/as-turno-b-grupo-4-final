@@ -295,8 +295,7 @@ describe("Cockpit backend", { timeout: 240_000 }, () => {
     const incident = await freshIncident("Cockpit approval fixture");
     await harness.agent.orchestrator.triage(incident.id);
     await harness.agent.orchestrator.investigate(incident.id);
-    await harness.agent.orchestrator.draftAndReview(incident.id);
-
+    await harness.agent.orchestrator.draftPacks(incident.id);
     const response = await app.request(
       `/api/incidents/${incident.id}/approve`,
       {
@@ -320,7 +319,7 @@ describe("Cockpit backend", { timeout: 240_000 }, () => {
     const incident = await freshIncident("Cockpit revision fixture");
     await harness.agent.orchestrator.triage(incident.id);
     await harness.agent.orchestrator.investigate(incident.id);
-    const draft = await harness.agent.orchestrator.draftAndReview(incident.id);
+    const draft = await harness.agent.orchestrator.draftPacks(incident.id);
     expect(draft.authority_pack_id).not.toBeNull();
 
     const response = await app.request(
@@ -384,8 +383,7 @@ describe("Cockpit backend", { timeout: 240_000 }, () => {
     const incident = await freshIncident("Cockpit chat fixture");
     await harness.agent.orchestrator.triage(incident.id);
     await harness.agent.orchestrator.investigate(incident.id);
-    await harness.agent.orchestrator.draftAndReview(incident.id);
-
+    await harness.agent.orchestrator.draftPacks(incident.id);
     chatMode = "valid";
     const okResponse = await app.request("/api/chat", {
       method: "POST",

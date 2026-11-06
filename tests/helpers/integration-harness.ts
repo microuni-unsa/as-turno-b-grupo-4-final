@@ -10,8 +10,6 @@ import {
   DRAFT_AUTHORITY_SYSTEM,
   DRAFT_SUBJECT_SYSTEM,
   RESOLUTION_SYSTEM,
-  REVIEW_CHALLENGE_AUTHORITY_SYSTEM,
-  REVIEW_CHALLENGE_SYSTEM,
   RISK_CATALOG_SYSTEM,
   ROOT_CAUSE_SYSTEM,
   TRIAGE_SYSTEM,
@@ -365,17 +363,6 @@ export async function startIntegrationHarness(options?: {
         citations: [authorityCitation],
       });
     }
-    // Challenge routing precedes resolution routing: the resolution-challenge
-    // system prompt contains the word "resolution" and would otherwise be
-    // hijacked by the resolution-draft branch below.
-    if (
-      args.system.startsWith(REVIEW_CHALLENGE_SYSTEM) ||
-      args.system.startsWith(REVIEW_CHALLENGE_AUTHORITY_SYSTEM) ||
-      args.system.includes("challenge") ||
-      args.system.includes("You review")
-    ) {
-      return respond({ challenges: [] });
-    }
     if (
       args.system.startsWith(RESOLUTION_SYSTEM) ||
       args.system.includes("resolution")
@@ -417,16 +404,13 @@ export async function startIntegrationHarness(options?: {
     VISION_MODEL: TEST_GPT_4O,
     EMBEDDINGS_MODEL: TEST_TEXT_EMBEDDING_3_SMALL,
     RERANKER_MODEL: TEST_GPT_4O_MINI,
-    EVIDENCE_KEY: TEST_EVIDENCE_KEY_HEX,
     ASSIGNEES: '["analyst-1","analyst-2"]',
     RAG_TOP_K: "24",
     RAG_RERANK_K: "6",
     RAG_MIN_SCORE: `${CONSTANTS.DEFAULT_RAG_MIN_SCORE}`,
     RAG_TIMEOUT_MS: "30000",
-    MAX_REVIEW_CYCLES: `${CONSTANTS.MAX_REVIEW_CYCLES}`,
     SCHEDULER_MAX_TIMERS: "100",
     AUTO_NOTIFY: autoNotify ? "true" : "false",
-    WATCHER_POLL_INTERVAL_MS: `${CONSTANTS.DEFAULT_WATCHER_POLL_INTERVAL_MS}`,
     PRESIDIO_URL: presidioUrl,
     PRESIDIO_TIMEOUT_MS: `${CONSTANTS.DEFAULT_WATCHER_POLL_INTERVAL_MS}`,
   });

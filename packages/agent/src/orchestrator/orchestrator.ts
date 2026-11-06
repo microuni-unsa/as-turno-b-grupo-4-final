@@ -20,8 +20,7 @@ import {
   type TimerEffects,
 } from "@pims/agent/orchestrator/scheduler.ts";
 import type { NoticeDraftService } from "@pims/agent/review/draft-service.ts";
-import type { NoticeReviewer } from "@pims/agent/review/reviewer.ts";
-import { assetIdsForSystem, toJsonObject } from "@pims/agent/tools/helpers.ts";
+import { assetIdsForSystem } from "@pims/agent/tools/helpers.ts";
 import type {
   ToolCallContext,
   ToolRegistry,
@@ -39,8 +38,8 @@ import {
   type ApproveNotifyResult,
   CLOSE_CHECKLIST_ITEMS,
   type CloseResult,
-  type DraftReviewOptions,
-  type DraftReviewResult,
+  type DraftPacksOptions,
+  type DraftPacksResult,
   type IndicatorEventAttrs,
   type IntakeCallbacks,
   type IntakePayload,
@@ -51,7 +50,6 @@ import {
   type PimsEmitRiskSignalResult,
   type PimsNotifyResult,
   PimsNotifyResultSchema,
-  type ReviewResult,
   RiskCatalogCodesSchema,
   type RootCause,
   RootCauseSchema,
@@ -75,7 +73,6 @@ import {
   CloseChecklistFailedError,
   ConfigError,
   DuplicateCreatedError,
-  EscalateStuckReviewError,
   EvidenceNotFoundError,
   ExemptionUngroundedError,
   HistoryGapError,
@@ -104,7 +101,6 @@ import type { JsonObject, JsonValue } from "@pims/types/models.ts";
 import type {
   ExemptionEvaluationInput,
   ExemptionEvaluationResult,
-  NumericApproval,
 } from "@pims/types/notices.ts";
 import {
   AFFECTED_CID,
@@ -216,7 +212,7 @@ const ReevaluationSnapshotSchema = z
 export type {
   ApproveNotifyResult,
   CloseResult,
-  DraftReviewOptions,
+  DraftPacksOptions,
   IntakeCallbacks,
   InvestigationResult,
   MonitorResult,
@@ -231,7 +227,6 @@ export interface IncidentOrchestratorDeps {
   bundleSealer: BundleSealer;
   modelClient: AgentModelClient;
   scheduler: DeadlineScheduler;
-  reviewer: NoticeReviewer;
   draftService: NoticeDraftService;
   composer: NoticeComposer;
   exemptionEngine: ExemptionEngine;
@@ -1663,10 +1658,10 @@ export class IncidentOrchestrator {
     });
   }
 
-  async draftAndReview(
+  async draftPacks(
     incidentId: number,
-    opts?: DraftReviewOptions,
-  ): Promise<DraftReviewResult> {
+    opts?: DraftPacksOptions,
+  ): Promise<DraftPacksResult> {
     await this.assertNotHalted();
     const incident = await this.deps.adapter.getIncident(incidentId);
     const code = incident.incident_code;
@@ -1682,7 +1677,7 @@ export class IncidentOrchestrator {
           incident.affected_cid.includes("C") &&
           !incident.security_measures_adopted.includes("encrypt_transit"),
         authorityOrdered: false,
-        reviewer: "compliance_reviewer",
+        reviewer: "human",
       });
 
       const exemption: ExemptionEvaluationResult =
@@ -1691,19 +1686,18 @@ export class IncidentOrchestrator {
           : this.deps.exemptionEngine.evaluate(opts.exemption);
 
       let authorityPackId: string | null = null;
-      let authorityApprovalId: string | null = null;
       let subjectPackId: string | null = null;
-      let subjectApprovalId: string | null = null;
 
       if (incident.involves_personal_data) {
-        const authority = await this.draftServiceWithReview(
+        const authority = await this.deps.draftService.draftAuthority(
           incident,
-          exemption,
-          opts,
+          {
+            fetchedAt: this.deps.clock(),
+            exemption,
+            phase: 1,
+          },
         );
-        authorityPackId = authority.packId;
-        authorityApprovalId = authority.approvalId;
-
+        authorityPackId = authority.pack.pack_id;
         if (authority.pack.phased) {
           if (opts?.phaseDueAtUtc === undefined) {
             throw new PimsValidationError("phase_due_at", "PHASE_DUE_REQUIRED");
@@ -1722,30 +1716,13 @@ export class IncidentOrchestrator {
       }
 
       const numericApprovals = opts?.numericApprovals ?? [];
-      const reviewed = await this.reviewWithRetries(
+      const subject = await this.deps.draftService.draftSubject(
         incident,
-        "subject",
+        gate,
+        exemption,
         numericApprovals,
-        async (feedback) => {
-          const draft = await this.deps.draftService.draftSubject(
-            incident,
-            gate,
-            exemption,
-            numericApprovals,
-            feedback ?? undefined,
-          );
-          return {
-            packId: draft.pack.pack_id,
-            contentSha: draft.contentSha,
-            bodyText: draft.pack.body_plain,
-            citations: draft.citations,
-            payload: draft.pack,
-          };
-        },
       );
-      const subject = reviewed.attempt.payload;
-      subjectPackId = subject.pack_id;
-      subjectApprovalId = reviewed.approvalId;
+      subjectPackId = subject.pack.pack_id;
 
       if (gate.verdict) {
         await this.armTimerIfAbsent(
@@ -1758,9 +1735,9 @@ export class IncidentOrchestrator {
         );
       }
 
-      if (subject.state === "exempted") {
+      if (subject.pack.state === "exempted") {
         await this.emitEvent("notice_exempted", incident, "drafter", {
-          exemption: subject.exemption?.letter ?? null,
+          exemption: subject.pack.exemption?.letter ?? null,
           reason: "ART34_3_EXEMPTION",
         });
       }
@@ -1768,144 +1745,10 @@ export class IncidentOrchestrator {
       return {
         authority_pack_id: authorityPackId,
         subject_pack_id: subjectPackId,
-        authority_approval_id: authorityApprovalId,
-        subject_approval_id: subjectApprovalId,
         high_risk_gate: gate,
         exemption,
       };
     });
-  }
-
-  private async draftServiceWithReview(
-    incident: PimsIncident,
-    exemption: ExemptionEvaluationResult,
-    opts?: DraftReviewOptions,
-  ): Promise<{
-    pack: {
-      pack_id: string;
-      phased: boolean;
-      item_c_consequences: string;
-      item_d_measures_taken: string[];
-      item_d_measures_proposed: string[];
-    };
-    packId: string;
-    approvalId: string;
-  }> {
-    const fetchedAt = this.deps.clock();
-    const reviewed = await this.reviewWithRetries(
-      incident,
-      "authority",
-      opts?.numericApprovals ?? [],
-      async (feedback) => {
-        const draft = await this.deps.draftService.draftAuthority(incident, {
-          fetchedAt,
-          exemption,
-          phase: 1,
-          ...(feedback === null ? {} : { feedback }),
-        });
-        const rawBodyText = [
-          `Naturaleza de la brecha: ${draft.pack.item_a_nature}`,
-          `Categorías de interesados: ${draft.pack.item_a_categories_subjects.join(", ")}`,
-          `Número aproximado de interesados: ${draft.pack.item_a_approx_subjects}`,
-          `Categorías de registros: ${draft.pack.item_a_categories_records.join(", ")}`,
-          `Número aproximado de registros: ${draft.pack.item_a_approx_records}`,
-          `Consecuencias probables: ${draft.pack.item_c_consequences}`,
-          `Medidas adoptadas: ${draft.pack.item_d_measures_taken.join("; ")}`,
-          `Medidas propuestas: ${draft.pack.item_d_measures_proposed.join("; ")}`,
-        ]
-          .filter((segment) => segment.trim().length > 0)
-          .join("\n");
-        const bodyText = await redactForPrompt(rawBodyText);
-        return {
-          packId: draft.pack.pack_id,
-          contentSha: draft.contentSha,
-          bodyText,
-          citations: draft.citations,
-          payload: draft.pack,
-        };
-      },
-    );
-
-    return {
-      pack: reviewed.attempt.payload,
-      packId: reviewed.attempt.payload.pack_id,
-      approvalId: reviewed.approvalId,
-    };
-  }
-
-  private async reviewWithRetries<T extends object>(
-    incident: PimsIncident,
-    packType: "authority" | "subject",
-    numericApprovals: NumericApproval[],
-    draftAttempt: (feedback: string | null) => Promise<{
-      packId: string;
-      contentSha: string;
-      bodyText: string;
-      citations: string[];
-      payload: T;
-    }>,
-  ): Promise<{
-    approvalId: string;
-    attempt: {
-      packId: string;
-      contentSha: string;
-      bodyText: string;
-      citations: string[];
-      payload: T;
-    };
-  }> {
-    const code = incident.incident_code;
-    this.announceRole(code, "compliance_reviewer");
-    let feedback: string | null = null;
-    let lastAttempt: {
-      packId: string;
-      contentSha: string;
-      bodyText: string;
-      citations: string[];
-      payload: T;
-    } | null = null;
-    for (let cycle = 0; cycle < this.deps.config.MAX_REVIEW_CYCLES; cycle++) {
-      const attempt = await draftAttempt(feedback);
-      lastAttempt = attempt;
-      const result: ReviewResult = await this.deps.reviewer.review(
-        {
-          incident_code: code,
-          pack_type: packType,
-          content_sha256: attempt.contentSha,
-          body_text: attempt.bodyText,
-          citations: attempt.citations,
-          numeric_approvals: numericApprovals,
-          plain_language_waiver: null,
-          checklist: null,
-        },
-        incident,
-      );
-      if (result.approved && result.approval_id !== null) {
-        return { approvalId: result.approval_id, attempt };
-      }
-      await this.deps.evidenceStore.saveDraftPack(
-        code,
-        packType,
-        toJsonObject(attempt.payload),
-        attempt.contentSha,
-        null,
-        "draft",
-      );
-      const rejection = result.rejection;
-      if (cycle === this.deps.config.MAX_REVIEW_CYCLES - 1) {
-        throw new EscalateStuckReviewError(
-          `Pack ${attempt.packId} rejected ${this.deps.config.MAX_REVIEW_CYCLES} times; last rejection ${rejection?.judge ?? "unknown"}:${rejection?.required_fix ?? "unknown"}`,
-        );
-      }
-      feedback =
-        rejection === null || rejection === undefined
-          ? "The reviewer rejected the draft without a specific fix; regenerate with strictly concrete, contradiction-free prose."
-          : `Rejected by ${rejection.judge} on item "${rejection.item}": ${rejection.required_fix}`;
-    }
-    const finalPackId = lastAttempt?.packId ?? "unknown";
-    throw new EscalateStuckReviewError(
-      `Pack ${finalPackId} never produced an approval`,
-    );
   }
 
   async attestSubjectExemption(
@@ -1959,7 +1802,7 @@ export class IncidentOrchestrator {
           incident.affected_cid.includes("C") &&
           !incident.security_measures_adopted.includes("encrypt_transit"),
         authorityOrdered: false,
-        reviewer: "compliance_reviewer",
+        reviewer: "human",
       });
       if (!gate.verdict) {
         throw new PimsValidationError(
@@ -1986,14 +1829,36 @@ export class IncidentOrchestrator {
 
   async approveAndNotify(
     incidentId: number,
-    opts?: { vetoWindowMin?: number },
+    opts?: { vetoWindowMin?: number; operator?: string },
   ): Promise<ApproveNotifyResult> {
     await this.assertNotHalted();
     const incident = await this.deps.adapter.getIncident(incidentId);
     const code = incident.incident_code;
+    const operator = opts?.operator ?? "cockpit";
 
     return this.withLease(code, async () => {
       this.announceRole(code, "notifier");
+      const humanNote = `HUMAN_APPROVAL:${operator}`;
+      for (const packType of CONSTANTS.NOTICE_PACK_TYPES) {
+        const row = await this.deps.evidenceStore.getDraftPack(code, packType);
+        if (row === null || row.state !== "draft") {
+          continue;
+        }
+        const approval = await this.deps.evidenceStore.mintReviewApproval({
+          incidentCode: code,
+          packType,
+          contentSha256: row.contentSha256,
+          note: humanNote,
+        });
+        await this.deps.evidenceStore.saveDraftPack(
+          code,
+          packType,
+          row.payload,
+          row.contentSha256,
+          approval.approval_id,
+          "approved",
+        );
+      }
       const actions = incident.actions ?? [];
       const baselineRaw = await this.deps.evidenceStore.getAgentState(
         `REOPEN_BASELINE:${code}`,
@@ -2019,34 +1884,18 @@ export class IncidentOrchestrator {
           incident,
           [...CLOSE_CHECKLIST_ITEMS],
         );
-        const resolutionReview: ReviewResult =
-          await this.deps.reviewer.reviewResolution(
-            {
-              incident_code: code,
-              pack_type: "resolution",
-              content_sha256: resolution.contentSha,
-              body_text: resolution.bodyText,
-              citations: resolution.citations,
-              numeric_approvals: [],
-              plain_language_waiver: null,
-              checklist: [...CLOSE_CHECKLIST_ITEMS],
-            },
-            incident,
-          );
-        if (
-          !resolutionReview.approved ||
-          resolutionReview.approval_id === null
-        ) {
-          throw new EscalateStuckReviewError(
-            `Resolution rejected by ${resolutionReview.rejection?.judge ?? "unknown"}:${resolutionReview.rejection?.required_fix ?? "unknown"}`,
-          );
-        }
+        const closeApproval = await this.deps.evidenceStore.mintReviewApproval({
+          incidentCode: code,
+          packType: "resolution",
+          contentSha256: resolution.contentSha,
+          note: humanNote,
+        });
 
         const resolutionActionArgs: JsonObject = {
           incident_id: incident.id,
           action_type: "R",
           description: resolution.bodyText,
-          review_approval_id: resolutionReview.approval_id,
+          review_approval_id: closeApproval.approval_id,
         };
         if (
           incident.assigned_to !== null &&
@@ -2099,7 +1948,7 @@ export class IncidentOrchestrator {
           incidentCode: code,
           packType: "resolution",
           contentSha256: hashState.data.content_sha256,
-          note: "resolution close",
+          note: humanNote,
         });
         closeApprovalId = closeApproval.approval_id;
       }
