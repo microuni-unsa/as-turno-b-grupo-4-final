@@ -169,6 +169,14 @@ export const CONSTANTS = {
     "MEDICAL_LICENSE",
     "DRIVER_LICENSE",
   ] as const,
+  PII_EXCLUDED_PERSON_TERMS: [
+    "san agustín",
+    "san agustin",
+    "decano",
+    "rector",
+    "docente",
+    "estudiante",
+  ] as const,
   DEPLOY_PORT: 3000,
   // Bun.serve kills responses idle longer than this (seconds); agent
   // approve/review calls legitimately run for minutes (LLM + RAG chain).

@@ -26,6 +26,7 @@ import {
   PlainLanguageViolationError,
   SubjectCountForbiddenError,
 } from "@pims/types/errors.ts";
+import { filterAuthenticPiiSpans } from "@pims/types/pii.ts";
 import type { PimsIncident } from "@pims/types/pims.ts";
 
 export const REVIEW_CHALLENGE_SYSTEM =
@@ -279,12 +280,7 @@ export class NoticeReviewer {
         );
       }
       const rawSpans = await presidio.analyze(ctx.body_text);
-      const piiSpans = rawSpans.filter(
-        (span) =>
-          (CONSTANTS.PII_ENTITIES as readonly string[]).includes(
-            span.entity_type,
-          ) && span.score >= CONSTANTS.PRESIDIO_MIN_SCORE,
-      );
+      const piiSpans = filterAuthenticPiiSpans(ctx.body_text, rawSpans);
       if (piiSpans.length > 0) {
         const piiTypes = Array.from(
           new Set(piiSpans.map((span) => span.entity_type)),

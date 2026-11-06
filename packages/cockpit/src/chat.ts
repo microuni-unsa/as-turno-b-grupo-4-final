@@ -37,6 +37,7 @@ import {
   PimsNotFoundError,
 } from "@pims/types/errors.ts";
 import { JsonObjectSchema, type JsonValue } from "@pims/types/models.ts";
+import { filterAuthenticPiiSpans } from "@pims/types/pii.ts";
 import type { RetrievalPassage } from "@pims/types/rag.ts";
 
 const PERSONA_PROMPTS: Record<ChatPersona, string> = {
@@ -764,12 +765,7 @@ export async function handleChat(
   }
 
   const piiSpans = await presidio.analyze(reply);
-  const piiHits = piiSpans.filter(
-    (span) =>
-      (CONSTANTS.PII_ENTITIES as readonly string[]).includes(
-        span.entity_type,
-      ) && span.score >= CONSTANTS.PRESIDIO_MIN_SCORE,
-  );
+  const piiHits = filterAuthenticPiiSpans(reply, piiSpans);
   const iocHits = extractIocs(reply).filter(
     (value) => !/^[0-9a-fA-F]{32,64}$/.test(value),
   );
@@ -781,7 +777,23 @@ export async function handleChat(
     if (iocHits.length > 0) {
       fields.push("ioc");
     }
-    throw new CockpitPiiBlockedError(fields);
+    console.error("[CHAT_PII_GATE_BLOCKED]", {
+      fields,
+      piiHits: piiHits.map((span) => ({
+        entity_type: span.entity_type,
+        score: span.score,
+        matched: reply.slice(span.start, span.end),
+      })),
+      iocHits,
+    });
+    throw new CockpitPiiBlockedError(fields, {
+      pii_hits: piiHits.map((span) => ({
+        entity_type: span.entity_type,
+        score: span.score,
+        matched: reply.slice(span.start, span.end),
+      })),
+      ioc_hits: iocHits,
+    });
   }
 
   // Extract or synthesize reasoning
