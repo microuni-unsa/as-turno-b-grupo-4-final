@@ -369,6 +369,7 @@ describe("Autonomous watcher daemon lifecycle", { timeout: 240_000 }, () => {
       title: "Updated blocked draft test fixture with more details",
     });
 
+    now.setSeconds(now.getSeconds() + 10);
     await watcher.pollOnce();
     expect(draftSpy).toHaveBeenCalledTimes(1);
 

@@ -31,6 +31,7 @@ import {
   CitationFabricatedError,
   CockpitChatInvalidError,
   CockpitPermissionDeniedError,
+  CockpitPiiBlockedError,
   PimsNotFoundError,
 } from "@pims/types/errors.ts";
 import { JsonObjectSchema, type JsonValue } from "@pims/types/models.ts";
@@ -653,6 +654,13 @@ export async function handleChat(
     throw new CockpitChatInvalidError(
       `Model response did not contain a non-empty reply (keys: ${Object.keys(response.content).join(",")})`,
     );
+  }
+
+  if (deps.presidioClient !== undefined) {
+    const findings = await deps.presidioClient.analyze(reply);
+    if (findings.length > 0) {
+      throw new CockpitPiiBlockedError(findings.map((f) => f.entity_type));
+    }
   }
 
   const citationsUsed = readStringArray(
