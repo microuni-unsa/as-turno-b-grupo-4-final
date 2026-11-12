@@ -1,11 +1,20 @@
 {
   "name": "incident-agent-monorepo",
   "version": "1.0.0",
-  "type": "module",
+  "devDependencies": {
+    "@biomejs/biome": "^2.6.4",
+    "@microx-technologies/microdev": "^0.1.0",
+    "@testcontainers/postgresql": "^12.2.1",
+    "@types/bun": "^1.4.4",
+    "@types/node": "^26.6.6",
+    "drizzle-kit": "^0.31.11",
+    "postgres": "^4.0.0",
+    "testcontainers": "^12.2.1",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.5",
+    "zod": "^4"
+  },
   "private": true,
-  "workspaces": [
-    "packages/*"
-  ],
   "scripts": {
     "test": "bun --bun vitest run",
     "test:unit": "bun --bun vitest run tests/unit",
@@ -18,28 +27,18 @@
     "build:server": "bun build packages/cockpit/src/server.ts --outdir dist --target bun",
     "build": "bun run build:ui && bun run build:server",
     "start": "bun run packages/cockpit/src/server.ts",
-    "dev": "microenv dev --def ./packages/config/src/env-matrix.ts --stack ./packages/config/src/stack-def.ts --preset dev --local",
-    "stack:dev": "bun run scripts/dev-stack.ts",
-    "env:check": "microenv check --def ./packages/config/src/env-matrix.ts",
-    "env:diff": "microenv diff --def ./packages/config/src/env-matrix.ts dev prod",
-    "env:materialize:dev": "microenv materialize --def ./packages/config/src/env-matrix.ts --env dev --out .env --force",
-    "env:materialize:prod": "microenv materialize --def ./packages/config/src/env-matrix.ts --env prod --out .env --force",
+    "dev:all": "bun run scripts/dev-all.ts",
+    "dev": "microdev run --preset dev -- bun run dev:all",
+    "stack:dev": "microdev dev --preset dev",
+    "env:check": "microdev check",
+    "env:diff": "bun run scripts/env-diff.ts",
+    "env:materialize:dev": "microdev materialize --preset dev --out .env --force",
+    "env:materialize:prod": "microdev materialize --preset prod --out .env --force",
     "diagram:generate": "bun scripts/generate-architecture-diagrams.ts",
     "report:compile": "typst compile --root . t2/main.typ t2/main.pdf"
   },
-  "devDependencies": {
-    "@biomejs/biome": "^2.6.4",
-    "@testcontainers/postgresql": "^12.2.1",
-    "@types/bun": "^1.4.4",
-    "@types/node": "^26.6.6",
-    "drizzle-kit": "^0.31.11",
-    "postgres": "^4.0.0",
-    "testcontainers": "^12.2.1",
-    "typescript": "^7.0.2",
-    "vitest": "^5.0.5"
-  },
-  "dependencies": {
-    "@microx-technologies/microcompose": "^0.1.1",
-    "@microx-technologies/microenv": "0.1.1"
-  }
+  "type": "module",
+  "workspaces": [
+    "packages/*"
+  ]
 }

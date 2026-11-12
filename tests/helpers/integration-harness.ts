@@ -15,7 +15,6 @@ import {
   TRIAGE_SYSTEM,
 } from "@pims/agent";
 import { type AgentConfig, loadConfig } from "@pims/config";
-import { createStack, type StackHandle } from "@pims/config/stack-def.ts";
 import { EvidenceStore } from "@pims/evidence";
 import { OpenAIModelProvider } from "@pims/models";
 import { PimsAdapter } from "@pims/pims-adapter";
@@ -34,6 +33,10 @@ import {
 import { CONSTANTS } from "@pims/types/constants.ts";
 import type { JsonObject, RankedPassage } from "@pims/types/models.ts";
 import type { StartedPostgreSqlContainer } from "@testcontainers/postgresql";
+import {
+  createTestContext,
+  type TestMicrodevContext,
+} from "@tests/helpers/microdev-test-context.ts";
 import {
   buildGdprTextAxes,
   generateSpanAwareEmbedding,
@@ -62,7 +65,7 @@ export type HarnessChatHandler = (
 ) => JsonObject | null;
 
 export interface IntegrationHarness {
-  stack: StackHandle;
+  ctx: TestMicrodevContext;
   container: StartedPostgreSqlContainer;
   dbClient: MockDatabaseClient;
   server: PimsTestServerInstance;
@@ -122,18 +125,19 @@ export async function startIntegrationHarness(options?: {
   const projectRoot = process.cwd();
   const now = new Date("2026-10-01T20:00:00.000Z");
   const includePresidio = options?.includePresidio ?? !options?.presidioUrl;
-  const stack = createStack({ projectRoot, includePresidio });
-  const stackEnv = await stack.up();
-
-  const connectionUri = stackEnv.EVIDENCE_DB_URL;
+  const ctx = createTestContext(includePresidio);
+  await ctx.up();
+  const connectionUri = ctx.flat.EVIDENCE_DB_URL;
   if (typeof connectionUri !== "string" || connectionUri.trim().length === 0) {
-    throw new Error("EVIDENCE_DB_URL was not populated by microcompose stack");
+    throw new Error(
+      "EVIDENCE_DB_URL was not populated by microdev test context",
+    );
   }
 
   const container = {
     getConnectionUri: () => connectionUri,
     stop: async () => {
-      await stack.down();
+      await ctx.down();
     },
   } as unknown as StartedPostgreSqlContainer;
 
@@ -384,12 +388,7 @@ export async function startIntegrationHarness(options?: {
     options !== undefined && options.autoNotify !== undefined
       ? options.autoNotify
       : CONSTANTS.DEFAULT_AUTO_NOTIFY;
-  const presidioUrl =
-    options !== undefined && options.presidioUrl !== undefined
-      ? options.presidioUrl
-      : stackEnv.PRESIDIO_URL !== undefined && stackEnv.PRESIDIO_URL.length > 0
-        ? stackEnv.PRESIDIO_URL
-        : TEST_PRESIDIO_URL;
+  const presidioUrl = options?.presidioUrl ?? ctx.flat.PRESIDIO_URL;
 
   const config = loadConfig({
     PIMS_BASE_URL: server.url,
@@ -397,6 +396,7 @@ export async function startIntegrationHarness(options?: {
     PIMS_USERNAME: TEST_DEFAULT_ADMIN,
     PIMS_PASSWORD: CONSTANTS.PIMS_TEST_SEED_PASSWORD,
     EVIDENCE_DB_URL: container.getConnectionUri(),
+    EVIDENCE_KEY: TEST_EVIDENCE_KEY_HEX,
     OPENAI_API_KEY: "integration-test-key",
     OPENAI_BASE_URL: TEST_OPENAI_BASE_URL,
     REASONING_MODEL: TEST_GPT_4O,
@@ -439,12 +439,12 @@ export async function startIntegrationHarness(options?: {
     await server.stop();
     await store.close();
     await dbClient.sql.end();
-    await stack.down();
+    await ctx.down();
     fs.rmSync(storageDir, { recursive: true, force: true });
   };
 
   return {
-    stack,
+    ctx,
     container,
     dbClient,
     server,

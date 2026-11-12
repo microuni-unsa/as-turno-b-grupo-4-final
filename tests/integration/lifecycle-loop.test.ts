@@ -34,9 +34,9 @@ import { CONSTANTS } from "@pims/types/constants.ts";
 import type { IndicatorSpoolRecord } from "@pims/types/evidence.ts";
 import type { JsonObject, RankedPassage } from "@pims/types/models.ts";
 import {
-  PostgreSqlContainer,
-  type StartedPostgreSqlContainer,
-} from "@testcontainers/postgresql";
+  createTestContext,
+  type TestMicrodevContext,
+} from "@tests/helpers/microdev-test-context.ts";
 import {
   buildGdprTextAxes,
   generateSpanAwareEmbedding,
@@ -45,8 +45,8 @@ import {
   TEST_ADMIN_USERNAME,
   TEST_DATE_2026_10_01,
   TEST_DPO_EMAIL,
+  TEST_EVIDENCE_KEY_HEX,
   TEST_MIME_TEXT,
-  TEST_PGVECTOR_IMAGE,
   TEST_SCHEMA,
 } from "@tests/helpers/test-constants.ts";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
@@ -108,7 +108,7 @@ const NON_PII_FIXTURE = IntakePayloadSchema.parse({
 describe("Phase 4 autonomous lifecycle loop (§6, §9, §14.2)", {
   timeout: 240_000,
 }, () => {
-  let container: StartedPostgreSqlContainer;
+  let ctx: TestMicrodevContext;
   let dbClient: MockDatabaseClient;
   let server: PimsTestServerInstance;
   let adapter: PimsAdapter;
@@ -123,28 +123,15 @@ describe("Phase 4 autonomous lifecycle loop (§6, §9, §14.2)", {
 
   beforeAll(async () => {
     const projectRoot = process.cwd();
-    const dumpPath = path.resolve(
-      projectRoot,
-      "data/gestitel_base_de_datos.sql",
-    );
-    const seedPath = path.resolve(projectRoot, "data/02-init-unsa-seed.sql");
+    ctx = createTestContext(true);
+    await ctx.up();
+    const dbUrl = ctx.flat.EVIDENCE_DB_URL;
+    const presidioUrl = ctx.flat.PRESIDIO_URL;
+    if (!dbUrl || !presidioUrl) {
+      throw new Error("Failed to resolve microdev test context environment");
+    }
 
-    container = await new PostgreSqlContainer(TEST_PGVECTOR_IMAGE)
-      .withBindMounts([
-        {
-          source: dumpPath,
-          target: "/docker-entrypoint-initdb.d/01-gestitel.sql",
-          mode: "ro",
-        },
-        {
-          source: seedPath,
-          target: "/docker-entrypoint-initdb.d/02-seed.sql",
-          mode: "ro",
-        },
-      ])
-      .start();
-
-    dbClient = createMockDatabase(container.getConnectionUri());
+    dbClient = createMockDatabase(dbUrl);
     server = await createPimsTestServer(dbClient, {
       nestedActionMode: "replace",
     });
@@ -163,7 +150,7 @@ describe("Phase 4 autonomous lifecycle loop (§6, §9, §14.2)", {
 
     storageDir = fs.mkdtempSync(path.join(os.tmpdir(), "pims-agent-loop-"));
     store = new EvidenceStore({
-      connectionUri: container.getConnectionUri(),
+      connectionUri: dbUrl,
       keyHex: "a1".repeat(32),
       baseStorageDir: storageDir,
     });
@@ -383,7 +370,9 @@ describe("Phase 4 autonomous lifecycle loop (§6, §9, §14.2)", {
       PIMS_SCHEMA: TEST_SCHEMA,
       PIMS_USERNAME: TEST_ADMIN_USERNAME,
       PIMS_PASSWORD: CONSTANTS.PIMS_TEST_SEED_PASSWORD,
-      EVIDENCE_DB_URL: container.getConnectionUri(),
+      EVIDENCE_DB_URL: dbUrl,
+      PRESIDIO_URL: presidioUrl,
+      EVIDENCE_KEY: TEST_EVIDENCE_KEY_HEX,
       OPENAI_API_KEY: "lifecycle-loop-test-key",
       OPENAI_BASE_URL: "https://api.openai.com/v1",
       REASONING_MODEL: "gpt-4o",
@@ -428,10 +417,10 @@ describe("Phase 4 autonomous lifecycle loop (§6, §9, §14.2)", {
     } else {
       // DB client was not initialized
     }
-    if (container) {
-      await container.stop();
+    if (ctx) {
+      await ctx.down();
     } else {
-      // Container was not started
+      // Context was not started
     }
     if (storageDir) {
       fs.rmSync(storageDir, { recursive: true, force: true });

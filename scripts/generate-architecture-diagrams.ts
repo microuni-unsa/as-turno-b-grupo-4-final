@@ -992,7 +992,7 @@ function generateSystemArchitectureHtml(): string {
         <div class="component-box">
           <div class="comp-top">
             <div class="comp-icon">${ICONS.docker}</div>
-            <div class="comp-title">Docker & Microcompose</div>
+            <div class="comp-title">Docker & Microdev</div>
           </div>
           <div class="comp-desc">Definición tipada de servicios compartida entre tests de integración y producción.</div>
         </div>
